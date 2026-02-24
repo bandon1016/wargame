@@ -1,0 +1,462 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+import { Compass, Sword, Home, Users, Package, Settings as SettingsIcon, Book, Heart, Shield, Zap, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, MapPin, Loader2 } from 'lucide-react';
+import type { CharacterStats, Enemy, Skill, GameItem, Equipment } from './types/game';
+import { MONSTER_DATABASE, SKILL_DATABASE, ITEM_DATABASE, RARITY_COLORS } from './types/game';
+import { CombatScreen } from './components/CombatScreen';
+import { PartnersTab } from './components/PartnersTab';
+import { HomeTab } from './components/HomeTab';
+import { AuthScreen } from './components/AuthScreen';
+import { supabase } from './lib/supabase';
+
+import L from 'leaflet';
+import iconImg from 'leaflet/dist/images/marker-icon.png';
+import iconShadow from 'leaflet/dist/images/marker-shadow.png';
+L.Marker.prototype.options.icon = L.icon({ iconUrl: iconImg, shadowUrl: iconShadow, iconSize: [25, 41], iconAnchor: [12, 41] });
+
+function MapUpdater({ center }: { center: [number, number] }) {
+  const map = useMap();
+  useEffect(() => { map.setView(center, map.getZoom()); }, [center, map]);
+  return null;
+}
+
+/* ─── Helpers ─── */
+const totalEquipAtk = (p: CharacterStats) => [p.equippedWeapon, p.equippedArmor, p.equippedHelmet, p.equippedBoots, p.equippedAccessory].reduce((s, e) => s + (e?.attack ?? 0), 0);
+const totalEquipDef = (p: CharacterStats) => [p.equippedWeapon, p.equippedArmor, p.equippedHelmet, p.equippedBoots, p.equippedAccessory].reduce((s, e) => s + (e?.defense ?? 0), 0);
+const totalEquipHp = (p: CharacterStats) => [p.equippedWeapon, p.equippedArmor, p.equippedHelmet, p.equippedBoots, p.equippedAccessory].reduce((s, e) => s + (e?.hp ?? 0), 0);
+
+const App: React.FC = () => {
+  const [position, setPosition] = useState<[number, number]>([25.0330, 121.5654]);
+  const [activeTab, setActiveTab] = useState('explore');
+  const [areaName] = useState('信義區 — 台北市');
+
+  const [session, setSession] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  const [player, setPlayer] = useState<CharacterStats | null>(null);
+  const playerRef = React.useRef<CharacterStats | null>(null);
+
+  // Sync ref structure
+  useEffect(() => {
+    playerRef.current = player;
+  }, [player]);
+
+  // Auth flow
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      if (session) fetchProfile(session.user.id);
+      else setLoading(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      if (session) fetchProfile(session.user.id);
+      else { setPlayer(null); setLoading(false); }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const fetchProfile = async (userId: string) => {
+    setLoading(true);
+    const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
+    if (data) {
+      // Decode json fields if they were stored as JSON strings or raw objects
+      setPlayer({
+        level: data.level, exp: data.exp, maxExp: data.max_exp,
+        hp: data.hp, maxHp: data.max_hp, attack: data.attack, defense: data.defense,
+        gold: data.gold, baseMaterials: data.base_materials,
+        buildings: data.buildings || [],
+        equipment: data.equipment || [],
+        equippedWeapon: data.equipped_weapon,
+        equippedArmor: data.equipped_armor,
+        equippedHelmet: data.equipped_helmet,
+        equippedBoots: data.equipped_boots,
+        equippedAccessory: data.equipped_accessory,
+        items: data.items || [],
+        skills: data.skills || [],
+        partners: data.partners || [],
+      });
+    } else if (error) {
+      console.error('Fetch profile error:', error);
+    }
+    setLoading(false);
+  };
+
+  // Sync to database
+  const saveProfile = async () => {
+    const p = playerRef.current;
+    if (!p || !session?.user?.id) return;
+
+    await supabase.from('profiles').update({
+      level: p.level, exp: p.exp, max_exp: p.maxExp,
+      hp: p.hp, max_hp: p.maxHp, attack: p.attack, defense: p.defense,
+      gold: p.gold, base_materials: p.baseMaterials,
+      buildings: p.buildings,
+      equipment: p.equipment,
+      equipped_weapon: p.equippedWeapon,
+      equipped_armor: p.equippedArmor,
+      equipped_helmet: p.equippedHelmet,
+      equipped_boots: p.equippedBoots,
+      equipped_accessory: p.equippedAccessory,
+      items: p.items,
+      skills: p.skills,
+      partners: p.partners,
+      updated_at: new Date().toISOString()
+    }).eq('id', session.user.id);
+  };
+
+  useEffect(() => {
+    // Save every 10 seconds to avoid spamming the DB
+    const saveInterval = setInterval(saveProfile, 10000);
+    return () => clearInterval(saveInterval);
+  }, [session]);
+
+  // Resource tick
+  useEffect(() => {
+    const t = window.setInterval(() => {
+      setPlayer(p => {
+        if (!p) return null;
+        let dg = 0, dm = 0;
+        p.buildings.forEach(b => { if (b.type === 'gold_mine') dg += b.baseProduction / 60; else if (b.type === 'material_camp') dm += b.baseProduction / 60; });
+        return { ...p, gold: p.gold + dg, baseMaterials: p.baseMaterials + dm };
+      });
+    }, 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  const [isCombatAction, setIsCombatAction] = useState(false);
+  const [currentEnemy, setCurrentEnemy] = useState<Enemy | null>(null);
+
+  const move = useCallback((d: 'n' | 's' | 'e' | 'w') => {
+    const s = 0.001;
+    setPosition(p => d === 'n' ? [p[0] + s, p[1]] : d === 's' ? [p[0] - s, p[1]] : d === 'e' ? [p[0], p[1] + s] : [p[0], p[1] - s]);
+  }, []);
+
+  const startHunt = useCallback(() => {
+    if (!player) return;
+    const lv = player.level;
+    const pool = MONSTER_DATABASE.filter(m => lv >= m.minLv && lv <= m.maxLv + 5);
+    const template = pool.length > 0 ? pool[Math.floor(Math.random() * pool.length)] : MONSTER_DATABASE[0];
+    const hp = template.baseHp + lv * 8;
+    const sk = SKILL_DATABASE[Math.floor(Math.random() * SKILL_DATABASE.length)];
+    const lootCount = Math.random() > 0.6 ? 1 : 0;
+    const loots: GameItem[] = [];
+    if (lootCount > 0) {
+      const it = ITEM_DATABASE[Math.floor(Math.random() * ITEM_DATABASE.length)];
+      loots.push({ ...it, quantity: 1 });
+    }
+    const enemy: Enemy = {
+      id: Math.random().toString(),
+      name: template.name, avatar: template.avatar,
+      level: lv + Math.floor(Math.random() * 3) - 1,
+      hp, maxHp: hp,
+      attack: template.baseAtk + lv * 2,
+      defense: template.baseDef + Math.floor(lv * 0.8),
+      expReward: 18 + lv * 6,
+      goldReward: 8 + lv * 3,
+      skillReward: Math.random() < 0.25 ? sk : undefined,
+      lootTable: loots,
+    };
+    setCurrentEnemy(enemy);
+    setIsCombatAction(true);
+  }, [player?.level]);
+
+  const handleCombatWin = useCallback((exp: number, gold: number, learnedSkill?: Skill, loot?: GameItem[]) => {
+    setPlayer(prev => {
+      if (!prev) return null;
+      let { level: lv, exp: xp, maxExp: mx, hp, maxHp, attack: atk, defense: def, skills, items } = { ...prev, skills: [...prev.skills], items: [...prev.items] };
+      xp += exp;
+      if (xp >= mx) { lv++; xp -= mx; mx = Math.floor(mx * 1.4); maxHp += 15; hp = maxHp; atk += 4; def += 2; }
+      if (learnedSkill && !skills.find(s => s.id === learnedSkill.id)) skills.push(learnedSkill);
+      if (loot) loot.forEach(li => {
+        const ex = items.find(i => i.id === li.id);
+        if (ex) ex.quantity += li.quantity; else items.push({ ...li });
+      });
+      return { ...prev, level: lv, exp: xp, maxExp: mx, hp, maxHp, attack: atk, defense: def, gold: prev.gold + gold, skills, items };
+    });
+    setIsCombatAction(false);
+  }, []);
+
+  const handleCombatLose = useCallback(() => {
+    setPlayer(p => p ? ({ ...p, hp: Math.floor(p.maxHp * 0.15) }) : null);
+    setIsCombatAction(false);
+  }, []);
+
+  const equipItem = useCallback((eq: Equipment) => {
+    setPlayer(prev => {
+      if (!prev) return null;
+      const slotKey = `equipped${eq.slot.charAt(0).toUpperCase() + eq.slot.slice(1)}` as keyof CharacterStats;
+      return { ...prev, [slotKey]: eq } as CharacterStats;
+    });
+  }, []);
+
+  const effectiveAtk = player ? player.attack + totalEquipAtk(player) : 0;
+  const effectiveDef = player ? player.defense + totalEquipDef(player) : 0;
+  const effectiveMaxHp = player ? player.maxHp + totalEquipHp(player) : 0;
+
+  if (loading) {
+    return <div className="flex items-center justify-center min-h-screen bg-[#0a0e1a] text-game-accent"><Loader2 className="animate-spin w-12 h-12" /></div>;
+  }
+
+  if (!session || !player) {
+    return <AuthScreen onSignIn={() => supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        setSession(session);
+        fetchProfile(session.user.id);
+      }
+    })} />;
+  }
+
+  return (
+    <div className="flex flex-col h-screen bg-[#0a0e1a] text-white overflow-hidden">
+
+      {/* ═══════════ TOP BAR ═══════════ */}
+      <div className="glass-panel px-4 py-3 flex justify-between items-center z-[1100] gap-4">
+        {/* Left: Avatar + Level */}
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="relative flex-shrink-0">
+            <div className="w-12 h-12 rounded-full border-2 border-game-gold bg-gradient-to-br from-game-medium to-game-dark flex items-center justify-center text-2xl anim-pulse-glow">
+              🧙‍♂️
+            </div>
+            <div className="absolute -bottom-1 -right-1 bg-game-gold text-game-dark text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center shadow-lg">
+              {player.level}
+            </div>
+          </div>
+          <div className="min-w-0">
+            <div className="text-sm font-bold truncate">勇者 <span className="text-gray-500 font-normal text-xs">Lv.{player.level}</span></div>
+            {/* HP bar */}
+            <div className="flex items-center gap-2 mt-0.5">
+              <Heart size={10} className="text-red-400 flex-shrink-0" />
+              <div className="w-28 h-[6px] bg-gray-800 rounded-full overflow-hidden">
+                <div className="h-full bar-hp transition-all duration-500 rounded-full" style={{ width: `${(player.hp / effectiveMaxHp) * 100}%` }} />
+              </div>
+              <span className="text-[10px] text-gray-400 tabular-nums w-16 text-right">{player.hp}/{effectiveMaxHp}</span>
+            </div>
+            {/* EXP bar */}
+            <div className="flex items-center gap-2 mt-0.5">
+              <Zap size={10} className="text-sky-400 flex-shrink-0" />
+              <div className="w-28 h-[4px] bg-gray-800 rounded-full overflow-hidden">
+                <div className="h-full bar-exp transition-all duration-500 rounded-full" style={{ width: `${(player.exp / player.maxExp) * 100}%` }} />
+              </div>
+              <span className="text-[10px] text-gray-500 tabular-nums w-16 text-right">{player.exp}/{player.maxExp}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Right: Resources */}
+        <div className="flex items-center gap-3 flex-shrink-0">
+          <div className="stat-badge"><span className="text-amber-500">🧱</span> {Math.floor(player.baseMaterials)}</div>
+          <div className="stat-badge"><span className="text-game-gold">💰</span> {Math.floor(player.gold)}</div>
+        </div>
+      </div>
+
+      {/* ═══════════ MAIN CONTENT ═══════════ */}
+      <div className="flex-1 relative overflow-hidden">
+
+        {/* ─── EXPLORE ─── */}
+        {activeTab === 'explore' && (
+          <div className="w-full h-full relative">
+            <MapContainer center={position} zoom={15} zoomControl={false} className="w-full h-full">
+              <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" attribution="&copy; OSM &copy; CARTO" />
+              <Marker position={position}><Popup>你的位置</Popup></Marker>
+              <MapUpdater center={position} />
+            </MapContainer>
+
+            {/* D-Pad */}
+            <div className="absolute bottom-8 right-6 z-[1000] flex flex-col items-center gap-1.5">
+              <button onClick={() => move('n')} className="w-11 h-11 glass-panel rounded-xl flex items-center justify-center active:scale-90 transition-all hover:border-game-accent/50"><ChevronUp size={22} /></button>
+              <div className="flex gap-1.5">
+                <button onClick={() => move('w')} className="w-11 h-11 glass-panel rounded-xl flex items-center justify-center active:scale-90 transition-all hover:border-game-accent/50"><ChevronLeft size={22} /></button>
+                <button onClick={() => move('s')} className="w-11 h-11 glass-panel rounded-xl flex items-center justify-center active:scale-90 transition-all hover:border-game-accent/50"><ChevronDown size={22} /></button>
+                <button onClick={() => move('e')} className="w-11 h-11 glass-panel rounded-xl flex items-center justify-center active:scale-90 transition-all hover:border-game-accent/50"><ChevronRight size={22} /></button>
+              </div>
+            </div>
+
+            {/* Area Card */}
+            <div className="absolute bottom-8 left-6 z-[1000] w-72 glass-panel p-4 rounded-2xl anim-fade-in-up">
+              <div className="flex items-center gap-2 mb-3">
+                <MapPin size={16} className="text-game-accent" />
+                <span className="font-bold text-sm text-game-accent tracking-wide">探索區域</span>
+                <span className="ml-auto text-[10px] bg-game-accent/10 text-game-accent px-2 py-0.5 rounded-full border border-game-accent/30">Lv.{Math.max(1, player!.level - 2)}~{player!.level + 3}</span>
+              </div>
+              <p className="text-base font-bold mb-1">{areaName}</p>
+              <p className="text-xs text-gray-400 mb-4">這片區域潛伏著各種危險的生物...</p>
+              <button onClick={startHunt} className="w-full bg-gradient-to-r from-game-accent to-indigo-500 hover:from-sky-400 hover:to-indigo-400 text-white font-bold py-2.5 rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-game-accent/20">
+                <Sword size={18} /> 開始狩獵
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ─── PARTNERS ─── */}
+        {activeTab === 'partners' && <PartnersTab player={player!} onUpdatePlayer={setPlayer as any} />}
+
+        {/* ─── HOME ─── */}
+        {activeTab === 'home' && <HomeTab player={player!} onUpdatePlayer={setPlayer as any} />}
+
+        {/* ─── BAG / CHARACTER ─── */}
+        {activeTab === 'bag' && (
+          <div className="p-5 h-full overflow-y-auto w-full space-y-5">
+
+            {/* Character Card */}
+            <div className="glass-panel rounded-2xl p-6 relative overflow-hidden">
+              <div className="absolute -right-10 -top-10 w-40 h-40 bg-game-accent/5 rounded-full blur-3xl" />
+              <div className="flex items-start gap-6">
+                <div className="flex-shrink-0">
+                  <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-game-medium to-game-dark border-2 border-game-accent/50 flex items-center justify-center text-4xl anim-float anim-pulse-glow">
+                    🧙‍♂️
+                  </div>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h2 className="text-xl font-bold flex items-center gap-2">勇者 <span className="text-sm text-game-accent font-normal bg-game-accent/10 px-2 py-0.5 rounded-full">Lv.{player.level}</span></h2>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3">
+                    <div className="stat-badge"><Sword size={14} className="text-red-400" /> <span className="text-red-400">{effectiveAtk}</span></div>
+                    <div className="stat-badge"><Shield size={14} className="text-blue-400" /> <span className="text-blue-400">{effectiveDef}</span></div>
+                    <div className="stat-badge"><Heart size={14} className="text-green-400" /> <span className="text-green-400">{effectiveMaxHp}</span></div>
+                    <div className="stat-badge"><span className="text-game-gold">💰</span> <span className="text-game-gold">{Math.floor(player.gold)}</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Equipment Slots */}
+            <div className="glass-panel rounded-2xl p-5">
+              <h3 className="text-base font-bold mb-4 flex items-center gap-2">⚔️ 裝備欄</h3>
+              <div className="grid grid-cols-5 gap-3">
+                {(['weapon', 'armor', 'helmet', 'boots', 'accessory'] as const).map(slot => {
+                  const slotKey = `equipped${slot.charAt(0).toUpperCase() + slot.slice(1)}` as keyof CharacterStats;
+                  const eq = player[slotKey] as Equipment | undefined;
+                  const r = eq ? RARITY_COLORS[eq.rarity] : null;
+                  return (
+                    <div key={slot} className="tooltip-wrap">
+                      <div className={`inv-slot ${r ? `border-2 ${r.border} ${r.bg} ${r.glow}` : ''}`}>
+                        {eq ? <span className="text-3xl">{eq.icon}</span> : <span className="text-gray-600 text-xs">{slot === 'weapon' ? '武器' : slot === 'armor' ? '護甲' : slot === 'helmet' ? '頭盔' : slot === 'boots' ? '鞋子' : '飾品'}</span>}
+                      </div>
+                      {eq && (
+                        <div className="tooltip-text">
+                          <div className={`font-bold ${r?.text}`}>{eq.name}</div>
+                          <div className="text-gray-400 text-[11px]">{eq.description}</div>
+                          <div className="mt-1 text-[11px] space-x-2">
+                            {eq.attack > 0 && <span className="text-red-400">ATK +{eq.attack}</span>}
+                            {eq.defense > 0 && <span className="text-blue-400">DEF +{eq.defense}</span>}
+                            {eq.hp > 0 && <span className="text-green-400">HP +{eq.hp}</span>}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Unequipped Equipment */}
+            {player.equipment.length > 0 && (
+              <div className="glass-panel rounded-2xl p-5">
+                <h3 className="text-base font-bold mb-4 flex items-center gap-2">🎒 背包裝備</h3>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {player.equipment.map(eq => {
+                    const r = RARITY_COLORS[eq.rarity];
+                    return (
+                      <div key={eq.id} onClick={() => equipItem(eq)} className={`glass-panel p-3 rounded-xl border-2 ${r.border} ${r.glow} cursor-pointer hover:bg-white/5 transition-all active:scale-95 anim-fade-in-up`}>
+                        <div className="flex items-center gap-3">
+                          <span className="text-3xl">{eq.icon}</span>
+                          <div>
+                            <div className={`font-bold text-sm ${r.text}`}>{eq.name}</div>
+                            <div className="text-[10px] text-gray-400">{r.label} · {eq.slot === 'weapon' ? '武器' : eq.slot === 'armor' ? '護甲' : eq.slot === 'helmet' ? '頭盔' : eq.slot === 'boots' ? '鞋子' : '飾品'}</div>
+                          </div>
+                        </div>
+                        <div className="mt-2 flex gap-2 text-[11px]">
+                          {eq.attack > 0 && <span className="text-red-400">ATK +{eq.attack}</span>}
+                          {eq.defense > 0 && <span className="text-blue-400">DEF +{eq.defense}</span>}
+                          {eq.hp > 0 && <span className="text-green-400">HP +{eq.hp}</span>}
+                        </div>
+                        <div className="mt-2 text-center text-[10px] text-game-accent cursor-pointer">點擊裝備</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Items */}
+            <div className="glass-panel rounded-2xl p-5">
+              <h3 className="text-base font-bold mb-4 flex items-center gap-2">🧪 道具</h3>
+              {player.items.length === 0 ? (
+                <div className="text-center text-gray-500 py-8 text-sm">背包空空如也…去探索看看吧！</div>
+              ) : (
+                <div className="flex flex-wrap gap-3">
+                  {player.items.map(item => (
+                    <div key={item.id} className="tooltip-wrap">
+                      <div className="inv-slot">
+                        <span className="text-2xl">{item.icon}</span>
+                        <span className="inv-qty">×{item.quantity}</span>
+                      </div>
+                      <div className="tooltip-text">
+                        <div className="font-bold">{item.name}</div>
+                        <div className="text-gray-400 text-[11px]">{item.description}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Skills */}
+            <div className="glass-panel rounded-2xl p-5">
+              <h3 className="text-base font-bold mb-4 flex items-center gap-2"><Book size={16} /> 技能書</h3>
+              {player.skills.length === 0 ? (
+                <div className="text-center text-gray-500 py-8 text-sm">尚未習得任何技能</div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {player.skills.map((sk, i) => (
+                    <div key={sk.id} className="flex items-center gap-3 bg-white/[0.03] p-3 rounded-xl border border-white/5 anim-slide-in" style={{ animationDelay: `${i * 60}ms` }}>
+                      <span className="text-2xl flex-shrink-0">{sk.icon}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-bold text-sm">{sk.name}</div>
+                        <div className="text-[11px] text-gray-400 truncate">{sk.description}</div>
+                      </div>
+                      <div className="text-xs font-bold text-game-accent bg-game-accent/10 px-2 py-1 rounded-lg">{sk.power}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Combat Overlay */}
+        {isCombatAction && currentEnemy && (
+          <CombatScreen
+            player={{ ...player, attack: effectiveAtk, defense: effectiveDef, maxHp: effectiveMaxHp }}
+            enemy={currentEnemy}
+            onWin={(exp, gold, skill) => handleCombatWin(exp, gold, skill, currentEnemy.lootTable)}
+            onLose={handleCombatLose}
+            onFlee={() => setIsCombatAction(false)}
+          />
+        )}
+      </div>
+
+      {/* ═══════════ BOTTOM NAV ═══════════ */}
+      <div className="glass-panel px-2 py-2 flex justify-around items-center z-[1100]">
+        {[
+          { key: 'explore', icon: <Compass size={22} />, label: '探索' },
+          { key: 'partners', icon: <Users size={22} />, label: '夥伴' },
+          { key: 'home', icon: <Home size={22} />, label: '家園' },
+          { key: 'bag', icon: <Package size={22} />, label: '行囊' },
+          { key: 'settings', icon: <SettingsIcon size={22} />, label: '設置' },
+        ].map(tab => (
+          <button key={tab.key} onClick={() => tab.key === 'settings' ? supabase.auth.signOut() : setActiveTab(tab.key)}
+            className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all ${activeTab === tab.key ? 'text-game-accent bg-game-accent/10 scale-105' : 'text-gray-500 hover:text-gray-300'}`}>
+            {tab.icon}
+            <span className="text-[10px] font-medium">{tab.key === 'settings' ? '登出' : tab.label}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+export default App;

@@ -1,0 +1,352 @@
+@import "tailwindcss";
+
+@theme {
+  --color-game-dark: #0f172a;
+  --color-game-medium: #1e293b;
+  --color-game-light: #334155;
+  --color-game-accent: #38bdf8;
+  --color-game-gold: #fbbf24;
+  --color-game-danger: #ef4444;
+}
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Noto+Sans+TC:wght@300;400;500;600;700;900&display=swap');
+
+:root {
+  font-family: 'Noto Sans TC', 'Inter', system-ui, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color-scheme: dark;
+  color: rgba(255, 255, 255, 0.87);
+  background-color: #0a0e1a;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  display: flex;
+  min-width: 320px;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+#root {
+  width: 100%;
+}
+
+/* ─── Glass Panel ─── */
+.glass-panel {
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.8), rgba(30, 41, 59, 0.6));
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* ─── Leaflet fix ─── */
+.leaflet-container {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  z-index: 1;
+  background: #0a0e1a !important;
+}
+
+/* ─── Scrollbar ─── */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* ─── Animations ─── */
+@keyframes float {
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes pulse-glow {
+
+  0%,
+  100% {
+    box-shadow: 0 0 8px rgba(56, 189, 248, 0.3);
+  }
+
+  50% {
+    box-shadow: 0 0 24px rgba(56, 189, 248, 0.6);
+  }
+}
+
+@keyframes pulse-danger {
+
+  0%,
+  100% {
+    box-shadow: 0 0 8px rgba(239, 68, 68, 0.3);
+  }
+
+  50% {
+    box-shadow: 0 0 24px rgba(239, 68, 68, 0.6);
+  }
+}
+
+@keyframes shake {
+
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  25% {
+    transform: translateX(-4px);
+  }
+
+  75% {
+    transform: translateX(4px);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes spin-slow {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.anim-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+.anim-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.anim-pulse-danger {
+  animation: pulse-danger 2s ease-in-out infinite;
+}
+
+.anim-shake {
+  animation: shake 0.3s ease-in-out;
+}
+
+.anim-shimmer {
+  background: linear-gradient(90deg, transparent 30%, rgba(255, 255, 255, 0.08) 50%, transparent 70%);
+  background-size: 200% 100%;
+  animation: shimmer 2s linear infinite;
+}
+
+.anim-fade-in-up {
+  animation: fadeInUp 0.5s ease forwards;
+}
+
+.anim-scale-in {
+  animation: scaleIn 0.4s ease forwards;
+}
+
+.anim-slide-in {
+  animation: slideIn 0.4s ease forwards;
+}
+
+.anim-spin-slow {
+  animation: spin-slow 12s linear infinite;
+}
+
+/* ─── Rarity Cards ─── */
+.rarity-1 {
+  border-color: #6b7280;
+}
+
+.rarity-2 {
+  border-color: #22c55e;
+}
+
+.rarity-3 {
+  border-color: #3b82f6;
+}
+
+.rarity-4 {
+  border-color: #a855f7;
+}
+
+.rarity-5 {
+  border-color: #fbbf24;
+  box-shadow: 0 0 20px rgba(251, 191, 36, 0.4);
+}
+
+/* ─── HP / EXP bars ─── */
+.bar-hp {
+  background: linear-gradient(90deg, #ef4444, #f97316);
+}
+
+.bar-exp {
+  background: linear-gradient(90deg, #38bdf8, #818cf8);
+}
+
+.bar-mp {
+  background: linear-gradient(90deg, #6366f1, #8b5cf6);
+}
+
+/* ─── Avatar Frames ─── */
+.avatar-frame {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  overflow: hidden;
+}
+
+.avatar-frame::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, #38bdf8, #818cf8, #a855f7, #38bdf8);
+  z-index: -1;
+  animation: spin-slow 6s linear infinite;
+}
+
+/* ─── Tooltip ─── */
+.tooltip-wrap {
+  position: relative;
+}
+
+.tooltip-wrap .tooltip-text {
+  visibility: hidden;
+  opacity: 0;
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+  z-index: 9999;
+  pointer-events: none;
+}
+
+.tooltip-wrap:hover .tooltip-text {
+  visibility: visible;
+  opacity: 1;
+  transform: translateX(-50%) translateY(-4px);
+}
+
+/* ─── Stat Badge ─── */
+.stat-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+/* ─── Inventory Slot ─── */
+.inv-slot {
+  width: 72px;
+  height: 72px;
+  border: 2px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  background: rgba(30, 41, 59, 0.5);
+  transition: all 0.2s ease;
+  cursor: pointer;
+  position: relative;
+}
+
+.inv-slot:hover {
+  border-color: #38bdf8;
+  background: rgba(56, 189, 248, 0.08);
+  transform: translateY(-2px);
+}
+
+.inv-slot .inv-qty {
+  position: absolute;
+  bottom: 2px;
+  right: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #fbbf24;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
