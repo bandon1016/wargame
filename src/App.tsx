@@ -192,8 +192,8 @@ const App: React.FC = () => {
   };
 
   // Sync to database
-  const saveProfile = async () => {
-    const p = playerRef.current;
+  const saveProfile = async (newState?: CharacterStats) => {
+    const p = newState || playerRef.current;
     if (!p || !session?.user?.id) return;
 
     await supabase.from('profiles').update({
@@ -332,12 +332,15 @@ const App: React.FC = () => {
       if (learnedSkill && !skills.find(s => s.id === learnedSkill.id)) skills.push(learnedSkill);
       if (loot) loot.forEach(li => {
         const ex = items.find(i => i.id === li.id);
-        if (ex) ex.quantity += li.quantity; else items.push({ ...li });
+        if (ex) ex.quantity = (ex.quantity || 1) + (li.quantity || 1);
+        else items.push({ ...li, quantity: li.quantity || 1 });
       });
-      return { ...prev, level: lv, exp: xp, maxExp: mx, hp, maxHp, attack: atk, defense: def, gold: prev.gold + gold, skills, items };
+      const nextState = { ...prev, level: lv, exp: xp, maxExp: mx, hp, maxHp, attack: atk, defense: def, gold: prev.gold + gold, skills, items };
+      saveProfile(nextState);
+      return nextState;
     });
     setIsCombatAction(false);
-  }, []);
+  }, [session]);
 
   const handleCombatLose = useCallback(() => {
     setPlayer(p => p ? ({ ...p, hp: Math.floor(p.maxHp * 0.15) }) : null);
@@ -361,22 +364,25 @@ const App: React.FC = () => {
       // Update items list
       const newItems = prev.items.map(i => {
         if (i.id === item.id) {
-          return { ...i, quantity: i.quantity - 1 };
+          return { ...i, quantity: (i.quantity || 1) - 1 };
         }
         return i;
-      }).filter(i => i.quantity > 0);
+      }).filter(i => (i.quantity || 1) > 0);
 
       // Perform healing logic
-      let newHp = prev.hp;
+      let recoverAmount = 0;
       if (item.id === 'item_hp_pot' || item.id === 'it_01') {
-        const recoverAmount = 50;
-        const currentMaxHp = prev.maxHp + totalEquipHp(prev) + totalPartnerHp(prev);
-        newHp = Math.min(newHp + recoverAmount, currentMaxHp);
+        recoverAmount = 50;
       }
 
-      return { ...prev, items: newItems, hp: newHp };
+      const currentMaxHp = prev.maxHp + totalEquipHp(prev) + totalPartnerHp(prev);
+      const newHp = Math.min(prev.hp + recoverAmount, currentMaxHp);
+
+      const nextState = { ...prev, items: newItems, hp: newHp };
+      saveProfile(nextState); // Immediately persist changes to avoid refresh loss
+      return nextState;
     });
-  }, []);
+  }, [session]);
 
   const effectiveAtk = player ? player.attack + totalEquipAtk(player) + totalPartnerAtk(player) : 0;
   const effectiveDef = player ? player.defense + totalEquipDef(player) + totalPartnerDef(player) : 0;
@@ -416,6 +422,9 @@ const App: React.FC = () => {
       }
       return prev;
     });
+
+    // We can also trigger a save with the current ref slightly after
+    setTimeout(() => saveProfile(), 500);
 
     if (poi.type === 'elite') {
       startHunt(true);
