@@ -127,6 +127,7 @@ export const ITEM_DATABASE: Omit<GameItem, 'quantity'>[] = [
     { id: 'item_magic_gem', name: '魔力寶石', type: 'gem', icon: '💎', description: '散發著微光的神秘寶石' },
     { id: 'item_herb', name: '藥草', type: 'material', icon: '🌿', description: '用於煉製藥水的草本植物' },
     { id: 'item_dragon_scale', name: '龍鱗碎片', type: 'material', icon: '🔮', description: '黑龍掉落的珍貴材料' },
+    { id: 'item_revive_pot', name: '復甦精華', type: 'potion', icon: '💧', description: '散發著奇蹟光芒的泉水，能在戰敗時將角色滿血復活。' },
     // Regional Materials
     { id: 'mat_north_tech', name: '科技廢料', type: 'material', icon: '⚙️', description: '北部特產：殘留微弱能量的廢棄晶片' },
     { id: 'mat_north_glass', name: '魔法玻璃', type: 'material', icon: '🪞', description: '北部特產：折射著奇幻光芒的玻璃碎片' },
@@ -135,6 +136,35 @@ export const ITEM_DATABASE: Omit<GameItem, 'quantity'>[] = [
     { id: 'mat_south_sand', name: '炎漠紅砂', type: 'material', icon: '🏜️', description: '南部特產：蘊含濃烈火屬性魔力的紅色砂礫' },
     { id: 'mat_south_pearl', name: '海淵珍珠', type: 'material', icon: '🦪', description: '南部特產：凝聚大洋精華的璀璨珍珠' },
     { id: 'mat_east_crystal', name: '花東水晶', type: 'material', icon: '💠', description: '東部特產：純淨無瑕的天然水晶' },
+];
+
+// Alchemy Recipes
+export interface AlchemyRecipe {
+    id: string;
+    targetItemId: string; // The item produced
+    materials: { id: string, name: string, quantity: number }[];
+    goldCost: number;
+}
+
+export const ALCHEMY_RECIPES: AlchemyRecipe[] = [
+    {
+        id: 'rec_hp_pot',
+        targetItemId: 'item_hp_pot',
+        materials: [
+            { id: 'item_herb', name: '藥草', quantity: 2 }
+        ],
+        goldCost: 20
+    },
+    {
+        id: 'rec_revive_pot',
+        targetItemId: 'item_revive_pot',
+        materials: [
+            { id: 'item_magic_gem', name: '魔力寶石', quantity: 1 },
+            { id: 'mat_north_glass', name: '魔法玻璃', quantity: 1 },
+            { id: 'mat_south_pearl', name: '海淵珍珠', quantity: 1 }
+        ],
+        goldCost: 500
+    }
 ];
 
 // Region definitions

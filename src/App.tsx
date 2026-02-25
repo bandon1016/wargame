@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap, Circle } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Compass, Sword, Home, Users, Package, Settings as SettingsIcon, Book, Heart, Shield, Zap, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, MapPin, Loader2 } from 'lucide-react';
-import type { CharacterStats, Enemy, Skill, GameItem, Equipment, WeatherType, Town, MapPOI } from './types/game';
+import type { CharacterStats, Equipment, GameItem, Skill, MapPOI, Town, WeatherType, Enemy, AlchemyRecipe } from './types/game';
 import { MONSTER_DATABASE, SKILL_DATABASE, ITEM_DATABASE, RARITY_COLORS, WEATHER_TYPES, getRegionByCoordinates, getRegionalMaterials, TOWN_DATABASE } from './types/game';
 import { CombatScreen } from './components/CombatScreen';
 import { PartnersTab } from './components/PartnersTab';
@@ -30,14 +30,6 @@ const POI_ICONS = {
   elite: '👹',
   altar: '⛩️'
 };
-
-const POI_NAMES = {
-  chest: '遺落的寶物',
-  merchant: '流浪商人',
-  elite: '危險的菁英怪',
-  altar: '神秘祭壇'
-};
-
 const createPoiIcon = (type: keyof typeof POI_ICONS) => L.divIcon({
   html: `<div style="font-size: 24px; filter: drop-shadow(0 0 5px rgba(255,255,255,0.7)); transform: translate(-10%, -10%); opacity: 0.9;">${POI_ICONS[type]}</div>`,
   className: 'custom-poi-marker',
@@ -71,6 +63,13 @@ const totalEquipHp = (p: CharacterStats) => [p.equippedWeapon, p.equippedArmor, 
 const totalPartnerAtk = (p: CharacterStats) => p.partners.reduce((s, pt) => s + (pt.role === 'dps' ? pt.power : Math.floor(pt.power * 0.2)), 0);
 const totalPartnerDef = (p: CharacterStats) => p.partners.reduce((s, pt) => s + (pt.role === 'tank' ? Math.floor(pt.power * 0.5) : Math.floor(pt.power * 0.1)), 0);
 const totalPartnerHp = (p: CharacterStats) => p.partners.reduce((s, pt) => s + (pt.role === 'tank' || pt.role === 'healer' ? pt.power * 3 : pt.power), 0);
+
+const POI_NAMES: Record<string, string> = {
+  chest: '遺落的物資',
+  elite: '危險的魔物棲息地',
+  altar: '神秘祭壇',
+  merchant: '流浪商人'
+};
 
 const App: React.FC = () => {
   const [position, setPosition] = useState<[number, number]>([25.0330, 121.5654]);
@@ -139,6 +138,8 @@ const App: React.FC = () => {
     const poiGenerator = setInterval(fetchPois, 60000); // check 1 min
     return () => clearInterval(poiGenerator);
   }, [fetchPois]);
+
+
 
   // Weather cycle logic
   useEffect(() => {
@@ -330,19 +331,69 @@ const App: React.FC = () => {
     return () => clearInterval(encounterMover);
   }, [autoExplore, isCombatAction, activeTab, move, startHunt]);
 
-  const handleCombatWin = useCallback(async (exp: number, gold: number, learnedSkill?: Skill, loot?: GameItem[]) => {
-    setPlayer(prev => {
-      if (!prev) return null;
-      let { level: lv, exp: xp, maxExp: mx, hp, maxHp, attack: atk, defense: def, skills, items } = { ...prev, skills: [...prev.skills], items: [...prev.items] };
-      xp += exp;
-      if (xp >= mx) { lv++; xp -= mx; mx = Math.floor(mx * 1.4); maxHp += 15; hp = maxHp; atk += 4; def += 2; }
-      if (learnedSkill && !skills.find(s => s.id === learnedSkill.id)) skills.push(learnedSkill);
-      if (loot) loot.forEach(li => {
-        const ex = items.find(i => i.id === li.id);
-        if (ex) ex.quantity = (ex.quantity ?? 1) + (li.quantity ?? 1);
-        else items.push({ ...li, quantity: li.quantity ?? 1 });
+  const handleCombatWin = useCallback(async (expReward: number, goldReward: number, learnedSkill?: Skill, lootList?: GameItem[]) => {
+    setPlayer(p => {
+      if (!p) return null;
+
+      // Basic Exp & Gold
+      const newExp = p.exp + expReward;
+      const newGold = p.gold + goldReward;
+
+      // Handle Level Up
+      let nextLevel = p.level;
+      let nextExp = newExp;
+      let nextMaxExp = p.maxExp;
+      let nextMaxHp = p.maxHp;
+      let nextAttack = p.attack;
+      let nextDefense = p.defense;
+
+      while (nextExp >= nextMaxExp) {
+        nextExp -= nextMaxExp;
+        nextLevel++;
+        nextMaxExp = Math.floor(nextMaxExp * 1.5);
+        nextMaxHp += 20;
+        nextAttack += 3;
+        nextDefense += 2;
+      }
+
+      // Merge Items
+      const combinedItems = [...p.items];
+      const itemsToAward = [...(lootList || [])];
+
+      // Elite Monster: 15% chance to drop revive potion
+      if (currentEnemy?.name.includes('【菁英】') && Math.random() < 0.15) { // Assuming elite monsters have '【菁英】' in their name
+        const potDef = ITEM_DATABASE.find(i => i.id === 'item_revive_pot');
+        if (potDef) itemsToAward.push({ ...potDef, quantity: 1 });
+      }
+
+      itemsToAward.forEach(loot => {
+        const existing = combinedItems.find(i => i.id === loot.id);
+        if (existing) {
+          existing.quantity = (existing.quantity || 1) + (loot.quantity || 1);
+        } else {
+          combinedItems.push({ ...loot });
+        }
       });
-      const nextState = { ...prev, level: lv, exp: xp, maxExp: mx, hp, maxHp, attack: atk, defense: def, gold: prev.gold + gold, skills, items };
+
+      // Handle learned skill
+      const newSkills = [...p.skills];
+      if (learnedSkill && !newSkills.find(s => s.id === learnedSkill.id)) {
+        newSkills.push(learnedSkill);
+      }
+
+      const nextState = {
+        ...p,
+        level: nextLevel,
+        exp: nextExp,
+        maxExp: nextMaxExp,
+        hp: nextMaxHp, // Heal to full on level up
+        maxHp: nextMaxHp,
+        attack: nextAttack,
+        defense: nextDefense,
+        gold: newGold,
+        skills: newSkills,
+        items: combinedItems
+      };
       saveProfile(nextState);
       return nextState;
     });
@@ -372,7 +423,7 @@ const App: React.FC = () => {
   const equipItem = useCallback((eq: Equipment) => {
     setPlayer(prev => {
       if (!prev) return null;
-      const slotKey = `equipped${eq.slot.charAt(0).toUpperCase() + eq.slot.slice(1)}` as keyof CharacterStats;
+      const slotKey = `equipped${eq.slot.charAt(0).toUpperCase() + eq.slot.slice(1)} ` as keyof CharacterStats;
       return { ...prev, [slotKey]: eq } as CharacterStats;
     });
   }, []);
@@ -402,6 +453,37 @@ const App: React.FC = () => {
 
       const nextState = { ...prev, items: newItems, hp: newHp };
       saveProfile(nextState); // Immediately persist changes to avoid refresh loss
+      return nextState;
+    });
+  }, [session]);
+
+  const handleCraftAlchemy = useCallback((recipe: AlchemyRecipe) => {
+    setPlayer(prev => {
+      if (!prev) return null;
+
+      // 1. Deduct Mats
+      let currentItems = [...prev.items];
+      for (const req of recipe.materials) {
+        currentItems = currentItems.map(i => i.id === req.id ? { ...i, quantity: (i.quantity ?? 1) - req.quantity } : i).filter(i => (i.quantity ?? 1) > 0);
+      }
+
+      // 2. Add Result
+      const existing = currentItems.find(i => i.id === recipe.targetItemId);
+      if (existing) {
+        existing.quantity = (existing.quantity ?? 1) + 1;
+      } else {
+        const itemDef = ITEM_DATABASE.find(i => i.id === recipe.targetItemId);
+        if (itemDef) {
+          currentItems.push({ ...itemDef, quantity: 1 });
+        }
+      }
+
+      const nextState = {
+        ...prev,
+        gold: prev.gold - recipe.goldCost,
+        items: currentItems
+      };
+      saveProfile(nextState);
       return nextState;
     });
   }, [session]);
@@ -446,7 +528,18 @@ const App: React.FC = () => {
       if (!prev) return null;
       if (poi.type === 'chest') {
         const goldBounty = 100 + prev.level * 20;
-        return { ...prev, gold: prev.gold + goldBounty };
+        let newItems = [...prev.items];
+
+        // 10% chance to drop a revive potion from chests
+        if (Math.random() < 0.1) {
+          const potDef = ITEM_DATABASE.find(i => i.id === 'item_revive_pot');
+          if (potDef) {
+            const existingPot = newItems.find(i => i.id === 'item_revive_pot');
+            if (existingPot) existingPot.quantity = (existingPot.quantity ?? 1) + 1;
+            else newItems.push({ ...potDef, quantity: 1 });
+          }
+        }
+        return { ...prev, gold: prev.gold + goldBounty, items: newItems };
       }
       if (poi.type === 'altar') {
         // Heal to full
@@ -505,7 +598,7 @@ const App: React.FC = () => {
             <div className="flex items-center gap-2 mt-0.5">
               <Heart size={10} className="text-red-400 flex-shrink-0" />
               <div className="w-28 h-[6px] bg-gray-800 rounded-full overflow-hidden">
-                <div className="h-full bar-hp transition-all duration-500 rounded-full" style={{ width: `${(player.hp / effectiveMaxHp) * 100}%` }} />
+                <div className="h-full bar-hp transition-all duration-500 rounded-full" style={{ width: `${(player.hp / effectiveMaxHp) * 100}% ` }} />
               </div>
               <span className="text-[10px] text-gray-400 tabular-nums w-16 text-right">{player.hp}/{effectiveMaxHp}</span>
             </div>
@@ -513,7 +606,7 @@ const App: React.FC = () => {
             <div className="flex items-center gap-2 mt-0.5">
               <Zap size={10} className="text-sky-400 flex-shrink-0" />
               <div className="w-28 h-[4px] bg-gray-800 rounded-full overflow-hidden">
-                <div className="h-full bar-exp transition-all duration-500 rounded-full" style={{ width: `${(player.exp / player.maxExp) * 100}%` }} />
+                <div className="h-full bar-exp transition-all duration-500 rounded-full" style={{ width: `${(player.exp / player.maxExp) * 100}% ` }} />
               </div>
               <span className="text-[10px] text-gray-500 tabular-nums w-16 text-right">{player.exp}/{player.maxExp}</span>
             </div>
@@ -603,13 +696,13 @@ const App: React.FC = () => {
                       <MapPin size={18} /> 互動 ({POI_NAMES[nearestPoi.type]})
                     </button>
                   ) : (
-                    <button onClick={() => startHunt(false)} disabled={autoExplore} className={`flex-1 ${autoExplore ? 'bg-gray-600' : 'bg-gradient-to-r from-game-accent to-indigo-500 hover:from-sky-400 hover:to-indigo-400'} text-white font-bold rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg ${autoExplore ? '' : 'shadow-game-accent/20'}`}>
+                    <button onClick={() => startHunt(false)} disabled={autoExplore} className={`flex - 1 ${autoExplore ? 'bg-gray-600' : 'bg-gradient-to-r from-game-accent to-indigo-500 hover:from-sky-400 hover:to-indigo-400'} text - white font - bold rounded - xl transition - all active: scale - 95 flex items - center justify - center gap - 2 shadow - lg ${autoExplore ? '' : 'shadow-game-accent/20'} `}>
                       <Sword size={18} /> {autoExplore ? '自動探索中...' : '自由狩獵'}
                     </button>
                   )}
                   <button
                     onClick={() => setAutoExplore(!autoExplore)}
-                    className={`min-w-[40px] w-[40px] rounded-xl flex items-center justify-center transition-all ${autoExplore ? 'bg-green-500/20 text-green-400 border border-green-500/50 shadow-[0_0_10px_rgba(34,197,94,0.3)]' : 'bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10'}`}
+                    className={`min - w - [40px] w - [40px] rounded - xl flex items - center justify - center transition - all ${autoExplore ? 'bg-green-500/20 text-green-400 border border-green-500/50 shadow-[0_0_10px_rgba(34,197,94,0.3)]' : 'bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10'} `}
                     title={autoExplore ? "停止自動探索" : "開啟自動探索"}
                   >
                     <Zap size={18} className={autoExplore ? 'animate-pulse' : ''} />
@@ -656,17 +749,17 @@ const App: React.FC = () => {
               <h3 className="text-base font-bold mb-4 flex items-center gap-2">⚔️ 裝備欄</h3>
               <div className="grid grid-cols-5 gap-3">
                 {(['weapon', 'armor', 'helmet', 'boots', 'accessory'] as const).map(slot => {
-                  const slotKey = `equipped${slot.charAt(0).toUpperCase() + slot.slice(1)}` as keyof CharacterStats;
+                  const slotKey = `equipped${slot.charAt(0).toUpperCase() + slot.slice(1)} ` as keyof CharacterStats;
                   const eq = player[slotKey] as Equipment | undefined;
                   const r = eq ? RARITY_COLORS[eq.rarity] : null;
                   return (
                     <div key={slot} className="tooltip-wrap">
-                      <div className={`inv-slot ${r ? `border-2 ${r.border} ${r.bg} ${r.glow}` : ''}`}>
+                      <div className={`inv - slot ${r ? `border-2 ${r.border} ${r.bg} ${r.glow}` : ''} `}>
                         {eq ? <span className="text-3xl">{eq.icon}</span> : <span className="text-gray-600 text-xs">{slot === 'weapon' ? '武器' : slot === 'armor' ? '護甲' : slot === 'helmet' ? '頭盔' : slot === 'boots' ? '鞋子' : '飾品'}</span>}
                       </div>
                       {eq && (
                         <div className="tooltip-text">
-                          <div className={`font-bold ${r?.text}`}>{eq.name}</div>
+                          <div className={`font - bold ${r?.text} `}>{eq.name}</div>
                           <div className="text-gray-400 text-[11px]">{eq.description}</div>
                           <div className="mt-1 text-[11px] space-x-2">
                             {eq.attack > 0 && <span className="text-red-400">ATK +{eq.attack}</span>}
@@ -689,11 +782,11 @@ const App: React.FC = () => {
                   {player.equipment.map(eq => {
                     const r = RARITY_COLORS[eq.rarity];
                     return (
-                      <div key={eq.id} onClick={() => equipItem(eq)} className={`glass-panel p-3 rounded-xl border-2 ${r.border} ${r.glow} cursor-pointer hover:bg-white/5 transition-all active:scale-95 anim-fade-in-up`}>
+                      <div key={eq.id} onClick={() => equipItem(eq)} className={`glass - panel p - 3 rounded - xl border - 2 ${r.border} ${r.glow} cursor - pointer hover: bg - white / 5 transition - all active: scale - 95 anim - fade -in -up`}>
                         <div className="flex items-center gap-3">
                           <span className="text-3xl">{eq.icon}</span>
                           <div>
-                            <div className={`font-bold text-sm ${r.text}`}>{eq.name}</div>
+                            <div className={`font - bold text - sm ${r.text} `}>{eq.name}</div>
                             <div className="text-[10px] text-gray-400">{r.label} · {eq.slot === 'weapon' ? '武器' : eq.slot === 'armor' ? '護甲' : eq.slot === 'helmet' ? '頭盔' : eq.slot === 'boots' ? '鞋子' : '飾品'}</div>
                           </div>
                         </div>
@@ -719,7 +812,7 @@ const App: React.FC = () => {
                 <div className="flex flex-wrap gap-3">
                   {player.items.map(item => (
                     <div key={item.id} className="tooltip-wrap" onClick={() => useItem(item)}>
-                      <div className={`inv-slot ${item.type === 'potion' ? 'cursor-pointer hover:ring-2 hover:ring-game-accent/50' : ''}`}>
+                      <div className={`inv - slot ${item.type === 'potion' ? 'cursor-pointer hover:ring-2 hover:ring-game-accent/50' : ''} `}>
                         <span className="text-2xl">{item.icon}</span>
                         <span className="inv-qty">×{item.quantity}</span>
                       </div>
@@ -774,15 +867,19 @@ const App: React.FC = () => {
             autoExplore={autoExplore}
             weather={weather}
             onAutoHeal={() => {
-              const pot = player.items.find(i => i.type === 'potion');
+              const pot = player.items.find(i => i.type === 'potion' && i.id !== 'item_revive_pot');
               if (pot) useItem(pot);
+            }}
+            onRevive={() => {
+              const revivePot = player.items.find(i => i.id === 'item_revive_pot');
+              if (revivePot) useItem(revivePot);
             }}
           />
         )}
 
         {/* Town Overlay */}
         {inTown && (
-          <TownScreen town={inTown} onLeave={() => setInTown(null)} />
+          <TownScreen town={inTown} player={player!} onLeave={() => setInTown(null)} onCraftAlchemy={handleCraftAlchemy} />
         )}
       </div>
 

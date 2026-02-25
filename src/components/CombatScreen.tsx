@@ -11,9 +11,10 @@ interface CombatScreenProps {
     autoExplore?: boolean;
     weather?: WeatherType;
     onAutoHeal?: () => void;
+    onRevive?: () => void;
 }
 
-export const CombatScreen: React.FC<CombatScreenProps> = ({ player, enemy, onWin, onLose, onFlee, autoExplore, weather, onAutoHeal }) => {
+export const CombatScreen: React.FC<CombatScreenProps> = ({ player, enemy, onWin, onLose, onFlee, autoExplore, weather, onAutoHeal, onRevive }) => {
     const [eHp, setEHp] = useState(enemy.hp);
     const [pHp, setPHp] = useState(player.hp);
     const [logs, setLogs] = useState<string[]>([`⚔️ 野外遭遇了 ${enemy.name} (Lv.${enemy.level})！`]);
@@ -23,15 +24,17 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({ player, enemy, onWin
     const [eShake, setEShake] = useState(false);
     const [result, setResult] = useState<'win' | 'lose' | null>(null);
     const logRef = useRef<HTMLDivElement>(null);
+    const [awaitingRevive, setAwaitingRevive] = useState(false);
+    const revivePotCount = player.items.find(i => i.id === 'item_revive_pot')?.quantity || 0;
 
     useEffect(() => { logRef.current?.scrollTo({ top: 999999, behavior: 'smooth' }); }, [logs]);
 
     useEffect(() => {
-        if (!auto || ended) return;
+        if (!auto || ended || awaitingRevive) return;
         const tickRate = autoExplore ? 400 : 800; // Faster combat if global auto explore is on
         const t = window.setTimeout(turn, tickRate);
         return () => clearTimeout(t);
-    }, [auto, pHp, eHp, ended]);
+    }, [auto, pHp, eHp, ended, awaitingRevive]);
 
     const log = (m: string) => setLogs(p => [...p, m]);
 
@@ -81,8 +84,27 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({ player, enemy, onWin
             setPHp(finalPHp);
             setPShake(true); setTimeout(() => setPShake(false), 300);
             log(`${enemy.avatar} ${enemy.name} 反擊，造成 ${eDmg} 傷害`);
-            if (finalPHp <= 0) lose();
+
+            if (finalPHp <= 0) {
+                if (revivePotCount > 0 && onRevive) {
+                    setAuto(false);
+                    setAwaitingRevive(true);
+                    log(`💧 檢測到背包中有【復甦精華】，是否使用？`);
+                } else {
+                    lose();
+                }
+            }
         }, 350);
+    };
+
+    const handleRevive = () => {
+        if (onRevive) {
+            onRevive();
+            setPHp(player.maxHp);
+            setAwaitingRevive(false);
+            log(`✨ 使用了【復甦精華】，重獲新生！`);
+            if (autoExplore) setAuto(true);
+        }
     };
 
     const win = () => {
@@ -178,20 +200,33 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({ player, enemy, onWin
 
             {/* Actions */}
             <div className="flex gap-3">
-                {!auto && !ended && (
+                {awaitingRevive ? (
                     <>
-                        <button onClick={turn} className="flex-1 bg-gradient-to-r from-game-accent to-indigo-500 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg shadow-game-accent/20">
-                            <Sword size={18} /> 攻擊
+                        <button onClick={handleRevive} className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg shadow-emerald-500/20">
+                            💧 使用復活道具 (剩餘: {revivePotCount})
                         </button>
-                        <button onClick={() => setAuto(true)} className="flex-1 glass-panel border border-game-accent/30 font-bold py-3 rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-all hover:bg-white/5">
-                            <Play size={18} /> 自動
+                        <button onClick={lose} className="flex-1 glass-panel border border-game-danger/40 text-game-danger font-bold py-3 rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-all hover:bg-white/5">
+                            <X size={16} /> 放棄戰鬥
                         </button>
                     </>
-                )}
-                {auto && !ended && (
-                    <button onClick={() => setAuto(false)} className="flex-1 glass-panel border border-game-danger/40 text-game-danger font-bold py-3 rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-all">
-                        <Square size={16} /> 停止自動
-                    </button>
+                ) : (
+                    <>
+                        {!auto && !ended && (
+                            <>
+                                <button onClick={turn} className="flex-1 bg-gradient-to-r from-game-accent to-indigo-500 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg shadow-game-accent/20">
+                                    <Sword size={18} /> 攻擊
+                                </button>
+                                <button onClick={() => setAuto(true)} className="flex-1 glass-panel border border-game-accent/30 font-bold py-3 rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-all hover:bg-white/5">
+                                    <Play size={18} /> 自動
+                                </button>
+                            </>
+                        )}
+                        {auto && !ended && (
+                            <button onClick={() => setAuto(false)} className="flex-1 glass-panel border border-game-danger/40 text-game-danger font-bold py-3 rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-all">
+                                <Square size={16} /> 停止自動
+                            </button>
+                        )}
+                    </>
                 )}
             </div>
         </div>
