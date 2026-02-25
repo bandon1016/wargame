@@ -36,7 +36,13 @@ export const AuthScreen: React.FC<{ onSignIn: () => void }> = ({ onSignIn }) => 
                 setIsLogin(true);
             }
         } catch (error: any) {
-            setMessage(error.message || '發生錯誤，請重試。');
+            let errorMsg = error.message;
+            if (errorMsg === 'Email not confirmed') {
+                errorMsg = '電子信箱尚未驗證，請先至您的信箱查看驗證信。';
+            } else if (errorMsg === 'Invalid login credentials') {
+                errorMsg = '電子信箱或密碼錯誤。';
+            }
+            setMessage(errorMsg || '發生錯誤，請重試。');
         } finally {
             setLoading(false);
         }
@@ -74,18 +80,18 @@ export const AuthScreen: React.FC<{ onSignIn: () => void }> = ({ onSignIn }) => 
                             </div>
                         )}
                         <div>
-                            <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Email</label>
+                            <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">電子信箱 (Email)</label>
                             <input
                                 type="email"
                                 required
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 className="w-full bg-gray-900/50 border border-gray-700/50 rounded-xl px-4 py-3 outline-none focus:border-game-accent/50 transition-colors"
-                                placeholder="adventurer@example.com"
+                                placeholder="example@email.com"
                             />
                         </div>
                         <div>
-                            <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Password</label>
+                            <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">登入密碼 (Password)</label>
                             <input
                                 type="password"
                                 required
