@@ -89,6 +89,11 @@ const App: React.FC = () => {
   const [inTown, setInTown] = useState<Town | null>(null);
   const [pois, setPois] = useState<MapPOI[]>([]);
 
+  const [activePoiCombat, setActivePoiCombat] = useState<string | null>(null);
+  const activePoiRef = React.useRef<string | null>(null);
+  useEffect(() => { activePoiRef.current = activePoiCombat; }, [activePoiCombat]);
+  const [eliteCooldowns, setEliteCooldowns] = useState<Record<string, number>>({});
+
   // Sync ref structure
   useEffect(() => {
     playerRef.current = player;
@@ -121,7 +126,9 @@ const App: React.FC = () => {
         type: d.type,
         lat: d.lat,
         lng: d.lng,
-        expiresAt: d.expires_at ? new Date(d.expires_at).getTime() : undefined
+        expiresAt: d.expires_at ? new Date(d.expires_at).getTime() : undefined,
+        lockedBy: d.locked_by,
+        lockedAt: d.locked_at ? new Date(d.locked_at).getTime() : undefined
       }));
       setPois(mapped);
     }
@@ -323,7 +330,7 @@ const App: React.FC = () => {
     return () => clearInterval(encounterMover);
   }, [autoExplore, isCombatAction, activeTab, move, startHunt]);
 
-  const handleCombatWin = useCallback((exp: number, gold: number, learnedSkill?: Skill, loot?: GameItem[]) => {
+  const handleCombatWin = useCallback(async (exp: number, gold: number, learnedSkill?: Skill, loot?: GameItem[]) => {
     setPlayer(prev => {
       if (!prev) return null;
       let { level: lv, exp: xp, maxExp: mx, hp, maxHp, attack: atk, defense: def, skills, items } = { ...prev, skills: [...prev.skills], items: [...prev.items] };
@@ -340,12 +347,27 @@ const App: React.FC = () => {
       return nextState;
     });
     setIsCombatAction(false);
-  }, [session]);
 
-  const handleCombatLose = useCallback(() => {
+    if (activePoiRef.current) {
+      await supabase.rpc('resolve_poi_combat', { p_poi_id: activePoiRef.current, p_win: true });
+      setPois(prev => prev.filter(p => p.id !== activePoiRef.current));
+      setActivePoiCombat(null);
+      fetchPois();
+    }
+  }, [session, fetchPois]);
+
+  const handleCombatLose = useCallback(async () => {
     setPlayer(p => p ? ({ ...p, hp: Math.floor(p.maxHp * 0.15) }) : null);
     setIsCombatAction(false);
-  }, []);
+
+    if (activePoiRef.current) {
+      const poiId = activePoiRef.current;
+      await supabase.rpc('resolve_poi_combat', { p_poi_id: poiId, p_win: false });
+      setEliteCooldowns(prev => ({ ...prev, [poiId]: Date.now() + 10000 }));
+      setActivePoiCombat(null);
+      fetchPois(); // Refresh to show it back
+    }
+  }, [fetchPois]);
 
   const equipItem = useCallback((eq: Equipment) => {
     setPlayer(prev => {
@@ -392,6 +414,18 @@ const App: React.FC = () => {
   const handlePoiInteract = useCallback(async (poi: MapPOI) => {
     if (!session?.user?.id) return;
 
+    if (poi.type === 'elite') {
+      const cd = eliteCooldowns[poi.id];
+      if (cd && Date.now() < cd) {
+        alert(`剛從戰鬥中撤退，請等待 ${Math.ceil((cd - Date.now()) / 1000)} 秒後再重新挑戰！`);
+        return;
+      }
+      if (poi.lockedBy && poi.lockedBy !== session.user.id) {
+        alert('這名菁英怪正在與其他玩家戰鬥中！');
+        return;
+      }
+    }
+
     // DB Check
     const { data: success, error } = await supabase.rpc('interact_poi', { p_poi_id: poi.id });
     if (error || !success) {
@@ -401,8 +435,11 @@ const App: React.FC = () => {
     }
 
     // Success! Update local state
-    if (poi.type === 'chest' || poi.type === 'elite') {
+    if (poi.type === 'chest') {
       setPois(prev => prev.filter(p => p.id !== poi.id)); // Remove the POI locally
+    } else if (poi.type === 'elite') {
+      setPois(prev => prev.map(p => p.id === poi.id ? { ...p, lockedBy: session.user.id, lockedAt: Date.now() } : p));
+      setActivePoiCombat(poi.id);
     }
 
     setPlayer(prev => {
@@ -517,11 +554,18 @@ const App: React.FC = () => {
                   <Popup>{t.name}</Popup>
                 </Circle>
               ))}
-              {pois.map(p => (
-                <Marker key={p.id} position={[p.lat, p.lng]} icon={createPoiIcon(p.type)}>
-                  <Popup>{POI_NAMES[p.type]}</Popup>
-                </Marker>
-              ))}
+              {pois.map(p => {
+                let statusLabel = '';
+                // 菁英怪已被鎖定
+                if (p.type === 'elite' && p.lockedBy) {
+                  statusLabel = p.lockedBy === session?.user?.id ? ' (⚔️你的戰鬥)' : ' (⚔️戰鬥中)';
+                }
+                return (
+                  <Marker key={p.id} position={[p.lat, p.lng]} icon={createPoiIcon(p.type)}>
+                    <Popup>{POI_NAMES[p.type]}{statusLabel}</Popup>
+                  </Marker>
+                );
+              })}
               <Marker position={position} icon={createPlayerIcon('🧙‍♂️')}>
                 <Popup>你的位置</Popup>
               </Marker>

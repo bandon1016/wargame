@@ -210,4 +210,6 @@ export interface MapPOI {
     lat: number;
     lng: number;
     expiresAt?: number;
+    lockedBy?: string | null;
+    lockedAt?: number | null;
 }
