@@ -33,7 +33,13 @@ body {
   display: flex;
   min-width: 320px;
   min-height: 100vh;
-  overflow-x: hidden;
+  overflow: hidden;
+  /* 防止 PWA 彈性捲動效果 */
+  overscroll-behavior: none;
+  user-select: none;
+  /* 防止長按文字被選取 */
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 #root {
@@ -310,7 +316,10 @@ body {
   padding: 8px 12px;
   border-radius: 8px;
   font-size: 12px;
-  white-space: nowrap;
+  width: max-content;
+  max-width: 220px;
+  white-space: normal;
+  word-wrap: break-word;
   transition: all 0.2s ease;
   z-index: 9999;
   pointer-events: none;

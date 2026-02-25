@@ -161,6 +161,22 @@ const App: React.FC = () => {
   const [eliteCooldowns, setEliteCooldowns] = useState<Record<string, number>>({});
   const [combatLogs, setCombatLogs] = useState<CombatLog[]>([]);
   const [logOpacity, setLogOpacity] = useState(1);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
+  // Check for onboarding
+  useEffect(() => {
+    if (player && player.level === 1 && player.exp === 0) {
+      const hasSeen = localStorage.getItem('hasSeenOnboarding_v1');
+      if (!hasSeen) {
+        setShowOnboarding(true);
+      }
+    }
+  }, [player]);
+
+  const handleCloseOnboarding = () => {
+    localStorage.setItem('hasSeenOnboarding_v1', 'true');
+    setShowOnboarding(false);
+  };
 
   // Railway Travel States (Time-Based)
   const [isTraveling, setIsTraveling] = useState(false);
@@ -208,7 +224,11 @@ const App: React.FC = () => {
       setTravelProgress(progress);
 
       if (progress >= 1) {
-        // Arrived!
+        // Arrived! Clear REFS first so saveProfile reads null travel data (not stale closure)
+        travelPathRef.current = [];
+        travelDepartedAtRef.current = null;
+        travelDurationSecRef.current = 0;
+
         const finalPos = path[path.length - 1];
         setPosition(finalPos);
         setIsTraveling(false);
@@ -216,8 +236,9 @@ const App: React.FC = () => {
         setTravelDepartedAt(null);
         setTravelDurationSec(0);
         setTravelProgress(0);
-        // Use ref to avoid forward-reference lint error
-        saveProfileRef.current?.();
+
+        // No need for immediate saveProfileRef.current?.(); 
+        // The setPosition above will trigger the auto-save useEffect naturally.
         return;
       }
 
@@ -464,6 +485,10 @@ const App: React.FC = () => {
         // Already arrived, jump to destination immediately
         const finalPos = path[path.length - 1];
         setPosition(finalPos);
+        setIsTraveling(false);
+        setTravelPath([]);
+        setTravelDepartedAt(null);
+        setTravelDurationSec(0);
         // Clear travel state on DB (will be done by next saveProfile)
       } else {
         // Journey in progress, restore travel state
@@ -482,8 +507,10 @@ const App: React.FC = () => {
     const p = newState || playerRef.current;
     if (!p || !session?.user?.id) return;
 
-    // Build travel persistence payload
-    const travelSaveData = isTraveling && travelPathRef.current.length > 0 && travelDepartedAtRef.current
+    // Build travel persistence payload - Use REFS directly to avoid state sync lag
+    const isCurrentlyOnTrain = travelPathRef.current.length > 0 && travelDepartedAtRef.current;
+
+    const travelSaveData = (isCurrentlyOnTrain && travelDepartedAtRef.current)
       ? {
         travel_path: travelPathRef.current,
         travel_started_at: travelDepartedAtRef.current.toISOString(),
@@ -871,8 +898,8 @@ const App: React.FC = () => {
       enemyName: currentEnemy?.name || '未知魔物',
       exp: expReward,
       gold: goldReward,
-      items: itemsToAward.map(i => ({ name: i.name, quantity: i.quantity || 1, icon: i.icon })).concat(
-        droppedEq ? [{ name: droppedEq.name, quantity: 1, icon: droppedEq.icon }] : []
+      items: itemsToAward.map(i => ({ name: i.name, quantity: i.quantity || 1, icon: ITEM_DATABASE.find(itemDef => itemDef.id === i.id)?.icon ?? i.icon })).concat(
+        droppedEq ? [{ name: droppedEq.name, quantity: 1, icon: EQUIPMENT_DATABASE.find(eqDef => eqDef.id === droppedEq.id)?.icon ?? droppedEq.icon }] : []
       )
     };
     setCombatLogs(prev => [...prev, newLog].slice(-6));
@@ -999,7 +1026,7 @@ const App: React.FC = () => {
       if (!silent) {
         setLootMessage({
           title: '藥水使用確認',
-          items: [{ name: item.name, quantity: 1, icon: item.icon }, { name: '恢復生命', quantity: actualHeal, icon: '💚' }]
+          items: [{ name: item.name, quantity: 1, icon: ITEM_DATABASE.find(itemDef => itemDef.id === item.id)?.icon ?? item.icon }, { name: '恢復生命', quantity: actualHeal, icon: '💚' }]
         });
       }
     } else if (item.type === 'consumable') {
@@ -1764,8 +1791,10 @@ const App: React.FC = () => {
         {activeTab === 'bag' && (
           <div className="p-5 h-full overflow-y-auto w-full space-y-5">
             {/* Equipment Slots */}
-            <div className="glass-panel rounded-2xl p-6 relative overflow-hidden">
-              <div className="absolute -right-10 -top-10 w-40 h-40 bg-game-accent/5 rounded-full blur-3xl" />
+            <div className="glass-panel rounded-2xl p-6 relative">
+              <div className="absolute inset-0 overflow-hidden rounded-2xl pointer-events-none">
+                <div className="absolute -right-10 -top-10 w-40 h-40 bg-game-accent/5 rounded-full blur-3xl" />
+              </div>
               <h3 className="text-base font-bold mb-4 flex items-center gap-2">⚔️ 當前裝備</h3>
               <div className="grid grid-cols-5 gap-3">
                 {(['weapon', 'armor', 'helmet', 'boots', 'accessory'] as const).map(slot => {
@@ -1775,7 +1804,7 @@ const App: React.FC = () => {
                   return (
                     <div key={slot} className="tooltip-wrap" onClick={() => eq && unequipItem(slot)}>
                       <div className={`inv-slot ${r ? `border-2 ${r.border} ${r.bg} ${r.glow} cursor-pointer` : ''}`}>
-                        {eq ? <span className="text-3xl">{eq.icon}</span> : <span className="text-gray-600 text-[10px] font-bold uppercase tracking-tighter">{slot === 'weapon' ? '武器' : slot === 'armor' ? '護甲' : slot === 'helmet' ? '頭盔' : slot === 'boots' ? '鞋子' : '飾品'}</span>}
+                        {eq ? <span className="text-3xl">{EQUIPMENT_DATABASE.find(e => e.id === eq.id)?.icon ?? eq.icon}</span> : <span className="text-gray-600 text-[10px] font-bold uppercase tracking-tighter">{slot === 'weapon' ? '武器' : slot === 'armor' ? '護甲' : slot === 'helmet' ? '頭盔' : slot === 'boots' ? '鞋子' : '飾品'}</span>}
                       </div>
                       {eq && (
                         <div className="tooltip-text">
@@ -1805,7 +1834,7 @@ const App: React.FC = () => {
                     return (
                       <div key={eq.id} className="tooltip-wrap" onClick={() => equipItem(eq)}>
                         <div className={`inv-slot border-2 ${r.border} ${r.bg} ${r.glow} cursor-pointer hover:scale-105 transition-transform`}>
-                          <span className="text-3xl">{eq.icon}</span>
+                          <span className="text-3xl">{EQUIPMENT_DATABASE.find(e => e.id === eq.id)?.icon ?? eq.icon}</span>
                         </div>
                         <div className="tooltip-text">
                           <div className={`font-bold ${r.text}`}>{eq.name}</div>
@@ -1833,7 +1862,7 @@ const App: React.FC = () => {
                   {player.items.map(item => (
                     <div key={item.id} className="tooltip-wrap" onClick={() => (item.type === 'potion' || item.type === 'consumable') && useItem(item)}>
                       <div className={`inv-slot ${(item.type === 'potion' || item.type === 'consumable') ? 'cursor-pointer hover:ring-2 hover:ring-game-accent/50' : 'opacity-80'}`}>
-                        <span className="text-2xl">{item.icon}</span>
+                        <span className="text-2xl">{ITEM_DATABASE.find(i => i.id === item.id)?.icon ?? item.icon}</span>
                         <span className="inv-qty">×{item.quantity}</span>
                       </div>
                       <div className="tooltip-text">
@@ -1926,7 +1955,7 @@ const App: React.FC = () => {
 
                     return (
                       <div key={item.id} className="flex items-center gap-3 bg-white/5 p-3 rounded-2xl border border-white/5 hover:bg-white/10 transition-all group">
-                        <div className="text-3xl bg-white/5 w-12 h-12 rounded-xl flex items-center justify-center border border-white/10">{item.icon}</div>
+                        <div className="text-3xl bg-white/5 w-12 h-12 rounded-xl flex items-center justify-center border border-white/10">{ITEM_DATABASE.find(i => i.id === item.id)?.icon ?? item.icon}</div>
                         <div className="flex-1">
                           <div className="font-bold text-sm">{item.name}</div>
                           <div className="text-[10px] text-gray-500">持有: {item.quantity}</div>
@@ -1995,8 +2024,81 @@ const App: React.FC = () => {
           </button>
         ))}
       </div>
-    </div >
+      {/* Onboarding Welcome Modal */}
+      {showOnboarding && (
+        <div className="fixed inset-0 z-[5000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm anim-fade-in">
+          <div className="glass-panel w-full max-w-lg rounded-[2.5rem] p-8 md:p-10 border border-white/20 shadow-2xl relative overflow-hidden anim-scale-in">
+            {/* Background Accent */}
+            <div className="absolute -right-20 -top-20 w-64 h-64 bg-game-accent/10 rounded-full blur-3xl" />
+            <div className="absolute -left-20 -bottom-20 w-64 h-64 bg-game-gold/10 rounded-full blur-3xl" />
+
+            <div className="relative">
+              <div className="flex justify-center mb-6">
+                <div className="w-20 h-20 bg-gradient-to-br from-game-accent to-indigo-600 rounded-3xl flex items-center justify-center shadow-lg shadow-game-accent/20 rotate-3">
+                  <Compass size={44} className="text-white animate-pulse" />
+                </div>
+              </div>
+
+              <h2 className="text-3xl font-black text-white text-center mb-2 italic">✨ 歡迎來到《浪跡戰域》 ✨</h2>
+              <p className="text-gray-400 text-center text-sm mb-8 leading-relaxed">
+                在這裡，現實與魔幻的地貌交錯。你將扮演一名失去記憶的冒險者，在這個以真實地理為藍本的奇幻島嶼上展開史詩旅程！
+              </p>
+
+              <div className="space-y-5 mb-10 text-sm">
+                <div className="flex gap-4 group">
+                  <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center flex-shrink-0 group-hover:bg-game-accent/20 transition-colors">
+                    <MapPin size={20} className="text-game-accent" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-white mb-0.5">🌍 探索與生存</h4>
+                    <p className="text-gray-400 leading-snug">點擊地圖在地圖上移動。靠近標記去搜括寶藏或挑戰魔物獲取經驗金幣！</p>
+                  </div>
+                </div>
+
+                <div className="flex gap-4 group">
+                  <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center flex-shrink-0 group-hover:bg-game-gold/20 transition-colors">
+                    <Sword size={20} className="text-game-gold" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-white mb-0.5">⚒️ 資源與鍛造</h4>
+                    <p className="text-gray-400 leading-snug">收集的素材可回城鎮進行鍛造。**每個城市都有獨特專屬的夢幻裝備！**</p>
+                  </div>
+                </div>
+
+                <div className="flex gap-4 group">
+                  <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center flex-shrink-0 group-hover:bg-sky-400/20 transition-colors">
+                    <TrainFront size={20} className="text-sky-400" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-white mb-0.5">🚂 城市鐵路</h4>
+                    <p className="text-gray-400 leading-snug">前往各大城鎮的「火車站」，支付金幣即可快速且精準地跨城市移動！</p>
+                  </div>
+                </div>
+
+                <div className="flex gap-4 group">
+                  <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center flex-shrink-0 group-hover:bg-amber-500/20 transition-colors">
+                    <Users size={20} className="text-amber-500" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-white mb-0.5">🤝 命運契約</h4>
+                    <p className="text-gray-400 leading-snug">遭遇強敵時，可於選單進行「命運契約」，招募靈魂夥伴並肩作戰！</p>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={handleCloseOnboarding}
+                className="w-full bg-gradient-to-r from-game-accent to-indigo-600 hover:from-game-accent/80 hover:to-indigo-500 text-white font-black py-4 rounded-2xl transition-all shadow-xl shadow-game-accent/20 active:scale-[0.98] flex items-center justify-center gap-2 group"
+              >
+                準備好開始你的傳奇了嗎？
+                <ChevronRight size={20} className="group-hover:translate-x-1 transition-transform" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
-};
+}
 
 export default App;

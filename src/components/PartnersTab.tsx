@@ -399,13 +399,13 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
                             </button>
 
                             {/* Left Side: Info & Button */}
-                            <div className="flex-1 flex flex-col items-center md:items-start md:border-r border-white/10 md:pr-8">
-                                <div className="w-24 h-24 bg-amber-500/20 rounded-full flex items-center justify-center mb-6 border-2 border-amber-500/40 mt-4 mx-auto md:mx-0">
+                            <div className="flex-1 flex flex-col items-center md:border-r border-white/10 md:pr-8">
+                                <div className="w-24 h-24 bg-amber-500/20 rounded-full flex items-center justify-center mb-5 border-2 border-amber-500/40 mt-4 mx-auto">
                                     <Sparkles size={48} className="text-game-gold anim-float" />
                                 </div>
 
-                                <h3 className="text-3xl font-black text-white mb-2 italic mx-auto md:mx-0">魂之招募</h3>
-                                <p className="text-sm text-gray-400 mb-8 leading-relaxed mx-auto md:mx-0 text-center md:text-left">尋找跨越時空的契約者<br />為勇者提供命運加護</p>
+                                <h3 className="text-3xl font-black text-white mb-2 italic text-center">命運契約</h3>
+                                <p className="text-sm text-gray-400 mb-8 leading-relaxed text-center">呼喚隱眠於異界的靈魂<br />以金幣之力訂立命運之盟</p>
 
                                 <button
                                     onClick={gacha}
@@ -426,15 +426,15 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
                                 </button>
 
                                 <div className="mt-auto pt-6 border-t border-white/5 w-full hidden md:block">
-                                    <h4 className="text-xs font-black text-gray-400 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+                                    <h4 className="text-xs font-black text-gray-400 uppercase tracking-[0.2em] mb-4 flex items-center justify-center gap-2">
                                         <ShieldAlert size={14} className="text-amber-500" /> 招募法則
                                     </h4>
-                                    <div className="flex justify-between gap-2 px-2">
+                                    <div className="grid grid-cols-3 gap-0">
                                         <div className="flex flex-col items-center">
                                             <span className="text-game-gold font-black text-sm">1%</span>
                                             <span className="text-[11px] text-gray-500 font-bold">傳奇 5★</span>
                                         </div>
-                                        <div className="flex flex-col items-center border-x border-white/5 px-4 w-full">
+                                        <div className="flex flex-col items-center border-x border-white/5">
                                             <span className="text-purple-400 font-black text-sm">10%</span>
                                             <span className="text-[11px] text-gray-500 font-bold">史詩 4★</span>
                                         </div>
@@ -477,12 +477,12 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
                                 <h4 className="text-xs font-black text-gray-400 uppercase tracking-[0.2em] mb-4 flex items-center justify-center gap-2">
                                     <ShieldAlert size={14} className="text-amber-500" /> 招募法則
                                 </h4>
-                                <div className="flex justify-around gap-2 px-2">
+                                <div className="grid grid-cols-3 gap-0">
                                     <div className="flex flex-col items-center">
                                         <span className="text-game-gold font-black text-sm">1%</span>
                                         <span className="text-[11px] text-gray-500 font-bold">傳奇 5★</span>
                                     </div>
-                                    <div className="flex flex-col items-center border-x border-white/5 px-4 w-full">
+                                    <div className="flex flex-col items-center border-x border-white/5">
                                         <span className="text-purple-400 font-black text-sm">10%</span>
                                         <span className="text-[11px] text-gray-500 font-bold">史詩 4★</span>
                                     </div>

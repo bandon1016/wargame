@@ -135,7 +135,9 @@ export const EQUIPMENT_DATABASE: Equipment[] = [
     { id: 'eq_dragon_greaves', name: '龍鱗護腿', slot: 'boots', rarity: 4, attack: 0, defense: 18, hp: 40, icon: '👢', description: '高雄專購，龍鱗鐵打造的進階戰靴' },
     { id: 'eq_coral_bracelet', name: '珊瑚護腕', slot: 'accessory', rarity: 3, attack: 5, defense: 8, hp: 50, icon: '🐚', description: '屏東海礁珊瑚打造，發出杯色輪小光芒' },
     { id: 'eq_basalt_armor', name: '玄武重甲', slot: 'armor', rarity: 3, attack: 0, defense: 22, hp: 50, icon: '🪨', description: '台東磐靈仔所打造，防禦准尤其凜個' },
-    { id: 'eq_crystal_staff', name: '花蓮水晶魔杖', slot: 'weapon', rarity: 4, attack: 35, defense: 0, hp: 20, icon: '🪄', description: '花蓮水晶凝聚魔力，施法者的故鄉' },
+    { id: 'eq_crystal_shuriken', name: '冰霜手裡劍', slot: 'weapon', rarity: 4, attack: 35, defense: 0, hp: 15, icon: '❄️', description: '以花東純淨水晶精雕而成的四角暗器，擲出時帶有刺骨的冰霜寒氣。' },
+    // 相容性保留：eq_crystal_staff 已重命名為冰霜手裡劍，舊存檔照常顯示
+    { id: 'eq_crystal_staff', name: '冰霜手裡劍', slot: 'weapon', rarity: 4, attack: 35, defense: 0, hp: 15, icon: '❄️', description: '以花東純淨水晶精雕而成的四角暗器，擲出時帶有刺骨的冰霜寒氣。' },
     { id: 'eq_crystal_robe', name: '水晶魔法袍', slot: 'armor', rarity: 4, attack: 10, defense: 20, hp: 80, icon: '👘', description: '花蓮魔法師援用，水晶繼維紡織而成' },
 ];
 
@@ -145,20 +147,20 @@ export const ITEM_DATABASE: Omit<GameItem, 'quantity'>[] = [
     { id: 'item_str_seed', name: '力量種子', type: 'consumable', icon: '💪', description: '蘊含神秘力量的種子，服用後永久提升 2 點攻擊力。' },
     { id: 'item_def_seed', name: '鐵壁種子', type: 'consumable', icon: '🛡️', description: '堅硬如鐵的種子，服用後永久提升 2 點防禦力。' },
     { id: 'item_hp_seed', name: '生命之果', type: 'consumable', icon: '🍎', description: '散發著生命氣息的果實，服用後永久提升 10 點最大生命值。' },
-    { id: 'item_iron_ore', name: '鐵礦石', type: 'material', icon: '🪨', description: '可以用來鍛造基礎裝備的金屬原礦。' },
+    { id: 'item_iron_ore', name: '鐵礦石', type: 'material', icon: '🔩', description: '可以用來鍛造基礎裝備的金屬原礦。' },
     { id: 'item_magic_gem', name: '魔力寶石', type: 'gem', icon: '🔮', description: '散發著幽藍微光的奇異寶石，蘊藏大量精純魔力。' },
     { id: 'item_herb', name: '藥草', type: 'material', icon: '🌿', description: '生長在野外的普通草本植物，是煉製各類藥水的基本材料。' },
     { id: 'item_dragon_scale', name: '龍鱗碎片', type: 'material', icon: '🐲', description: '強大黑龍掉落的珍貴鱗片，堅硬無比，散發著危險的氣息。' },
     { id: 'item_revive_pot', name: '復甦精華', type: 'potion', icon: '💧', description: '閃耀著奇蹟般光芒的泉水，不僅能恢復生命，還能在戰敗時將角色滿血復活。' },
     // Regional Materials
     { id: 'mat_north_tech', name: '科技廢料', type: 'material', icon: '⚙️', description: '北部特產：沾染微弱魔力的報廢電路板。' },
-    { id: 'mat_north_glass', name: '魔法玻璃', type: 'material', icon: '💎', description: '北部特產：折射著奇幻光芒的玻璃碎片，可用於光學附魔。' },
+    { id: 'mat_north_glass', name: '魔法玻璃', type: 'material', icon: '🪷', description: '北部特產：折射著奇幻光芒的玻璃碎片，可用於光學附魔。' },
     { id: 'mat_central_iron', name: '高山鐵礦', type: 'material', icon: '⛰️', description: '中部特產：只有在中央山脈深處才挖得到的極堅硬礦石。' },
-    { id: 'mat_central_wood', name: '神木枝枒', type: 'material', icon: '🎋', description: '中部特產：受到古老森林魔力滋養的千年樹枝。' },
+    { id: 'mat_central_wood', name: '神木枝枒', type: 'material', icon: '🍃', description: '中部特產：受到古老森林魔力滋養的千年樹枝。' },
     { id: 'mat_south_sand', name: '炎漠紅砂', type: 'material', icon: '🏜️', description: '南部特產：蘊含濃烈火屬性魔力的紅色砂礫。' },
     { id: 'mat_south_pearl', name: '海淵珍珠', type: 'material', icon: '🦪', description: '南部特產：凝聚大洋水屬性精華的璀璨珍珠。' },
     { id: 'mat_east_crystal', name: '花東水晶', type: 'material', icon: '💠', description: '東部特產：純淨無瑕的天然水晶，能大幅增幅魔力。' },
-    { id: 'mat_coral', name: '珊瑚碎片', type: 'material', icon: '🪸', description: '屏東特產：沾著濃厚海洋魔力的礁石碎片。' },
+    { id: 'mat_coral', name: '珊瑚碎片', type: 'material', icon: '🌺', description: '屏東特產：沾著濃厚海洋魔力的礁石碎片。' },
     { id: 'mat_basalt', name: '玄武岩礦石', type: 'material', icon: '🌑', description: '台東特產：花東縱谷出產的堅硬黑色岩石。' },
     { id: 'mat_ancient_wood', name: '太古神木', type: 'material', icon: '🌲', description: '台中稀有：更高品質的千年神木原木，蒸餾著古老欲力。' },
     { id: 'mat_lava_sand', name: '熔岩紅砂', type: 'material', icon: '🌋', description: '台南稀有：比炎漠紅砂更濃縮的極品火屬性砂礫。' },
@@ -259,7 +261,7 @@ export const BLACKSMITH_RECIPES: BlacksmithRecipe[] = [
         ], goldCost: 1300
     },
     {
-        id: 'forge_crystal_staff', targetEquipmentId: 'eq_crystal_staff', cityId: 'town_hun',
+        id: 'forge_crystal_shuriken', targetEquipmentId: 'eq_crystal_shuriken', cityId: 'town_hun',
         materials: [
             { id: 'mat_east_crystal', name: '花東水晶', quantity: 4 },
             { id: 'item_magic_gem', name: '魔力寶石', quantity: 3 }
