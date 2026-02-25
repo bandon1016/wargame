@@ -8,13 +8,15 @@ interface CombatScreenProps {
     onWin: (exp: number, gold: number, skill?: Skill) => void;
     onLose: () => void;
     onFlee: () => void;
+    autoExplore?: boolean;
+    onAutoHeal?: () => void;
 }
 
-export const CombatScreen: React.FC<CombatScreenProps> = ({ player, enemy, onWin, onLose, onFlee }) => {
+export const CombatScreen: React.FC<CombatScreenProps> = ({ player, enemy, onWin, onLose, onFlee, autoExplore, onAutoHeal }) => {
     const [eHp, setEHp] = useState(enemy.hp);
     const [pHp, setPHp] = useState(player.hp);
     const [logs, setLogs] = useState<string[]>([`⚔️ 野外遭遇了 ${enemy.name} (Lv.${enemy.level})！`]);
-    const [auto, setAuto] = useState(false);
+    const [auto, setAuto] = useState(autoExplore || false);
     const [ended, setEnded] = useState(false);
     const [pShake, setPShake] = useState(false);
     const [eShake, setEShake] = useState(false);
@@ -25,7 +27,8 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({ player, enemy, onWin
 
     useEffect(() => {
         if (!auto || ended) return;
-        const t = window.setTimeout(turn, 800);
+        const tickRate = autoExplore ? 400 : 800; // Faster combat if global auto explore is on
+        const t = window.setTimeout(turn, tickRate);
         return () => clearTimeout(t);
     }, [auto, pHp, eHp, ended]);
 
@@ -42,6 +45,12 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({ player, enemy, onWin
         log(`🗡️ 勇者揮出一擊，對 ${enemy.name} 造成 ${pDmg} 傷害`);
 
         if (newEHp <= 0) { win(); return; }
+
+        // Auto Heal check for auto explore
+        if (autoExplore && onAutoHeal && pHp < player.maxHp * 0.4) {
+            log(`✨ 生命危急！自動嘗試使用藥水...`);
+            onAutoHeal();
+        }
 
         // Enemy attacks
         setTimeout(() => {
@@ -65,13 +74,13 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({ player, enemy, onWin
         if (enemy.lootTable.length > 0) {
             enemy.lootTable.forEach(i => log(`📦 獲得道具：${i.icon} ${i.name} ×${i.quantity}`));
         }
-        setTimeout(() => onWin(enemy.expReward, enemy.goldReward, sk), 3000);
+        setTimeout(() => onWin(enemy.expReward, enemy.goldReward, sk), autoExplore ? 1000 : 3000);
     };
 
     const lose = () => {
         setEnded(true); setAuto(false); setResult('lose');
         log(`💀 勇者倒下了…`);
-        setTimeout(() => onLose(), 2500);
+        setTimeout(() => onLose(), autoExplore ? 1500 : 2500);
     };
 
     const hpPct = (cur: number, max: number) => Math.max(0, (cur / max) * 100);

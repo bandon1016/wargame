@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Noto+Sans+TC:wght@300;400;500;600;700;900&display=swap');
+
 @theme {
   --color-game-dark: #0f172a;
   --color-game-medium: #1e293b;
@@ -8,8 +10,6 @@
   --color-game-gold: #fbbf24;
   --color-game-danger: #ef4444;
 }
-
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Noto+Sans+TC:wght@300;400;500;600;700;900&display=swap');
 
 :root {
   font-family: 'Noto Sans TC', 'Inter', system-ui, sans-serif;

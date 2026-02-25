@@ -55,8 +55,8 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer }) => {
             <div className="glass-panel rounded-2xl p-6 flex flex-col items-center text-center relative overflow-hidden border border-game-accent/20">
                 <div className="absolute inset-0 anim-shimmer pointer-events-none" />
                 <Sparkles size={40} className="text-game-gold mb-3 anim-float" />
-                <h3 className="text-xl font-bold mb-1">時空酒館</h3>
-                <p className="text-sm text-gray-400 mb-5 max-w-xs">招募來自異界的冒險者加入隊伍</p>
+                <h3 className="text-xl font-bold mb-1">夥伴招募</h3>
+                <p className="text-sm text-gray-400 mb-5 max-w-xs">招募強大的夥伴為您提供戰鬥屬性加成</p>
                 <button onClick={gacha} disabled={anim}
                     className="bg-gradient-to-r from-game-gold to-amber-500 hover:from-yellow-400 hover:to-amber-400 text-game-dark font-bold text-sm py-3 px-10 rounded-full transition-all active:scale-95 disabled:opacity-50 shadow-lg shadow-game-gold/30 flex items-center gap-2">
                     {anim ? <><span className="anim-spin-slow inline-block">✨</span> 召喚中...</> : <>💰 招募 (100 G)</>}

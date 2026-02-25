@@ -26,6 +26,11 @@ const totalEquipAtk = (p: CharacterStats) => [p.equippedWeapon, p.equippedArmor,
 const totalEquipDef = (p: CharacterStats) => [p.equippedWeapon, p.equippedArmor, p.equippedHelmet, p.equippedBoots, p.equippedAccessory].reduce((s, e) => s + (e?.defense ?? 0), 0);
 const totalEquipHp = (p: CharacterStats) => [p.equippedWeapon, p.equippedArmor, p.equippedHelmet, p.equippedBoots, p.equippedAccessory].reduce((s, e) => s + (e?.hp ?? 0), 0);
 
+// Partner Stat Bonuses
+const totalPartnerAtk = (p: CharacterStats) => p.partners.reduce((s, pt) => s + (pt.role === 'dps' ? pt.power : Math.floor(pt.power * 0.2)), 0);
+const totalPartnerDef = (p: CharacterStats) => p.partners.reduce((s, pt) => s + (pt.role === 'tank' ? Math.floor(pt.power * 0.5) : Math.floor(pt.power * 0.1)), 0);
+const totalPartnerHp = (p: CharacterStats) => p.partners.reduce((s, pt) => s + (pt.role === 'tank' || pt.role === 'healer' ? pt.power * 3 : pt.power), 0);
+
 const App: React.FC = () => {
   const [position, setPosition] = useState<[number, number]>([25.0330, 121.5654]);
   const [activeTab, setActiveTab] = useState('explore');
@@ -129,6 +134,7 @@ const App: React.FC = () => {
 
   const [isCombatAction, setIsCombatAction] = useState(false);
   const [currentEnemy, setCurrentEnemy] = useState<Enemy | null>(null);
+  const [autoExplore, setAutoExplore] = useState(false);
 
   const move = useCallback((d: 'n' | 's' | 'e' | 'w') => {
     const s = 0.001;
@@ -164,6 +170,26 @@ const App: React.FC = () => {
     setIsCombatAction(true);
   }, [player?.level]);
 
+  // Auto Explore Logic
+  useEffect(() => {
+    if (!autoExplore || isCombatAction || activeTab !== 'explore') return;
+
+    // Movement & Encounter cycle
+    const encounterMover = setInterval(() => {
+      // Pick random direction
+      const dirs: ('n' | 's' | 'e' | 'w')[] = ['n', 's', 'e', 'w'];
+      const d = dirs[Math.floor(Math.random() * dirs.length)];
+      move(d);
+
+      // 30% chance to encounter monster while moving in auto mode
+      if (Math.random() > 0.7) {
+        startHunt();
+      }
+    }, 2000); // Move every 2 seconds
+
+    return () => clearInterval(encounterMover);
+  }, [autoExplore, isCombatAction, activeTab, move, startHunt]);
+
   const handleCombatWin = useCallback((exp: number, gold: number, learnedSkill?: Skill, loot?: GameItem[]) => {
     setPlayer(prev => {
       if (!prev) return null;
@@ -193,9 +219,35 @@ const App: React.FC = () => {
     });
   }, []);
 
-  const effectiveAtk = player ? player.attack + totalEquipAtk(player) : 0;
-  const effectiveDef = player ? player.defense + totalEquipDef(player) : 0;
-  const effectiveMaxHp = player ? player.maxHp + totalEquipHp(player) : 0;
+  const useItem = useCallback((item: GameItem) => {
+    if (item.type !== 'potion') return;
+
+    setPlayer(prev => {
+      if (!prev) return null;
+
+      // Update items list
+      const newItems = prev.items.map(i => {
+        if (i.id === item.id) {
+          return { ...i, quantity: i.quantity - 1 };
+        }
+        return i;
+      }).filter(i => i.quantity > 0);
+
+      // Perform healing logic
+      let newHp = prev.hp;
+      if (item.id === 'item_hp_pot' || item.id === 'it_01') {
+        const recoverAmount = 50;
+        const maxHp = prev.maxHp + totalEquipHp(prev);
+        newHp = Math.min(newHp + recoverAmount, maxHp);
+      }
+
+      return { ...prev, items: newItems, hp: newHp };
+    });
+  }, []);
+
+  const effectiveAtk = player ? player.attack + totalEquipAtk(player) + totalPartnerAtk(player) : 0;
+  const effectiveDef = player ? player.defense + totalEquipDef(player) + totalPartnerDef(player) : 0;
+  const effectiveMaxHp = player ? player.maxHp + totalEquipHp(player) + totalPartnerHp(player) : 0;
 
   if (loading) {
     return <div className="flex items-center justify-center min-h-screen bg-[#0a0e1a] text-game-accent"><Loader2 className="animate-spin w-12 h-12" /></div>;
@@ -284,9 +336,18 @@ const App: React.FC = () => {
               </div>
               <p className="text-base font-bold mb-1">{areaName}</p>
               <p className="text-xs text-gray-400 mb-4">這片區域潛伏著各種危險的生物...</p>
-              <button onClick={startHunt} className="w-full bg-gradient-to-r from-game-accent to-indigo-500 hover:from-sky-400 hover:to-indigo-400 text-white font-bold py-2.5 rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-game-accent/20">
-                <Sword size={18} /> 開始狩獵
-              </button>
+              <div className="flex gap-2">
+                <button onClick={startHunt} disabled={autoExplore} className={`flex-1 ${autoExplore ? 'bg-gray-600' : 'bg-gradient-to-r from-game-accent to-indigo-500 hover:from-sky-400 hover:to-indigo-400'} text-white font-bold py-2.5 rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg ${autoExplore ? '' : 'shadow-game-accent/20'}`}>
+                  <Sword size={18} /> {autoExplore ? '自動探索中...' : '開始狩獵'}
+                </button>
+                <button
+                  onClick={() => setAutoExplore(!autoExplore)}
+                  className={`w-12 h-[44px] rounded-xl flex items-center justify-center transition-all ${autoExplore ? 'bg-green-500/20 text-green-400 border border-green-500/50 shadow-[0_0_10px_rgba(34,197,94,0.3)]' : 'bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10'}`}
+                  title={autoExplore ? "停止自動探索" : "開啟自動探索"}
+                >
+                  <Zap size={18} className={autoExplore ? 'animate-pulse' : ''} />
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -389,14 +450,15 @@ const App: React.FC = () => {
               ) : (
                 <div className="flex flex-wrap gap-3">
                   {player.items.map(item => (
-                    <div key={item.id} className="tooltip-wrap">
-                      <div className="inv-slot">
+                    <div key={item.id} className="tooltip-wrap" onClick={() => useItem(item)}>
+                      <div className={`inv-slot ${item.type === 'potion' ? 'cursor-pointer hover:ring-2 hover:ring-game-accent/50' : ''}`}>
                         <span className="text-2xl">{item.icon}</span>
                         <span className="inv-qty">×{item.quantity}</span>
                       </div>
                       <div className="tooltip-text">
                         <div className="font-bold">{item.name}</div>
                         <div className="text-gray-400 text-[11px]">{item.description}</div>
+                        {item.type === 'potion' && <div className="mt-1 text-[10px] text-game-accent font-bold">點擊使用</div>}
                       </div>
                     </div>
                   ))}
@@ -434,7 +496,12 @@ const App: React.FC = () => {
             enemy={currentEnemy}
             onWin={(exp, gold, skill) => handleCombatWin(exp, gold, skill, currentEnemy.lootTable)}
             onLose={handleCombatLose}
-            onFlee={() => setIsCombatAction(false)}
+            onFlee={() => { setIsCombatAction(false); setAutoExplore(false); }}
+            autoExplore={autoExplore}
+            onAutoHeal={() => {
+              const pot = player.items.find(i => i.type === 'potion');
+              if (pot) useItem(pot);
+            }}
           />
         )}
       </div>
