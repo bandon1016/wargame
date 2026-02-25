@@ -11,6 +11,10 @@ create table public.profiles (
   gold double precision default 500,
   base_materials double precision default 120,
   
+  -- 地圖位置
+  current_location_lat double precision default 25.0330,
+  current_location_lng double precision default 121.5654,
+  
   -- 複雜的陣列物件資料，採用 JSONB 格式簡單儲存
   buildings jsonb default '[]'::jsonb,
   equipment jsonb default '[]'::jsonb,

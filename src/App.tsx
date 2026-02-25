@@ -33,6 +33,7 @@ const totalPartnerHp = (p: CharacterStats) => p.partners.reduce((s, pt) => s + (
 
 const App: React.FC = () => {
   const [position, setPosition] = useState<[number, number]>([25.0330, 121.5654]);
+  const positionRef = React.useRef<[number, number]>(position);
   const [activeTab, setActiveTab] = useState('explore');
   const [areaName] = useState('信義區 — 台北市');
 
@@ -46,6 +47,10 @@ const App: React.FC = () => {
   useEffect(() => {
     playerRef.current = player;
   }, [player]);
+
+  useEffect(() => {
+    positionRef.current = position;
+  }, [position]);
 
   // Auth flow
   useEffect(() => {
@@ -84,6 +89,10 @@ const App: React.FC = () => {
         skills: data.skills || [],
         partners: data.partners || [],
       });
+      // Load saved position
+      if (data.current_location_lat != null && data.current_location_lng != null) {
+        setPosition([data.current_location_lat, data.current_location_lng]);
+      }
     } else if (error) {
       console.error('Fetch profile error:', error);
     }
@@ -109,6 +118,8 @@ const App: React.FC = () => {
       items: p.items,
       skills: p.skills,
       partners: p.partners,
+      current_location_lat: positionRef.current[0],
+      current_location_lng: positionRef.current[1],
       updated_at: new Date().toISOString()
     }).eq('id', session.user.id);
   };
@@ -312,8 +323,10 @@ const App: React.FC = () => {
         {activeTab === 'explore' && (
           <div className="w-full h-full relative">
             <MapContainer center={position} zoom={15} zoomControl={false} className="w-full h-full">
-              <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" attribution="&copy; OSM &copy; CARTO" />
-              <Marker position={position}><Popup>你的位置</Popup></Marker>
+              <TileLayer
+                url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                attribution='Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+              /><Marker position={position}><Popup>你的位置</Popup></Marker>
               <MapUpdater center={position} />
             </MapContainer>
 
