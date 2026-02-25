@@ -162,6 +162,8 @@ const App: React.FC = () => {
   const [combatLogs, setCombatLogs] = useState<CombatLog[]>([]);
   const [logOpacity, setLogOpacity] = useState(1);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [isEditingNickname, setIsEditingNickname] = useState(false);
+  const [tempNickname, setTempNickname] = useState('');
 
   // Check for onboarding
   useEffect(() => {
@@ -722,6 +724,20 @@ const App: React.FC = () => {
     frameId = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(frameId);
   }, [targetPosition, isTraveling]);
+
+  const handleSaveNickname = async () => {
+    if (!player || !session?.user?.id || !tempNickname.trim()) {
+      setIsEditingNickname(false);
+      return;
+    }
+    const newName = tempNickname.trim();
+    const nextState = { ...player, nickname: newName };
+    setPlayer(nextState);
+    setIsEditingNickname(false);
+
+    // Save to DB immediately
+    await supabase.from('profiles').update({ nickname: newName }).eq('id', session.user.id);
+  };
 
   const startHunt = useCallback((isElite = false) => {
     if (!player) return;
@@ -1716,9 +1732,40 @@ const App: React.FC = () => {
                 </div>
               </div>
               <div className="flex-1 text-center md:text-left">
-                <h2 className="text-2xl font-black flex items-center justify-center md:justify-start gap-3">
-                  勇者 <span className="text-sm text-game-accent font-bold bg-game-accent/15 px-3 py-1 rounded-full border border-game-accent/30 tracking-tight">Lv.{player.level}</span>
-                </h2>
+                <div className="flex items-center justify-center md:justify-start gap-3 mb-1">
+                  {isEditingNickname ? (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={tempNickname}
+                        onChange={(e) => setTempNickname(e.target.value)}
+                        className="bg-black/40 border border-game-accent/50 rounded-lg px-3 py-1 text-white font-bold outline-none focus:border-game-accent w-40"
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleSaveNickname();
+                          if (e.key === 'Escape') setIsEditingNickname(false);
+                        }}
+                      />
+                      <button onClick={handleSaveNickname} className="text-game-accent hover:text-white transition-colors">
+                        <PlusCircle size={20} />
+                      </button>
+                    </div>
+                  ) : (
+                    <h2 className="text-2xl font-black flex items-center gap-2">
+                      {player.nickname || '勇者'}
+                      <button
+                        onClick={() => {
+                          setTempNickname(player.nickname || '勇者');
+                          setIsEditingNickname(true);
+                        }}
+                        className="text-gray-500 hover:text-game-accent transition-colors p-1"
+                      >
+                        <SettingsIcon size={16} />
+                      </button>
+                    </h2>
+                  )}
+                  <span className="text-sm text-game-accent font-bold bg-game-accent/15 px-3 py-1 rounded-full border border-game-accent/30 tracking-tight">Lv.{player.level}</span>
+                </div>
                 <div className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-black/20">
                   <table className="w-full text-sm text-left">
                     <thead className="bg-white/5 text-sm uppercase text-gray-400 font-bold border-b border-white/5">
