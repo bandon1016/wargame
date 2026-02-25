@@ -102,57 +102,36 @@ const App: React.FC = () => {
     weatherRef.current = weather;
   }, [weather]);
 
-  // Generates POIs around the player over time
-  useEffect(() => {
-    const poiGenerator = setInterval(() => {
-      setPois(prev => {
-        const now = Date.now();
-        // Remove expired
-        const valid = prev.filter(p => p.expiresAt && p.expiresAt > now);
+  // Generates POIs around the player via Database
+  const fetchPois = useCallback(async () => {
+    if (!session?.user?.id) return;
+    const { data, error } = await supabase.rpc('sync_pois', {
+      center_lat: positionRef.current[0],
+      center_lng: positionRef.current[1]
+    });
 
-        // Ensure some POIs exist around player
-        if (valid.length < 6) {
-          const pPos = positionRef.current;
-          const count = Math.floor(Math.random() * 3) + 1;
-          for (let i = 0; i < count; i++) {
-            const latOffset = (Math.random() - 0.5) * 0.03; // ~1-3km radius
-            const lngOffset = (Math.random() - 0.5) * 0.03;
-            const typeRoll = Math.random();
-            let type: MapPOI['type'] = 'chest';
-            if (typeRoll > 0.8) type = 'merchant';
-            else if (typeRoll > 0.6) type = 'elite';
-            else if (typeRoll > 0.4) type = 'altar';
-
-            valid.push({
-              id: `poi_${now}_${i}`,
-              type,
-              lat: pPos[0] + latOffset,
-              lng: pPos[1] + lngOffset,
-              expiresAt: now + 1000 * 60 * 15 // 15 mins
-            });
-          }
-        }
-        return [...valid];
-      });
-    }, 60000); // check 1 min
-
-    // Initial spawn
-    if (pois.length === 0) {
-      const initial = [];
-      const now = Date.now();
-      for (let i = 0; i < 4; i++) {
-        initial.push({
-          id: `poi_init_${i}`,
-          type: ['chest', 'merchant', 'elite', 'altar'][Math.floor(Math.random() * 4)] as any,
-          lat: position[0] + (Math.random() - 0.5) * 0.02,
-          lng: position[1] + (Math.random() - 0.5) * 0.02,
-          expiresAt: now + 1000 * 60 * 15
-        });
-      }
-      setPois(initial);
+    if (error) {
+      console.error('Error fetching POIs:', error);
+      return;
     }
+
+    if (data) {
+      const mapped = data.map((d: any) => ({
+        id: d.id,
+        type: d.type,
+        lat: d.lat,
+        lng: d.lng,
+        expiresAt: d.expires_at ? new Date(d.expires_at).getTime() : undefined
+      }));
+      setPois(mapped);
+    }
+  }, [session]);
+
+  useEffect(() => {
+    fetchPois();
+    const poiGenerator = setInterval(fetchPois, 60000); // check 1 min
     return () => clearInterval(poiGenerator);
-  }, []);
+  }, [fetchPois]);
 
   // Weather cycle logic
   useEffect(() => {
@@ -404,8 +383,21 @@ const App: React.FC = () => {
   const effectiveMaxHp = player ? player.maxHp + totalEquipHp(player) + totalPartnerHp(player) : 0;
 
   // Interaction Handler for POIs
-  const handlePoiInteract = useCallback((poi: MapPOI) => {
-    setPois(prev => prev.filter(p => p.id !== poi.id)); // Remove the POI
+  const handlePoiInteract = useCallback(async (poi: MapPOI) => {
+    if (!session?.user?.id) return;
+
+    // DB Check
+    const { data: success, error } = await supabase.rpc('interact_poi', { p_poi_id: poi.id });
+    if (error || !success) {
+      alert('這項事件已經消失，或是已經被其他人搶先觸發了！');
+      fetchPois(); // Refresh immediately
+      return;
+    }
+
+    // Success! Update local state
+    if (poi.type === 'chest' || poi.type === 'elite') {
+      setPois(prev => prev.filter(p => p.id !== poi.id)); // Remove the POI locally
+    }
 
     setPlayer(prev => {
       if (!prev) return null;
@@ -428,7 +420,7 @@ const App: React.FC = () => {
     if (poi.type === 'elite') {
       startHunt(true);
     }
-  }, [startHunt]);
+  }, [startHunt, session, fetchPois]);
 
   const nearestTown = TOWN_DATABASE.find(t => getDistance(position[0], position[1], t.lat, t.lng) <= t.radius);
   const nearestPoi = pois.find(p => getDistance(position[0], position[1], p.lat, p.lng) <= 200);
@@ -734,7 +726,7 @@ const App: React.FC = () => {
 
         {/* Town Overlay */}
         {inTown && (
-          <TownScreen town={inTown} player={player} onLeave={() => setInTown(null)} />
+          <TownScreen town={inTown} onLeave={() => setInTown(null)} />
         )}
       </div>
 

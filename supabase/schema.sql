@@ -69,3 +69,105 @@ $$ language plpgsql security definer;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure public.handle_new_user();
+
+-- 5. 建立野外動態事件 POI 資料表
+create table public.map_pois (
+  id uuid default gen_random_uuid() primary key,
+  type text not null, -- 'chest', 'merchant', 'elite', 'altar'
+  lat double precision not null,
+  lng double precision not null,
+  is_active boolean default true,
+  respawn_at timestamp with time zone,
+  expires_at timestamp with time zone
+);
+
+create table public.poi_claims (
+  poi_id uuid not null,
+  user_id uuid references auth.users not null,
+  claimed_at timestamp with time zone default now(),
+  primary key (poi_id, user_id)
+);
+
+-- 6. RPC: 同步並產生 POI
+create or replace function public.sync_pois(center_lat double precision, center_lng double precision)
+returns setof public.map_pois
+language plpgsql
+security definer
+as $$
+declare
+  v_count integer;
+  v_type text;
+  v_lat double precision;
+  v_lng double precision;
+begin
+  -- 刪除過期的商或祭壇，及已屆重生時間的寶箱怪
+  delete from public.map_pois 
+  where (is_active = true and expires_at < now()) 
+     or (is_active = false and respawn_at < now());
+
+  -- 計算玩家附近大約 3km 內的 POI 總數
+  select count(*) into v_count 
+  from public.map_pois 
+  where lat between center_lat - 0.03 and center_lat + 0.03
+    and lng between center_lng - 0.03 and center_lng + 0.03;
+
+  -- 如果不夠 6 個，則隨機生成補滿
+  while v_count < 6 loop
+    v_type := (array['chest', 'merchant', 'elite', 'altar'])[floor(random() * 4 + 1)];
+    v_lat := center_lat + (random() - 0.5) * 0.05;
+    v_lng := center_lng + (random() - 0.5) * 0.05;
+    
+    insert into public.map_pois (type, lat, lng, is_active, expires_at)
+    values (
+      v_type, 
+      v_lat, 
+      v_lng, 
+      true, 
+      now() + interval '30 minutes'
+    );
+    v_count := v_count + 1;
+  end loop;
+  
+  -- 回傳所有活躍的 POI
+  return query 
+  select * from public.map_pois 
+  where is_active = true
+    and lat between center_lat - 0.03 and center_lat + 0.03
+    and lng between center_lng - 0.03 and center_lng + 0.03;
+end;
+$$;
+
+-- 7. RPC: 互動並鎖定 POI
+create or replace function public.interact_poi(p_poi_id uuid)
+returns boolean
+language plpgsql
+security definer
+as $$
+declare
+  v_poi public.map_pois;
+begin
+  -- 取得目標 POI 並鎖定資料列
+  select * into v_poi from public.map_pois where id = p_poi_id and is_active = true for update;
+  
+  if not found then
+    return false;
+  end if;
+
+  -- 檢查該玩家是否已經互動過這個 POI
+  if exists (select 1 from public.poi_claims where poi_id = p_poi_id and user_id = auth.uid()) then
+    return false;
+  end if;
+
+  -- 記錄玩家互動
+  insert into public.poi_claims (poi_id, user_id) values (p_poi_id, auth.uid());
+
+  -- 如果是寶箱或菁英怪，則讓它立馬消失並進入 30 分鐘重生冷卻
+  if v_poi.type in ('chest', 'elite') then
+    update public.map_pois 
+    set is_active = false, respawn_at = now() + interval '30 minutes'
+    where id = p_poi_id;
+  end if;
+
+  return true;
+end;
+$$;
