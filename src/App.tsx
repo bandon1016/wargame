@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap, Circle } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Compass, Sword, Home, Users, Package, Settings as SettingsIcon, Book, Heart, Shield, Zap, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, MapPin, Loader2 } from 'lucide-react';
-import type { CharacterStats, Enemy, Skill, GameItem, Equipment, WeatherType } from './types/game';
-import { MONSTER_DATABASE, SKILL_DATABASE, ITEM_DATABASE, RARITY_COLORS, WEATHER_TYPES, getRegionByCoordinates, getRegionalMaterials } from './types/game';
+import type { CharacterStats, Enemy, Skill, GameItem, Equipment, WeatherType, Town, MapPOI } from './types/game';
+import { MONSTER_DATABASE, SKILL_DATABASE, ITEM_DATABASE, RARITY_COLORS, WEATHER_TYPES, getRegionByCoordinates, getRegionalMaterials, TOWN_DATABASE } from './types/game';
 import { CombatScreen } from './components/CombatScreen';
 import { PartnersTab } from './components/PartnersTab';
 import { HomeTab } from './components/HomeTab';
 import { AuthScreen } from './components/AuthScreen';
+import { TownScreen } from './components/TownScreen';
 import { supabase } from './lib/supabase';
 
 import L from 'leaflet';
@@ -23,6 +24,27 @@ const createPlayerIcon = (emoji: string) => L.divIcon({
   iconAnchor: [20, 20],
 });
 
+const POI_ICONS = {
+  chest: '📦',
+  merchant: '🐪',
+  elite: '👹',
+  altar: '⛩️'
+};
+
+const POI_NAMES = {
+  chest: '遺落的寶物',
+  merchant: '流浪商人',
+  elite: '危險的菁英怪',
+  altar: '神秘祭壇'
+};
+
+const createPoiIcon = (type: keyof typeof POI_ICONS) => L.divIcon({
+  html: `<div style="font-size: 24px; filter: drop-shadow(0 0 5px rgba(255,255,255,0.7)); transform: translate(-10%, -10%); opacity: 0.9;">${POI_ICONS[type]}</div>`,
+  className: 'custom-poi-marker',
+  iconSize: [30, 30],
+  iconAnchor: [15, 15],
+});
+
 function MapUpdater({ center }: { center: [number, number] }) {
   const map = useMap();
   useEffect(() => { map.setView(center, map.getZoom()); }, [center, map]);
@@ -30,6 +52,17 @@ function MapUpdater({ center }: { center: [number, number] }) {
 }
 
 /* ─── Helpers ─── */
+const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+  const R = 6371e3; // metres
+  const r1 = lat1 * Math.PI / 180;
+  const r2 = lat2 * Math.PI / 180;
+  const dr = (lat2 - lat1) * Math.PI / 180;
+  const dl = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dr / 2) * Math.sin(dr / 2) + Math.cos(r1) * Math.cos(r2) * Math.sin(dl / 2) * Math.sin(dl / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+};
+
 const totalEquipAtk = (p: CharacterStats) => [p.equippedWeapon, p.equippedArmor, p.equippedHelmet, p.equippedBoots, p.equippedAccessory].reduce((s, e) => s + (e?.attack ?? 0), 0);
 const totalEquipDef = (p: CharacterStats) => [p.equippedWeapon, p.equippedArmor, p.equippedHelmet, p.equippedBoots, p.equippedAccessory].reduce((s, e) => s + (e?.defense ?? 0), 0);
 const totalEquipHp = (p: CharacterStats) => [p.equippedWeapon, p.equippedArmor, p.equippedHelmet, p.equippedBoots, p.equippedAccessory].reduce((s, e) => s + (e?.hp ?? 0), 0);
@@ -48,10 +81,13 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   const [player, setPlayer] = useState<CharacterStats | null>(null);
-  const playerRef = React.useRef<CharacterStats | null>(null);
+  const playerRef = React.useRef<CharacterStats | null>(player);
   const [weather, setWeather] = useState<WeatherType>('sunny');
   const weatherRef = React.useRef<WeatherType>(weather);
   const [areaName] = useState('信義區 — 台北市');
+
+  const [inTown, setInTown] = useState<Town | null>(null);
+  const [pois, setPois] = useState<MapPOI[]>([]);
 
   // Sync ref structure
   useEffect(() => {
@@ -65,6 +101,58 @@ const App: React.FC = () => {
   useEffect(() => {
     weatherRef.current = weather;
   }, [weather]);
+
+  // Generates POIs around the player over time
+  useEffect(() => {
+    const poiGenerator = setInterval(() => {
+      setPois(prev => {
+        const now = Date.now();
+        // Remove expired
+        const valid = prev.filter(p => p.expiresAt && p.expiresAt > now);
+
+        // Ensure some POIs exist around player
+        if (valid.length < 6) {
+          const pPos = positionRef.current;
+          const count = Math.floor(Math.random() * 3) + 1;
+          for (let i = 0; i < count; i++) {
+            const latOffset = (Math.random() - 0.5) * 0.03; // ~1-3km radius
+            const lngOffset = (Math.random() - 0.5) * 0.03;
+            const typeRoll = Math.random();
+            let type: MapPOI['type'] = 'chest';
+            if (typeRoll > 0.8) type = 'merchant';
+            else if (typeRoll > 0.6) type = 'elite';
+            else if (typeRoll > 0.4) type = 'altar';
+
+            valid.push({
+              id: `poi_${now}_${i}`,
+              type,
+              lat: pPos[0] + latOffset,
+              lng: pPos[1] + lngOffset,
+              expiresAt: now + 1000 * 60 * 15 // 15 mins
+            });
+          }
+        }
+        return [...valid];
+      });
+    }, 60000); // check 1 min
+
+    // Initial spawn
+    if (pois.length === 0) {
+      const initial = [];
+      const now = Date.now();
+      for (let i = 0; i < 4; i++) {
+        initial.push({
+          id: `poi_init_${i}`,
+          type: ['chest', 'merchant', 'elite', 'altar'][Math.floor(Math.random() * 4)] as any,
+          lat: position[0] + (Math.random() - 0.5) * 0.02,
+          lng: position[1] + (Math.random() - 0.5) * 0.02,
+          expiresAt: now + 1000 * 60 * 15
+        });
+      }
+      setPois(initial);
+    }
+    return () => clearInterval(poiGenerator);
+  }, []);
 
   // Weather cycle logic
   useEffect(() => {
@@ -177,14 +265,17 @@ const App: React.FC = () => {
     setPosition(p => d === 'n' ? [p[0] + s, p[1]] : d === 's' ? [p[0] - s, p[1]] : d === 'e' ? [p[0], p[1] + s] : [p[0], p[1] - s]);
   }, []);
 
-  const startHunt = useCallback(() => {
+  const startHunt = useCallback((isElite = false) => {
     if (!player) return;
     const lv = player.level;
     const pool = MONSTER_DATABASE.filter(m => lv >= m.minLv && lv <= m.maxLv + 5);
     const template = pool.length > 0 ? pool[Math.floor(Math.random() * pool.length)] : MONSTER_DATABASE[0];
-    const hp = template.baseHp + lv * 8;
+
+    // Elite stats boost
+    const statMultiplier = isElite ? 2.5 : 1;
+    const hp = Math.floor((template.baseHp + lv * 8) * statMultiplier);
     const sk = SKILL_DATABASE[Math.floor(Math.random() * SKILL_DATABASE.length)];
-    const lootCount = Math.random() > 0.6 ? 1 : 0;
+    const lootCount = isElite ? 3 : (Math.random() > 0.6 ? 1 : 0);
     const loots: GameItem[] = [];
     if (lootCount > 0) {
       const it = ITEM_DATABASE[Math.floor(Math.random() * ITEM_DATABASE.length)];
@@ -208,8 +299,8 @@ const App: React.FC = () => {
     }
 
     // Weather Effects on Stats (simplified)
-    let eAtk = template.baseAtk + lv * 2;
-    let eDef = template.baseDef + Math.floor(lv * 0.8);
+    let eAtk = Math.floor((template.baseAtk + lv * 2) * statMultiplier);
+    let eDef = Math.floor((template.baseDef + Math.floor(lv * 0.8)) * statMultiplier);
     if (weatherRef.current === 'rainy') {
       eDef += 2; // monsters slightly tougher in rain
     } else if (weatherRef.current === 'foggy') {
@@ -218,14 +309,14 @@ const App: React.FC = () => {
 
     const enemy: Enemy = {
       id: Math.random().toString(),
-      name: template.name, avatar: template.avatar,
-      level: lv + Math.floor(Math.random() * 3) - 1,
+      name: (isElite ? '【菁英】' : '') + template.name, avatar: template.avatar,
+      level: lv + Math.floor(Math.random() * 3) - 1 + (isElite ? 2 : 0),
       hp, maxHp: hp,
       attack: eAtk,
       defense: eDef,
-      expReward: 18 + lv * 6,
-      goldReward: 8 + lv * 3,
-      skillReward: Math.random() < 0.25 ? sk : undefined,
+      expReward: Math.floor((18 + lv * 6) * statMultiplier),
+      goldReward: Math.floor((8 + lv * 3) * statMultiplier),
+      skillReward: (Math.random() < 0.25 || isElite) ? sk : undefined,
       lootTable: loots,
     };
     setCurrentEnemy(enemy);
@@ -312,6 +403,36 @@ const App: React.FC = () => {
   const effectiveDef = player ? player.defense + totalEquipDef(player) + totalPartnerDef(player) : 0;
   const effectiveMaxHp = player ? player.maxHp + totalEquipHp(player) + totalPartnerHp(player) : 0;
 
+  // Interaction Handler for POIs
+  const handlePoiInteract = useCallback((poi: MapPOI) => {
+    setPois(prev => prev.filter(p => p.id !== poi.id)); // Remove the POI
+
+    setPlayer(prev => {
+      if (!prev) return null;
+      if (poi.type === 'chest') {
+        const goldBounty = 100 + prev.level * 20;
+        return { ...prev, gold: prev.gold + goldBounty };
+      }
+      if (poi.type === 'altar') {
+        // Heal to full
+        const currentMax = prev.maxHp + totalEquipHp(prev) + totalPartnerHp(prev);
+        return { ...prev, hp: currentMax };
+      }
+      if (poi.type === 'merchant') {
+        // Give free base materials for now
+        return { ...prev, baseMaterials: prev.baseMaterials + 50 };
+      }
+      return prev;
+    });
+
+    if (poi.type === 'elite') {
+      startHunt(true);
+    }
+  }, [startHunt]);
+
+  const nearestTown = TOWN_DATABASE.find(t => getDistance(position[0], position[1], t.lat, t.lng) <= t.radius);
+  const nearestPoi = pois.find(p => getDistance(position[0], position[1], p.lat, p.lng) <= 200);
+
   if (loading) {
     return <div className="flex items-center justify-center min-h-screen bg-[#0a0e1a] text-game-accent"><Loader2 className="animate-spin w-12 h-12" /></div>;
   }
@@ -390,6 +511,16 @@ const App: React.FC = () => {
                 url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
                 attribution='Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
               />
+              {TOWN_DATABASE.map(t => (
+                <Circle key={t.id} center={[t.lat, t.lng]} radius={t.radius} pathOptions={{ color: t.color, fillColor: t.color, fillOpacity: 0.1, weight: 2 }}>
+                  <Popup>{t.name}</Popup>
+                </Circle>
+              ))}
+              {pois.map(p => (
+                <Marker key={p.id} position={[p.lat, p.lng]} icon={createPoiIcon(p.type)}>
+                  <Popup>{POI_NAMES[p.type]}</Popup>
+                </Marker>
+              ))}
               <Marker position={position} icon={createPlayerIcon('🧙‍♂️')}>
                 <Popup>你的位置</Popup>
               </Marker>
@@ -416,9 +547,19 @@ const App: React.FC = () => {
               <p className="text-base font-bold mb-1">{areaName}</p>
               <p className="text-xs text-gray-400 mb-4">這片區域潛伏著各種危險的生物...</p>
               <div className="flex gap-2">
-                <button onClick={startHunt} disabled={autoExplore} className={`flex-1 ${autoExplore ? 'bg-gray-600' : 'bg-gradient-to-r from-game-accent to-indigo-500 hover:from-sky-400 hover:to-indigo-400'} text-white font-bold py-2.5 rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg ${autoExplore ? '' : 'shadow-game-accent/20'}`}>
-                  <Sword size={18} /> {autoExplore ? '自動探索中...' : '開始狩獵'}
-                </button>
+                {nearestTown ? (
+                  <button onClick={() => setInTown(nearestTown)} className="flex-1 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-400 hover:to-purple-400 text-white font-bold py-2.5 rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20">
+                    <Home size={18} /> 進入 {nearestTown.name}
+                  </button>
+                ) : nearestPoi ? (
+                  <button onClick={() => handlePoiInteract(nearestPoi)} className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-bold py-2.5 rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20">
+                    <MapPin size={18} /> 互動 ({POI_NAMES[nearestPoi.type]})
+                  </button>
+                ) : (
+                  <button onClick={() => startHunt(false)} disabled={autoExplore} className={`flex-1 ${autoExplore ? 'bg-gray-600' : 'bg-gradient-to-r from-game-accent to-indigo-500 hover:from-sky-400 hover:to-indigo-400'} text-white font-bold py-2.5 rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg ${autoExplore ? '' : 'shadow-game-accent/20'}`}>
+                    <Sword size={18} /> {autoExplore ? '自動探索中...' : '開始狩獵'}
+                  </button>
+                )}
                 <button
                   onClick={() => setAutoExplore(!autoExplore)}
                   className={`w-12 h-[44px] rounded-xl flex items-center justify-center transition-all ${autoExplore ? 'bg-green-500/20 text-green-400 border border-green-500/50 shadow-[0_0_10px_rgba(34,197,94,0.3)]' : 'bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10'}`}
@@ -589,6 +730,11 @@ const App: React.FC = () => {
               if (pot) useItem(pot);
             }}
           />
+        )}
+
+        {/* Town Overlay */}
+        {inTown && (
+          <TownScreen town={inTown} player={player} onLeave={() => setInTown(null)} />
         )}
       </div>
 

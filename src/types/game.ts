@@ -183,3 +183,31 @@ export const RARITY_COLORS: Record<number, { border: string, bg: string, text: s
     4: { border: 'border-purple-500', bg: 'bg-purple-900/30', text: 'text-purple-400', glow: 'shadow-[0_0_16px_rgba(168,85,247,0.5)]', label: '史詩' },
     5: { border: 'border-game-gold', bg: 'bg-yellow-900/30', text: 'text-game-gold', glow: 'shadow-[0_0_20px_rgba(251,191,36,0.6)]', label: '傳說' },
 };
+
+// Towns & Field Events
+export interface Town {
+    id: string;
+    name: string;
+    lat: number;
+    lng: number;
+    radius: number; // trigger radius in meters
+    color: string;
+    facilities: ('market' | 'blacksmith' | 'alchemy')[];
+}
+
+export const TOWN_DATABASE: Town[] = [
+    { id: 'town_tpe', name: '台北城', lat: 25.0330, lng: 121.5654, radius: 2000, color: '#3b82f6', facilities: ['market', 'blacksmith', 'alchemy'] },
+    { id: 'town_ntpc', name: '新北城', lat: 25.0169, lng: 121.4627, radius: 2000, color: '#6366f1', facilities: ['market', 'blacksmith'] },
+    { id: 'town_tyn', name: '桃園城', lat: 24.9931, lng: 121.3010, radius: 2000, color: '#14b8a6', facilities: ['market'] },
+    { id: 'town_txg', name: '台中城', lat: 24.1477, lng: 120.6736, radius: 2000, color: '#f59e0b', facilities: ['market', 'blacksmith', 'alchemy'] },
+    { id: 'town_tnn', name: '台南城', lat: 22.9997, lng: 120.2270, radius: 2000, color: '#ef4444', facilities: ['market', 'alchemy'] },
+    { id: 'town_khh', name: '高雄城', lat: 22.6272, lng: 120.3014, radius: 2000, color: '#eab308', facilities: ['market', 'blacksmith', 'alchemy'] }
+];
+
+export interface MapPOI {
+    id: string;
+    type: 'chest' | 'elite' | 'altar' | 'merchant';
+    lat: number;
+    lng: number;
+    expiresAt?: number;
+}
