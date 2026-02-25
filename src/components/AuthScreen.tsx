@@ -69,7 +69,7 @@ export const AuthScreen: React.FC<{ onSignIn: () => void }> = ({ onSignIn }) => 
                                     value={nickname}
                                     onChange={(e) => setNickname(e.target.value)}
                                     className="w-full bg-gray-900/50 border border-gray-700/50 rounded-xl px-4 py-3 outline-none focus:border-game-accent/50 transition-colors"
-                                    placeholder="這將是你在世界之痕的稱號"
+                                    placeholder=""
                                 />
                             </div>
                         )}
