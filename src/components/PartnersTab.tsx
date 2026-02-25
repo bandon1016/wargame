@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
-import { Star, Sparkles, UserPlus, Users, ShieldAlert, CheckCircle2, MinusCircle, PlusCircle, Loader2, X, Zap, AlertTriangle, ArrowRight } from 'lucide-react';
+import { Star, Sparkles, UserPlus, Users, ShieldAlert, CheckCircle2, MinusCircle, PlusCircle, Loader2, X, Zap, AlertTriangle, ArrowRight, ArrowUpCircle, Home } from 'lucide-react';
 import type { Partner, CharacterStats } from '../types/game';
-import { RARITY_COLORS } from '../types/game';
+import { RARITY_COLORS, PARTNER_POOL, getPartnerAvatar } from '../types/game';
 
 interface Props {
     player: CharacterStats;
@@ -10,20 +10,7 @@ interface Props {
     isCombatAction: boolean;
 }
 
-const pool = [
-    { name: '聖靈騎士', role: 'tank' as const, rarity: 5 as const, power: 50, avatar: '🧔' },
-    { name: '精靈射手', role: 'dps' as const, rarity: 4 as const, power: 35, avatar: '🧝' },
-    { name: '治癒修女', role: 'healer' as const, rarity: 4 as const, power: 25, avatar: '👩‍🦰' },
-    { name: '鐵甲守衛', role: 'tank' as const, rarity: 3 as const, power: 15, avatar: '👨‍🦲' },
-    { name: '見習法師', role: 'dps' as const, rarity: 3 as const, power: 20, avatar: '🧙' },
-    { name: '流浪劍客', role: 'dps' as const, rarity: 3 as const, power: 18, avatar: '👨‍🦱' },
-    { name: '暗影刺客', role: 'dps' as const, rarity: 5 as const, power: 55, avatar: '🕵️' },
-    { name: '大地祭司', role: 'healer' as const, rarity: 4 as const, power: 30, avatar: '👳' },
-];
-
-const getLatestAvatar = (name: string, fallback: string) => {
-    return pool.find(p => p.name === name)?.avatar || fallback;
-};
+const getLatestAvatar = getPartnerAvatar;
 
 const RoleTag = ({ role }: { role: string }) => {
     const m: Record<string, { color: string; label: string }> = {
@@ -82,9 +69,9 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
             const isSuccess = Math.random() < successRate;
             const nextRarity = isSuccess ? (synthRarity + 1 as 3 | 4 | 5) : synthRarity;
 
-            const cands = pool.filter(p => p.rarity === nextRarity);
+            const cands = PARTNER_POOL.filter(p => p.rarity === nextRarity);
             const s = cands[Math.floor(Math.random() * cands.length)];
-            const np: Partner = { id: Math.random().toString(), ...s, level: 1, isDeployed: false };
+            const np: Partner = { id: Math.random().toString(), ...s, level: 1, exp: 0, maxExp: 100, isDeployed: false };
 
             setSynthResult(np);
             setSynthSuccess(isSuccess);
@@ -112,9 +99,9 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
             const r = Math.random();
             let rarity: 3 | 4 | 5 = 3;
             if (r > 0.99) rarity = 5; else if (r > 0.89) rarity = 4;
-            const cands = pool.filter(p => p.rarity === rarity);
+            const cands = PARTNER_POOL.filter(p => p.rarity === rarity);
             const s = cands[Math.floor(Math.random() * cands.length)];
-            const np: Partner = { id: Math.random().toString(), ...s, level: 1, isDeployed: false };
+            const np: Partner = { id: Math.random().toString(), ...s, level: 1, exp: 0, maxExp: 100, isDeployed: false };
 
             setDrawn(np);
             setAnim(false);
@@ -129,6 +116,38 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
                 return nextState;
             });
         }, 1500);
+    };
+
+    const handleUpgrade = (partnerId: string) => {
+        if (player.baseMaterials < 10) { alert('建材不足！需要 10 建材'); return; }
+
+        onUpdatePlayer(prev => {
+            const nextPartners = prev.partners.map(p => {
+                if (p.id !== partnerId) return p;
+                let nextExp = p.exp + 50;
+                let nextLevel = p.level;
+                let nextMaxExp = p.maxExp;
+                let nextPower = p.power;
+
+                while (nextExp >= nextMaxExp) {
+                    nextExp -= nextMaxExp;
+                    nextLevel++;
+                    nextMaxExp = Math.floor(nextMaxExp * 1.5);
+                    if (p.rarity === 5) nextPower += 5;
+                    else if (p.rarity === 4) nextPower += 3;
+                    else nextPower += 2;
+                }
+                return { ...p, exp: nextExp, level: nextLevel, maxExp: nextMaxExp, power: nextPower };
+            });
+
+            const nextState = {
+                ...prev,
+                baseMaterials: prev.baseMaterials - 10,
+                partners: nextPartners
+            };
+            saveProfile(nextState);
+            return nextState;
+        });
     };
 
     const toggleDeploy = (partnerId: string) => {
@@ -157,18 +176,20 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
 
     // Grouping logic for "stacked" display
     const groupedPartners = useMemo(() => {
-        const groups: Record<string, { base: any, count: number, deployedIds: string[], undeployedIds: string[] }> = {};
+        const assignedIdsInFacilities = new Set(player.buildings.flatMap(b => b.assignedPartners || []));
+        const groups: Record<string, { base: any, count: number, deployedIds: string[], facilityIds: string[], idleIds: string[] }> = {};
         player.partners.forEach(p => {
             const latestAvatar = getLatestAvatar(p.name, p.avatar);
             if (!groups[p.name]) {
-                groups[p.name] = { base: { ...p, avatar: latestAvatar }, count: 0, deployedIds: [], undeployedIds: [] };
+                groups[p.name] = { base: { ...p, avatar: latestAvatar }, count: 0, deployedIds: [], facilityIds: [], idleIds: [] };
             }
             groups[p.name].count++;
             if (p.isDeployed) groups[p.name].deployedIds.push(p.id);
-            else groups[p.name].undeployedIds.push(p.id);
+            else if (assignedIdsInFacilities.has(p.id)) groups[p.name].facilityIds.push(p.id);
+            else groups[p.name].idleIds.push(p.id);
         });
         return Object.values(groups).sort((a, b) => b.base.rarity - a.base.rarity);
-    }, [player.partners]);
+    }, [player.partners, player.buildings]);
 
     const currentDeployed = player.partners.filter(p => p.isDeployed);
 
@@ -252,6 +273,13 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
                                                 <div className="lg:hidden mt-0.5 flex justify-center scale-[0.6] origin-top h-2">
                                                     <Stars n={p.rarity} />
                                                 </div>
+
+                                                {/* EXP Bar */}
+                                                <div className="w-full mt-1.5 opacity-80">
+                                                    <div className="h-1 bg-black/50 rounded-full overflow-hidden border border-white/5">
+                                                        <div className="h-full bg-game-gold transition-all duration-300" style={{ width: `${Math.min(100, Math.max(0, (p.exp / p.maxExp) * 100))}%` }} />
+                                                    </div>
+                                                </div>
                                             </div>
                                         </>
                                     ) : (
@@ -278,9 +306,14 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
                         ) : (
                             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                                 {groupedPartners.map((group) => (
-                                    <div key={group.base.name} className={`p-4 rounded-3xl border-2 flex items-center gap-4 transition-all group ${RARITY_COLORS[group.base.rarity].border} ${RARITY_COLORS[group.base.rarity].bg} ${RARITY_COLORS[group.base.rarity].glow} ${group.undeployedIds.length === 0 && group.deployedIds.length > 0 ? 'opacity-80' : 'hover:brightness-125 hover:scale-[1.02]'}`}>
-                                        <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br from-slate-800 to-black flex items-center justify-center text-3xl border-2 border-white/10`}>
-                                            {group.base.avatar}
+                                    <div key={group.base.name} className={`p-4 rounded-3xl border-2 flex items-center gap-4 transition-all group ${RARITY_COLORS[group.base.rarity].border} ${RARITY_COLORS[group.base.rarity].bg} ${RARITY_COLORS[group.base.rarity].glow} ${group.idleIds.length === 0 && (group.deployedIds.length > 0 || group.facilityIds.length > 0) ? 'opacity-80' : 'hover:brightness-125 hover:scale-[1.02]'}`}>
+                                        <div className="flex flex-col items-center gap-1.5 shrink-0">
+                                            <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br from-slate-800 to-black flex items-center justify-center text-3xl border-2 border-white/10 shadow-inner group-hover:scale-105 transition-transform`}>
+                                                {group.base.avatar}
+                                            </div>
+                                            <div className="text-[10px] font-black text-gray-400 whitespace-nowrap">
+                                                Lv.{group.base.level} <span className="text-[8px] opacity-60">({Math.floor((group.base.exp / group.base.maxExp) * 100)}%)</span>
+                                            </div>
                                         </div>
                                         <div className="flex-1 min-w-0">
                                             <div className="flex justify-between items-start">
@@ -288,7 +321,12 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
                                                     <div className="flex items-center justify-between">
                                                         <div className="font-black text-white flex items-center gap-1.5 truncate">
                                                             {group.base.name}
-                                                            <span className="text-[11px] bg-white/10 px-1.5 py-0.5 rounded font-mono">x{group.count}</span>
+                                                            <span className="text-[11px] bg-white/10 px-1.5 py-0.5 rounded font-mono">
+                                                                x{group.idleIds.length}
+                                                                {group.count > group.idleIds.length && (
+                                                                    <span className="text-[9px] opacity-40 ml-1">/ 總計 {group.count}</span>
+                                                                )}
+                                                            </span>
                                                         </div>
                                                     </div>
                                                     <div className="flex items-center gap-2 mt-1">
@@ -297,8 +335,13 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
                                                     </div>
                                                 </div>
                                             </div>
-                                            <div className="flex items-center gap-2 mt-2">
+                                            <div className="flex flex-wrap items-center gap-2 mt-2">
                                                 <RoleTag role={group.base.role} />
+                                                {group.facilityIds.length > 0 && (
+                                                    <div className="text-[9px] font-black text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded-full border border-amber-400/30 flex items-center gap-1 whitespace-nowrap">
+                                                        <Home size={10} /> {group.facilityIds.length} 設施中
+                                                    </div>
+                                                )}
                                                 {group.deployedIds.length > 0 && (
                                                     <div className="text-[9px] font-black text-emerald-400 bg-emerald-400/10 px-2 py-0.5 rounded-full border border-emerald-400/30 flex items-center gap-1 whitespace-nowrap">
                                                         <CheckCircle2 size={10} /> {group.deployedIds.length} 上陣
@@ -307,11 +350,20 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
                                             </div>
                                         </div>
                                         <div className="flex flex-col gap-1.5 min-w-[70px]">
-                                            {group.undeployedIds.length > 0 && (
+                                            <button
+                                                onClick={() => handleUpgrade(group.base.id)}
+                                                disabled={player.baseMaterials < 10}
+                                                className="w-full py-1.5 bg-game-gold/10 hover:bg-game-gold/20 text-game-gold rounded-xl text-[10px] font-black transition-all border border-game-gold/30 disabled:opacity-30 disabled:grayscale flex items-center justify-center gap-1"
+                                                title="消耗 10 建材升級"
+                                            >
+                                                <ArrowUpCircle size={12} /> 升級
+                                            </button>
+
+                                            {group.idleIds.length > 0 && (
                                                 <button
                                                     disabled={isCombatAction || currentDeployed.length >= 5}
-                                                    onClick={() => toggleDeploy(group.undeployedIds[0])}
-                                                    className="w-full py-2 bg-emerald-500/20 hover:bg-emerald-500 text-emerald-400 hover:text-white rounded-xl text-[10px] font-black transition-all border border-emerald-500/30 disabled:opacity-30 flex items-center justify-center gap-1"
+                                                    onClick={() => toggleDeploy(group.idleIds[0])}
+                                                    className="w-full py-1.5 bg-emerald-500/20 hover:bg-emerald-500 text-emerald-400 hover:text-white rounded-xl text-[10px] font-black transition-all border border-emerald-500/30 disabled:opacity-30 flex items-center justify-center gap-1"
                                                 >
                                                     <PlusCircle size={12} /> 上陣
                                                 </button>
@@ -320,7 +372,7 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
                                                 <button
                                                     disabled={isCombatAction}
                                                     onClick={() => toggleDeploy(group.deployedIds[0])}
-                                                    className="w-full py-2 bg-red-500/20 hover:bg-red-500 text-red-400 hover:text-white rounded-xl text-[10px] font-black transition-all border border-red-500/30 flex items-center justify-center gap-1"
+                                                    className="w-full py-1.5 bg-red-500/20 hover:bg-red-500 text-red-400 hover:text-white rounded-xl text-[10px] font-black transition-all border border-red-500/30 flex items-center justify-center gap-1"
                                                 >
                                                     <MinusCircle size={12} /> 撤回
                                                 </button>
@@ -335,71 +387,108 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
 
                 {/* GACHA MODAL */}
                 {isModalOpen && (
-                    <div className="absolute inset-0 z-[2000] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md anim-fade-in">
-                        <div className="glass-panel w-full max-w-sm rounded-[40px] p-8 border-2 border-amber-500/30 shadow-2xl relative overflow-hidden flex flex-col items-center text-center bg-gradient-to-b from-amber-500/10 to-transparent">
+                    <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md anim-fade-in">
+                        <div className="glass-panel w-full max-w-sm md:max-w-3xl max-h-[80vh] overflow-hidden rounded-[40px] p-8 border-2 border-amber-500/30 shadow-2xl relative flex flex-col md:flex-row text-center md:text-left bg-gradient-to-b md:bg-gradient-to-r from-amber-500/10 to-transparent">
                             <div className="absolute inset-0 anim-shimmer pointer-events-none opacity-30" />
 
                             <button
                                 onClick={() => { setIsModalOpen(false); setDrawn(null); }}
-                                className="absolute top-6 right-6 p-2 rounded-full bg-white/5 hover:bg-white/10 transition-colors text-gray-400 hover:text-white"
+                                className="absolute top-6 right-6 p-2 rounded-full bg-white/5 hover:bg-white/10 transition-colors text-gray-400 hover:text-white z-10"
                             >
                                 <X size={24} />
                             </button>
 
-                            <div className="w-24 h-24 bg-amber-500/20 rounded-full flex items-center justify-center mb-6 border-2 border-amber-500/40 mt-4">
-                                <Sparkles size={48} className="text-game-gold anim-float" />
-                            </div>
+                            {/* Left Side: Info & Button */}
+                            <div className="flex-1 flex flex-col items-center md:items-start md:border-r border-white/10 md:pr-8">
+                                <div className="w-24 h-24 bg-amber-500/20 rounded-full flex items-center justify-center mb-6 border-2 border-amber-500/40 mt-4 mx-auto md:mx-0">
+                                    <Sparkles size={48} className="text-game-gold anim-float" />
+                                </div>
 
-                            <h3 className="text-3xl font-black text-white mb-2 italic">魂之招募</h3>
-                            <p className="text-sm text-gray-400 mb-8 leading-relaxed">尋找跨越時空的契約者<br />為勇者提供命運加護</p>
+                                <h3 className="text-3xl font-black text-white mb-2 italic mx-auto md:mx-0">魂之招募</h3>
+                                <p className="text-sm text-gray-400 mb-8 leading-relaxed mx-auto md:mx-0 text-center md:text-left">尋找跨越時空的契約者<br />為勇者提供命運加護</p>
 
-                            <button
-                                onClick={gacha}
-                                disabled={anim}
-                                className="group w-full bg-gradient-to-r from-amber-600 to-yellow-500 hover:from-amber-500 hover:to-yellow-400 text-black font-black py-4 px-6 rounded-3xl transition-all active:scale-95 disabled:opacity-50 shadow-[0_8px_30px_rgba(251,191,36,0.5)] flex flex-col items-center gap-0.5 mb-8"
-                            >
-                                {anim ? (
-                                    <><Loader2 className="animate-spin mb-1" /> <span className="text-base">共鳴中...</span></>
-                                ) : (
-                                    <>
-                                        <div className="flex items-center gap-2">
-                                            <UserPlus size={22} />
-                                            <span className="text-lg">起始召喚</span>
+                                <button
+                                    onClick={gacha}
+                                    disabled={anim}
+                                    className="group w-full max-w-[280px] mx-auto md:mx-0 bg-gradient-to-r from-amber-600 to-yellow-500 hover:from-amber-500 hover:to-yellow-400 text-black font-black py-4 px-6 rounded-3xl transition-all active:scale-95 disabled:opacity-50 shadow-[0_8px_30px_rgba(251,191,36,0.5)] flex flex-col items-center gap-0.5 mb-8"
+                                >
+                                    {anim ? (
+                                        <><Loader2 className="animate-spin mb-1" /> <span className="text-base">共鳴中...</span></>
+                                    ) : (
+                                        <>
+                                            <div className="flex items-center gap-2">
+                                                <UserPlus size={22} />
+                                                <span className="text-lg">起始召喚</span>
+                                            </div>
+                                            <div className="text-xs opacity-70 mt-1">每次消耗 100 金幣</div>
+                                        </>
+                                    )}
+                                </button>
+
+                                <div className="mt-auto pt-6 border-t border-white/5 w-full hidden md:block">
+                                    <h4 className="text-xs font-black text-gray-400 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+                                        <ShieldAlert size={14} className="text-amber-500" /> 招募法則
+                                    </h4>
+                                    <div className="flex justify-between gap-2 px-2">
+                                        <div className="flex flex-col items-center">
+                                            <span className="text-game-gold font-black text-sm">1%</span>
+                                            <span className="text-[11px] text-gray-500 font-bold">傳奇 5★</span>
                                         </div>
-                                        <div className="text-xs opacity-70">每次消耗 100 金幣</div>
-                                    </>
-                                )}
-                            </button>
-
-                            {drawn && !anim && (
-                                <div className={`p-6 rounded-[32px] border-2 w-full animate-in zoom-in-95 duration-300 relative ${RARITY_COLORS[drawn.rarity!].border} ${RARITY_COLORS[drawn.rarity!].bg} ${RARITY_COLORS[drawn.rarity!].glow}`}>
-                                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-black px-4 py-1.5 rounded-full border border-white/20 text-[10px] font-black text-game-gold whitespace-nowrap tracking-widest">NEW PARTNER</div>
-                                    <div className="text-6xl mb-4 transform hover:scale-110 transition-transform">{drawn.avatar}</div>
-                                    <div className="flex justify-center mb-3"><Stars n={drawn.rarity!} /></div>
-                                    <div className="font-black text-xl text-white mb-2">{drawn.name}</div>
-                                    <div className="flex flex-col items-center gap-3">
-                                        <RoleTag role={drawn.role} />
-                                        <div className="text-xs font-mono text-gray-300 bg-black/40 px-3 py-1 rounded-xl border border-white/5">戰鬥力: {drawn.power}</div>
+                                        <div className="flex flex-col items-center border-x border-white/5 px-4 w-full">
+                                            <span className="text-purple-400 font-black text-sm">10%</span>
+                                            <span className="text-[11px] text-gray-500 font-bold">史詩 4★</span>
+                                        </div>
+                                        <div className="flex flex-col items-center">
+                                            <span className="text-sky-400 font-black text-sm">89%</span>
+                                            <span className="text-[11px] text-gray-500 font-bold">精英 3★</span>
+                                        </div>
                                     </div>
                                 </div>
-                            )}
+                            </div>
 
-                            <div className="mt-8 pt-6 border-t border-white/5 w-full">
+                            {/* Right Side: Result */}
+                            <div className="flex-1 flex flex-col items-center justify-center md:pl-8 mt-8 md:mt-0 min-h-[300px]">
+                                {drawn && !anim ? (
+                                    <div className={`p-6 rounded-[32px] border-2 w-full max-w-[280px] animate-in zoom-in-95 duration-300 relative bg-black/40 ${RARITY_COLORS[drawn.rarity!].border} ${RARITY_COLORS[drawn.rarity!].glow}`}>
+                                        <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-black px-4 py-1.5 rounded-full border border-white/20 text-[10px] font-black text-game-gold whitespace-nowrap tracking-widest">NEW PARTNER</div>
+                                        <div className="text-6xl mb-4 transform hover:scale-110 transition-transform flex justify-center">{getLatestAvatar(drawn.name, drawn.avatar)}</div>
+                                        <div className="flex justify-center mb-3"><Stars n={drawn.rarity!} /></div>
+                                        <div className="font-black text-xl text-white mb-2 text-center">{drawn.name}</div>
+                                        <div className="flex flex-col items-center gap-3">
+                                            <RoleTag role={drawn.role} />
+                                            <div className="text-xs font-mono text-gray-300 bg-black/40 px-3 py-1 rounded-xl border border-white/5">戰鬥力: {drawn.power}</div>
+                                        </div>
+                                    </div>
+                                ) : anim ? (
+                                    <div className="text-amber-500/50 flex flex-col items-center justify-center animate-pulse">
+                                        <Sparkles size={64} className="mb-4" />
+                                        <div className="font-black text-xl tracking-widest">SUMMONING...</div>
+                                    </div>
+                                ) : (
+                                    <div className="w-full h-full border-2 border-dashed border-white/10 rounded-[32px] flex items-center justify-center opacity-30 text-center flex-col p-6 min-h-[250px] mx-auto max-w-[280px]">
+                                        <UserPlus size={48} className="mb-4" />
+                                        <p className="font-bold">等待召喚...</p>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Mobile rules at bottom */}
+                            <div className="mt-8 pt-6 border-t border-white/5 w-full md:hidden">
                                 <h4 className="text-xs font-black text-gray-400 uppercase tracking-[0.2em] mb-4 flex items-center justify-center gap-2">
                                     <ShieldAlert size={14} className="text-amber-500" /> 招募法則
                                 </h4>
                                 <div className="flex justify-around gap-2 px-2">
                                     <div className="flex flex-col items-center">
                                         <span className="text-game-gold font-black text-sm">1%</span>
-                                        <span className="text-[11px] text-gray-500 font-bold">傳奇</span>
+                                        <span className="text-[11px] text-gray-500 font-bold">傳奇 5★</span>
                                     </div>
-                                    <div className="flex flex-col items-center border-x border-white/5 px-4">
-                                        <span className="text-gray-300 font-black text-sm">10%</span>
-                                        <span className="text-[11px] text-gray-500 font-bold">史詩</span>
+                                    <div className="flex flex-col items-center border-x border-white/5 px-4 w-full">
+                                        <span className="text-purple-400 font-black text-sm">10%</span>
+                                        <span className="text-[11px] text-gray-500 font-bold">史詩 4★</span>
                                     </div>
                                     <div className="flex flex-col items-center">
-                                        <span className="text-gray-500 font-black text-sm">89%</span>
-                                        <span className="text-[11px] text-gray-500 font-bold">精英</span>
+                                        <span className="text-sky-400 font-black text-sm">89%</span>
+                                        <span className="text-[11px] text-gray-500 font-bold">精英 3★</span>
                                     </div>
                                 </div>
                             </div>
@@ -409,39 +498,67 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
 
                 {/* SYNTHESIS MODAL */}
                 {isSynthesisModalOpen && (
-                    <div className="absolute inset-0 z-[2000] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md anim-fade-in">
-                        <div className="glass-panel w-full max-w-2xl max-h-[90vh] rounded-[40px] p-6 lg:p-8 border-2 border-purple-500/30 shadow-2xl relative flex flex-col bg-gradient-to-b from-purple-900/40 to-black overflow-hidden">
+                    <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md anim-fade-in">
+                        <div className="glass-panel w-full max-w-sm md:max-w-4xl xl:max-w-5xl max-h-[80vh] rounded-[40px] p-6 lg:p-8 border-2 border-purple-500/30 shadow-2xl relative flex flex-col md:flex-row gap-6 bg-gradient-to-b md:bg-gradient-to-r from-purple-900/40 to-black overflow-hidden">
 
                             <button
                                 onClick={() => setIsSynthesisModalOpen(false)}
-                                className="absolute top-6 right-6 p-2 rounded-full bg-white/5 hover:bg-white/10 transition-colors text-gray-400 hover:text-white z-10"
+                                className="absolute top-6 right-6 p-2 rounded-full bg-white/5 hover:bg-white/10 transition-colors text-gray-400 hover:text-white z-20"
                             >
-                                <X size={24} />
+                                <X size={20} />
                             </button>
 
-                            <div className="flex items-center justify-center gap-3 mb-6 shrink-0">
-                                <Zap size={28} className="text-purple-400" />
-                                <h3 className="text-2xl font-black text-white">夥伴合成</h3>
+                            {/* Left Side: Info & Actions */}
+                            <div className="flex flex-col md:w-64 shrink-0 h-full">
+                                <div className="flex items-center gap-3 mb-6 shrink-0 md:justify-start justify-center">
+                                    <Zap size={24} className="text-purple-400" />
+                                    <h3 className="text-xl font-black text-white">夥伴合成</h3>
+                                </div>
+
+                                {!synthResult && !synthAnim && (
+                                    <div className="flex md:flex-col justify-center gap-4 mb-6 shrink-0">
+                                        <button
+                                            onClick={() => { setSynthRarity(3); setSelectedMaterials([]); }}
+                                            className={`px-6 py-3 rounded-xl font-black transition-all ${synthRarity === 3 ? 'bg-sky-500/20 text-sky-400 border-2 border-sky-500 shadow-[0_0_15px_rgba(14,165,233,0.3)]' : 'bg-white/5 text-gray-400 border-2 border-transparent hover:bg-white/10'}`}
+                                        >
+                                            3★ 升 4★
+                                        </button>
+                                        <button
+                                            onClick={() => { setSynthRarity(4); setSelectedMaterials([]); }}
+                                            className={`px-6 py-3 rounded-xl font-black transition-all ${synthRarity === 4 ? 'bg-purple-500/20 text-purple-400 border-2 border-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.3)]' : 'bg-white/5 text-gray-400 border-2 border-transparent hover:bg-white/10'}`}
+                                        >
+                                            4★ 升 5★
+                                        </button>
+                                    </div>
+                                )}
+
+                                {!synthResult && !synthAnim && (
+                                    <div className="mt-auto shrink-0 hidden md:flex flex-col gap-4">
+                                        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4">
+                                            <h5 className="text-red-400 font-black text-sm flex items-center gap-1.5 mb-1.5"><AlertTriangle size={15} /> 警告</h5>
+                                            <p className="text-[11px] text-red-400/80 leading-relaxed font-bold">
+                                                合成材料將會<span className="text-red-300">永久消失</span>，且不保證 100% 成功。
+                                            </p>
+                                        </div>
+
+                                        <div className="text-xs text-gray-400 font-bold bg-white/5 p-3 rounded-xl">
+                                            <div>機率: {synthRarity === 3 ? '10% 獲取 4★' : '5% 獲取 5★'}</div>
+                                            <div className="opacity-60 font-medium text-[10px] mt-1">(失敗則隨機退還 1 張同星級)</div>
+                                        </div>
+
+                                        <button
+                                            onClick={handleSynthesis}
+                                            disabled={selectedMaterials.length !== 4}
+                                            className="w-full bg-purple-600 hover:bg-purple-500 disabled:bg-white/5 disabled:text-gray-500 text-white font-black py-4 px-8 rounded-xl transition-all shadow-[0_4px_15px_rgba(168,85,247,0.3)] disabled:shadow-none"
+                                        >
+                                            確認合成
+                                        </button>
+                                    </div>
+                                )}
                             </div>
 
-                            {!synthResult && !synthAnim && (
-                                <div className="flex justify-center gap-4 mb-6 shrink-0">
-                                    <button
-                                        onClick={() => { setSynthRarity(3); setSelectedMaterials([]); }}
-                                        className={`px-6 py-2 rounded-xl font-black transition-all ${synthRarity === 3 ? 'bg-sky-500/20 text-sky-400 border-2 border-sky-500' : 'bg-white/5 text-gray-400 border-2 border-transparent hover:bg-white/10'}`}
-                                    >
-                                        3★ 升 4★
-                                    </button>
-                                    <button
-                                        onClick={() => { setSynthRarity(4); setSelectedMaterials([]); }}
-                                        className={`px-6 py-2 rounded-xl font-black transition-all ${synthRarity === 4 ? 'bg-purple-500/20 text-purple-400 border-2 border-purple-500' : 'bg-white/5 text-gray-400 border-2 border-transparent hover:bg-white/10'}`}
-                                    >
-                                        4★ 升 5★
-                                    </button>
-                                </div>
-                            )}
-
-                            <div className="flex-1 overflow-y-auto min-h-[300px] custom-scrollbar rounded-2xl bg-black/40 p-4 border border-white/5">
+                            {/* Right Side: Materials Array */}
+                            <div className="flex-1 overflow-y-auto min-h-[300px] custom-scrollbar rounded-2xl bg-black/40 p-4 border border-white/5 relative">
                                 {synthAnim ? (
                                     <div className="h-full flex flex-col items-center justify-center">
                                         <Loader2 size={48} className="animate-spin text-purple-500 mb-4" />
@@ -470,37 +587,41 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
                                     </div>
                                 ) : (
                                     <div className="flex flex-col h-full">
-                                        <div className="flex items-center justify-between mb-4">
-                                            <p className="text-sm font-bold text-gray-400">請選擇 4 張未上陣的同星級卡片做為材料</p>
+                                        <div className="flex items-center justify-between mb-4 sticky top-0 bg-black/40 p-2 z-10 backdrop-blur-md rounded-lg">
+                                            <p className="text-sm font-bold text-gray-400 hidden sm:block">請選擇 4 張同星級卡片做為材料</p>
+                                            <p className="text-sm font-bold text-gray-400 sm:hidden">選 4 張素材</p>
                                             <span className="text-xs px-3 py-1 rounded-full bg-purple-500/20 text-purple-300 font-mono border border-purple-500/30">已選: {selectedMaterials.length}/4</span>
                                         </div>
 
-                                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
                                             {player.partners
-                                                .filter(p => p.rarity === synthRarity && !p.isDeployed)
+                                                .filter(p => p.rarity === synthRarity && !p.isDeployed && !player.buildings.some(b => b.assignedPartners?.includes(p.id)))
                                                 .map(p => {
                                                     const isSelected = selectedMaterials.includes(p.id);
                                                     return (
                                                         <div
                                                             key={p.id}
                                                             onClick={() => toggleMaterialSelection(p.id)}
-                                                            className={`aspect-[3/4] rounded-2xl border-2 flex flex-col items-center justify-center p-2 cursor-pointer transition-all relative
-                                                            ${isSelected ? 'border-purple-500 bg-purple-500/20 scale-95 shadow-[0_0_15px_rgba(168,85,247,0.4)]' : `border-transparent bg-white/5 hover:bg-white/10 opacity-70 hover:opacity-100`}
+                                                            className={`rounded-2xl border flex flex-col items-center justify-center p-2 cursor-pointer transition-all relative
+                                                            ${isSelected ? 'border-purple-500 bg-purple-500/20 scale-95 shadow-[0_0_15px_rgba(168,85,247,0.4)]' : `border-white/5 bg-white/5 hover:bg-white/10 opacity-70 hover:opacity-100 hover:border-purple-500/30`}
                                                         `}
                                                         >
                                                             {isSelected && (
-                                                                <div className="absolute top-2 right-2 bg-purple-500 text-white rounded-full p-0.5 z-10 shadow-lg">
+                                                                <div className="absolute top-1 right-1 bg-purple-500 text-white rounded-full p-0.5 z-10 shadow-lg scale-75">
                                                                     <CheckCircle2 size={16} />
                                                                 </div>
                                                             )}
-                                                            <div className="text-3xl mb-2">{getLatestAvatar(p.name, p.avatar)}</div>
-                                                            <div className="font-black text-xs text-center truncate w-full px-1">{p.name}</div>
-                                                            <div className="mt-1 flex justify-center"><Stars n={p.rarity} /></div>
+                                                            <div className="text-3xl mb-1 mt-1 group-hover:scale-110 transition-transform">{getLatestAvatar(p.name, p.avatar)}</div>
+                                                            <div className="font-black text-[10px] text-center truncate w-full px-1 text-white/90">{p.name}</div>
+                                                            <div className="mt-1 flex items-center gap-0.5 bg-black/30 px-1.5 py-0.5 rounded-full border border-white/5">
+                                                                <Star size={8} className="text-game-gold" fill="currentColor" />
+                                                                <span className="text-[9px] font-black text-game-gold">{p.rarity}</span>
+                                                            </div>
                                                         </div>
                                                     );
                                                 })
                                             }
-                                            {player.partners.filter(p => p.rarity === synthRarity && !p.isDeployed).length === 0 && (
+                                            {player.partners.filter(p => p.rarity === synthRarity && !p.isDeployed && !player.buildings.some(b => b.assignedPartners?.includes(p.id))).length === 0 && (
                                                 <div className="col-span-full py-12 flex flex-col items-center justify-center opacity-50">
                                                     <Users size={32} className="mb-2" />
                                                     <p className="font-bold text-sm">沒有符合條件的未上陣夥伴</p>
@@ -511,27 +632,17 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
                                 )}
                             </div>
 
+                            {/* Mobile actions at bottom */}
                             {!synthResult && !synthAnim && (
-                                <div className="mt-6 shrink-0">
-                                    <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 mb-4 flex items-start gap-3">
-                                        <AlertTriangle className="text-red-500 shrink-0 mt-0.5" size={18} />
-                                        <div>
-                                            <h5 className="text-red-400 font-black text-sm mb-1">系統警告</h5>
-                                            <p className="text-xs text-red-400/80 leading-relaxed font-bold">
-                                                已獲得的夥伴如果作為材料進行合成，<span className="text-red-300">原本招募到的卡片將會永久消失</span>，並按照合成結果獲得 1 張全新的夥伴。請謹慎選擇！
-                                            </p>
-                                        </div>
-                                    </div>
-
+                                <div className="mt-6 shrink-0 md:hidden flex flex-col gap-4">
                                     <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
                                         <div className="text-xs text-gray-400 font-bold text-center sm:text-left">
-                                            合成預覽: {synthRarity}★ <ArrowRight size={10} className="inline opacity-50 mx-1" /> {synthRarity === 3 ? '10% 機率獲取 4★' : '5% 機率獲取 5★'}<br />
-                                            <span className="opacity-60 font-medium">(若合成失敗將隨機退還 1 張同星級卡片)</span>
+                                            合成預覽: {synthRarity}★ <ArrowRight size={10} className="inline opacity-50 mx-1" /> {synthRarity === 3 ? '10% 獲取 4★' : '5% 獲取 5★'}<br />
                                         </div>
                                         <button
                                             onClick={handleSynthesis}
                                             disabled={selectedMaterials.length !== 4}
-                                            className="w-full sm:w-auto bg-purple-600 hover:bg-purple-500 disabled:bg-white/5 disabled:text-gray-500 text-white font-black py-3 px-8 rounded-xl transition-all shadow-[0_4px_15px_rgba(168,85,247,0.3)] disabled:shadow-none"
+                                            className="w-full sm:w-auto bg-purple-600 hover:bg-purple-500 disabled:bg-white/5 disabled:text-gray-500 text-white font-black py-4 px-8 rounded-xl transition-all shadow-[0_4px_15px_rgba(168,85,247,0.3)] disabled:shadow-none"
                                         >
                                             確認合成
                                         </button>

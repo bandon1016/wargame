@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMap, Circle } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap, Circle, Polyline, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Compass, Sword, Home, Users, Package, Settings as SettingsIcon, Book, Heart, Shield, Zap, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, MapPin, Loader2, X, PlusCircle, Activity, Info } from 'lucide-react';
+import { Compass, Sword, Home, Users, Package, Settings as SettingsIcon, Book, Heart, Shield, Zap, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, MapPin, Loader2, X, PlusCircle, Activity, Info, ShieldAlert, TrainFront } from 'lucide-react';
 import type { CharacterStats, Equipment, GameItem, Skill, MapPOI, Town, WeatherType, Enemy, AlchemyRecipe, BlacksmithRecipe } from './types/game';
-import { MONSTER_DATABASE, SKILL_DATABASE, ITEM_DATABASE, EQUIPMENT_DATABASE, RARITY_COLORS, WEATHER_TYPES, getRegionByCoordinates, getRegionalMaterials, TOWN_DATABASE } from './types/game';
+import { MONSTER_DATABASE, SKILL_DATABASE, ITEM_DATABASE, EQUIPMENT_DATABASE, RARITY_COLORS, WEATHER_TYPES, getRegionByCoordinates, getRegionalMaterials, TOWN_DATABASE, getPartnerAvatar, getRailwayPath } from './types/game';
 import { CombatScreen } from './components/CombatScreen';
 import { PartnersTab } from './components/PartnersTab';
 import { HomeTab } from './components/HomeTab';
@@ -38,9 +38,20 @@ const createPoiIcon = (type: keyof typeof POI_ICONS) => L.divIcon({
   iconAnchor: [15, 15],
 });
 
-function MapUpdater({ center }: { center: [number, number] }) {
+function MapUpdater({ center, isTraveling }: { center: [number, number], isTraveling: boolean }) {
   const map = useMap();
-  useEffect(() => { map.setView(center, map.getZoom()); }, [center, map]);
+
+  useEffect(() => {
+    if (isTraveling) {
+      map.setZoom(11); // County level zoom
+    } else {
+      map.setZoom(15); // Street/City level zoom
+    }
+  }, [isTraveling, map]);
+
+  useEffect(() => {
+    map.setView(center, map.getZoom(), { animate: false });
+  }, [center, map]);
   return null;
 }
 
@@ -100,6 +111,16 @@ const POI_DETAILS = {
   }
 };
 
+interface CombatLog {
+  id: string;
+  type: 'win' | 'lose';
+  enemyName: string;
+  exp?: number;
+  gold?: number;
+  items?: { name: string; quantity: number; icon: string }[];
+  message?: string;
+}
+
 const TAIWAN_BOUNDS = { minLat: 21.8, maxLat: 26.4, minLng: 119.0, maxLng: 122.5 };
 const DEFAULT_POSITION: [number, number] = [25.0340, 121.5645]; // 台北101
 
@@ -119,28 +140,128 @@ const App: React.FC = () => {
   const playerRef = React.useRef<CharacterStats | null>(player);
   const [weather, setWeather] = useState<WeatherType>('sunny');
   const weatherRef = React.useRef<WeatherType>(weather);
-  const [areaName] = useState('信義區 — 台北市');
+  const [areaName, setAreaName] = useState('載入中...');
 
   const [inTown, setInTown] = useState<Town | null>(null);
   const [pois, setPois] = useState<MapPOI[]>([]);
+  const [targetPosition, setTargetPosition] = useState<[number, number] | null>(null);
+  const [isWalking, setIsWalking] = useState(false);
+  const moveDirRef = React.useRef<'n' | 's' | 'e' | 'w' | null>(null);
   const [lootMessage, setLootMessage] = useState<{ title: string; items: { name: string; quantity: number; icon: string }[] } | null>(null);
 
   const [activePoiCombat, setActivePoiCombat] = useState<string | null>(null);
   const [isMerchantOpen, setIsMerchantOpen] = useState(false);
   const [isLegendOpen, setIsLegendOpen] = useState(false);
   const [selectedLegendPoi, setSelectedLegendPoi] = useState<keyof typeof POI_DETAILS | null>(null);
+  const [isDoubleTabbed, setIsDoubleTabbed] = useState(false);
+  const [mySessionId] = useState(() => crypto.randomUUID());
   const activePoiRef = React.useRef<string | null>(null);
+  const activeMerchantPoiRef = React.useRef<string | null>(null);
   useEffect(() => { activePoiRef.current = activePoiCombat; }, [activePoiCombat]);
   const [eliteCooldowns, setEliteCooldowns] = useState<Record<string, number>>({});
+  const [combatLogs, setCombatLogs] = useState<CombatLog[]>([]);
+  const [logOpacity, setLogOpacity] = useState(1);
+
+  // Railway Travel States
+  const [isTraveling, setIsTraveling] = useState(false);
+  const [travelPath, setTravelPath] = useState<[number, number][]>([]);
+  const [travelProgress, setTravelProgress] = useState(0);
+  const TRAVEL_SPEED_FACTOR = 0.0008; // Even slower as requested (was 0.002)
 
   // Sync ref structure
   useEffect(() => {
     playerRef.current = player;
   }, [player]);
 
+  // Railway Animation Loop
+  useEffect(() => {
+    if (!isTraveling || travelPath.length < 2) return;
+
+    let frameId: number;
+
+    const animate = () => {
+      setTravelProgress(prev => {
+        const next = prev + TRAVEL_SPEED_FACTOR;
+
+        // Save progress to local storage for persistence
+        localStorage.setItem('war_game_travel_v1', JSON.stringify({
+          isTraveling: true,
+          travelPath,
+          travelProgress: next,
+          lastUpdated: Date.now()
+        }));
+
+        if (next >= travelPath.length - 1) {
+          setIsTraveling(false);
+          setTravelProgress(0);
+          setTravelPath([]);
+          localStorage.removeItem('war_game_travel_v1');
+          const finalPos = travelPath[travelPath.length - 1];
+          setPosition(finalPos);
+          // Force save profile on arrival
+          saveProfile();
+          return 0;
+        }
+
+        const segmentIndex = Math.floor(next);
+        const segmentProgress = next - segmentIndex;
+        const p1 = travelPath[segmentIndex];
+        const p2 = travelPath[segmentIndex + 1];
+
+        const lat = p1[0] + (p2[0] - p1[0]) * segmentProgress;
+        const lng = p1[1] + (p2[1] - p1[1]) * segmentProgress;
+        setPosition([lat, lng]);
+
+        return next;
+      });
+      frameId = requestAnimationFrame(animate);
+    };
+
+    frameId = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(frameId);
+  }, [isTraveling, travelPath]);
+
+  // Load persistence state on start
+  useEffect(() => {
+    const saved = localStorage.getItem('war_game_travel_v1');
+    if (saved) {
+      try {
+        const data = JSON.parse(saved);
+        if (data.isTraveling && data.travelPath && data.travelPath.length > 0) {
+          setTravelPath(data.travelPath);
+          setTravelProgress(data.travelProgress);
+          setIsTraveling(true);
+        }
+      } catch (e) {
+        console.error("Failed to restore travel state:", e);
+      }
+    }
+  }, []);
+
   useEffect(() => {
     positionRef.current = position;
-  }, [position]);
+
+    // Reverse Geocoding for Area Name
+    const updateAreaName = async () => {
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${position[0]}&lon=${position[1]}&zoom=10&addressdetails=1`, {
+          headers: { 'Accept-Language': 'zh-TW' }
+        });
+        const data = await res.json();
+        if (data && data.address) {
+          // Priority: city, town, village, state
+          const city = data.address.city || data.address.town || data.address.village || data.address.state || '未知海域';
+          setAreaName(city);
+        }
+      } catch (e) {
+        console.error("Geocoding error:", e);
+      }
+    };
+
+    // Debounce geocoding during travel
+    const timer = setTimeout(updateAreaName, isTraveling ? 2000 : 500);
+    return () => clearTimeout(timer);
+  }, [position, isTraveling]);
 
   useEffect(() => {
     weatherRef.current = weather;
@@ -209,6 +330,32 @@ const App: React.FC = () => {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Anti Double Tabbing
+  useEffect(() => {
+    if (!session?.user?.id) return;
+    const channelName = 'war_game_channel_' + session.user.id;
+    const channel = new BroadcastChannel(channelName);
+
+    // Send initial ping to tell others I am the new active tab
+    const timer = setTimeout(() => {
+      channel.postMessage({ type: 'NEW_SESSION', sessionId: mySessionId });
+    }, 100);
+
+    const listener = (event: MessageEvent) => {
+      if (event.data.type === 'NEW_SESSION' && event.data.sessionId !== mySessionId) {
+        // A newer tab was opened! We are the old tab.
+        setIsDoubleTabbed(true);
+      }
+    };
+
+    channel.onmessage = listener;
+
+    return () => {
+      clearTimeout(timer);
+      channel.close();
+    };
+  }, [session?.user?.id, mySessionId]);
+
   // Realtime Sync for multi-browser support
   useEffect(() => {
     if (!session?.user?.id) return;
@@ -225,6 +372,11 @@ const App: React.FC = () => {
         },
         (payload) => {
           const data = payload.new;
+          // SERVER SIDE ANTI DOUBLE TAB: If session_id in DB is different from ours, block this tab.
+          if (data.session_id && data.session_id !== mySessionId) {
+            setIsDoubleTabbed(true);
+            return;
+          }
           // Only update if it's not the current player state (basic check via updated_at or just update to be sure)
           setPlayer({
             level: data.level, exp: data.exp, maxExp: data.max_exp,
@@ -270,6 +422,9 @@ const App: React.FC = () => {
         skills: data.skills || [],
         partners: data.partners || [],
       });
+
+      // NEW TAB WINS: Claim the session for ourself unconditionally
+      supabase.from('profiles').update({ session_id: mySessionId }).eq('id', userId).then();
       // Load saved position
       if (data.current_location_lat === 25.0330 && data.current_location_lng === 121.5654 && data.level === 1) {
         // 新角色，嘗試使用 GPS
@@ -303,6 +458,8 @@ const App: React.FC = () => {
     const p = newState || playerRef.current;
     if (!p || !session?.user?.id) return;
 
+    console.log('Attempting to save profile...', { sessionId: mySessionId });
+
     const { error } = await supabase.from('profiles').update({
       level: p.level, exp: p.exp, max_exp: p.maxExp,
       hp: p.hp, max_hp: p.maxHp, attack: p.attack, defense: p.defense,
@@ -317,26 +474,38 @@ const App: React.FC = () => {
       items: p.items,
       skills: p.skills,
       partners: p.partners,
+      session_id: mySessionId,
       current_location_lat: positionRef.current[0],
       current_location_lng: positionRef.current[1],
       updated_at: new Date().toISOString()
-    }).eq('id', session.user.id);
+    }).eq('id', session.user.id); // Removed session_id constraint to ensure saves stick during transitions
 
     if (error) {
       console.error('Save Profile Error:', error);
     } else {
       console.log('Profile Saved Successfully');
     }
-  }, [session]);
+  }, [session, mySessionId]);
+
+  const pendingSaveRef = React.useRef<any>(null);
 
   useEffect(() => {
     if (!player || !session?.user?.id) return;
-    // Debounced auto-save: 每當 player 變更後 1 秒進行儲存
-    const timer = setTimeout(() => {
-      saveProfile(player);
-    }, 1000);
-    return () => clearTimeout(timer);
-  }, [player, session]);
+
+    // Throttled Auto-Save: 5000ms. 確保連續移動或狀態更新時，不會被打斷存檔。
+    if (!pendingSaveRef.current) {
+      pendingSaveRef.current = setTimeout(() => {
+        saveProfile();
+        pendingSaveRef.current = null;
+      }, 5000);
+    }
+  }, [player, position, session, saveProfile]);
+
+  useEffect(() => {
+    return () => {
+      if (pendingSaveRef.current) clearTimeout(pendingSaveRef.current);
+    };
+  }, []);
 
   // Resource tick
   useEffect(() => {
@@ -344,11 +513,32 @@ const App: React.FC = () => {
       setPlayer(p => {
         if (!p) return null;
         let dg = 0, dm = 0;
-        p.buildings.forEach(b => { if (b.type === 'gold_mine') dg += b.baseProduction / 60; else if (b.type === 'material_camp') dm += b.baseProduction / 60; });
+        p.buildings.forEach(b => {
+          // Calculate bonus
+          let goldBonus = 0;
+          let matBonus = 0;
+          const assigned = p.partners.filter(pt => b.assignedPartners?.includes(pt.id));
+          assigned.forEach(pt => {
+            let mult = pt.rarity === 5 ? 0.05 : pt.rarity === 4 ? 0.03 : 0.02;
+            if (pt.role === 'tank' && (b.type === 'material_camp' || b.name.includes('營地') || b.name.includes('工坊'))) {
+              matBonus += mult;
+            } else if (pt.role === 'healer' && b.type === 'gold_mine') {
+              goldBonus += mult;
+            }
+          });
+
+          if (b.type === 'gold_mine') {
+            dg += (b.baseProduction * (1 + goldBonus)) / 60;
+          } else if (b.type === 'material_camp') {
+            dm += (b.baseProduction * (1 + matBonus)) / 60;
+          }
+        });
+
+        if (dg === 0 && dm === 0) return p; // 避免無意義的狀態變更觸發重繪與存檔計時器
         return { ...p, gold: p.gold + dg, baseMaterials: p.baseMaterials + dm };
       });
     }, 1000);
-    return () => clearInterval(t);
+    return () => window.clearInterval(t);
   }, []);
 
   const [isCombatAction, setIsCombatAction] = useState(false);
@@ -356,9 +546,112 @@ const App: React.FC = () => {
   const [autoExplore, setAutoExplore] = useState(false);
 
   const move = useCallback((d: 'n' | 's' | 'e' | 'w') => {
-    const s = 0.001;
-    setPosition(p => d === 'n' ? [p[0] + s, p[1]] : d === 's' ? [p[0] - s, p[1]] : d === 'e' ? [p[0], p[1] + s] : [p[0], p[1] - s]);
+    const s = 0.0005;
+    setPosition(p => {
+      const next: [number, number] = d === 'n' ? [p[0] + s, p[1]] : d === 's' ? [p[0] - s, p[1]] : d === 'e' ? [p[0], p[1] + s] : [p[0], p[1] - s];
+      return next;
+    });
+    setTargetPosition(null); // Cancel click-to-move if using D-Pad
   }, []);
+
+  // Keyboard Support (WASD) - Continuous Smooth Movement
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (isTraveling || activeTab !== 'explore' || inTown || activePoiCombat) return;
+      const key = e.key.toLowerCase();
+      if (key === 'w' || key === 'arrowup') startMove('n');
+      else if (key === 's' || key === 'arrowdown') startMove('s');
+      else if (key === 'a' || key === 'arrowleft') startMove('w');
+      else if (key === 'd' || key === 'arrowright') startMove('e');
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      const key = e.key.toLowerCase();
+      let dir: 'n' | 's' | 'e' | 'w' | null = null;
+      if (key === 'w' || key === 'arrowup') dir = 'n';
+      else if (key === 's' || key === 'arrowdown') dir = 's';
+      else if (key === 'a' || key === 'arrowleft') dir = 'w';
+      else if (key === 'd' || key === 'arrowright') dir = 'e';
+
+      if (dir && moveDirRef.current === dir) stopMove();
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [isTraveling, activeTab, inTown, activePoiCombat]);
+
+  // Continuous Movement Loop (for Hold-to-Move)
+  useEffect(() => {
+    let frameId: number;
+    const CONTINUOUS_SPEED = 0.0001; // Speed per frame during hold
+
+    const animate = () => {
+      if (moveDirRef.current && !isTraveling && activeTab === 'explore' && !inTown && !activePoiCombat) {
+        const d = moveDirRef.current;
+        setPosition(p => {
+          const s = CONTINUOUS_SPEED;
+          return d === 'n' ? [p[0] + s, p[1]] : d === 's' ? [p[0] - s, p[1]] : d === 'e' ? [p[0], p[1] + s] : [p[0], p[1] - s];
+        });
+        setIsWalking(true);
+      } else if (!targetPosition) {
+        setIsWalking(false);
+      }
+      frameId = requestAnimationFrame(animate);
+    };
+
+    frameId = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(frameId);
+  }, [isTraveling, activeTab, inTown, activePoiCombat, targetPosition]);
+
+  const startMove = (d: 'n' | 's' | 'e' | 'w') => {
+    moveDirRef.current = d;
+    setTargetPosition(null);
+    if ('vibrate' in navigator) navigator.vibrate(10); // Subtle haptic feedback
+  };
+
+  const stopMove = () => {
+    moveDirRef.current = null;
+  };
+
+  // Click-to-Move Walking Animation
+  useEffect(() => {
+    if (!targetPosition || isTraveling) {
+      setIsWalking(false);
+      return;
+    }
+
+    let frameId: number;
+    const WALKING_SPEED = 0.00015; // Speed of walking per frame
+
+    const animate = () => {
+      setPosition(prev => {
+        const [currLat, currLng] = prev;
+        const [tgtLat, tgtLng] = targetPosition;
+
+        const dLat = tgtLat - currLat;
+        const dLng = tgtLng - currLng;
+        const dist = Math.hypot(dLat, dLng);
+
+        if (dist < WALKING_SPEED) {
+          setTargetPosition(null);
+          setIsWalking(false);
+          return targetPosition;
+        }
+
+        setIsWalking(true);
+        const ratio = WALKING_SPEED / dist;
+        return [currLat + dLat * ratio, currLng + dLng * ratio] as [number, number];
+      });
+      frameId = requestAnimationFrame(animate);
+    };
+
+    frameId = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(frameId);
+  }, [targetPosition, isTraveling]);
 
   const startHunt = useCallback((isElite = false) => {
     if (!player) return;
@@ -480,6 +773,26 @@ const App: React.FC = () => {
       nextDefense += 2;
     }
 
+    // Partner EXP Sharing (20% of reward)
+    const partnerExpReward = Math.floor(expReward * 0.2);
+    const updatedPartners = player.partners.map(p => {
+      if (!p.isDeployed) return p;
+      let pNextExp = p.exp + partnerExpReward;
+      let pNextLevel = p.level;
+      let pNextMaxExp = p.maxExp;
+      let pNextPower = p.power;
+
+      while (pNextExp >= pNextMaxExp) {
+        pNextExp -= pNextMaxExp;
+        pNextLevel++;
+        pNextMaxExp = Math.floor(pNextMaxExp * 1.5);
+        if (p.rarity === 5) pNextPower += 5;
+        else if (p.rarity === 4) pNextPower += 3;
+        else pNextPower += 2;
+      }
+      return { ...p, exp: pNextExp, level: pNextLevel, maxExp: pNextMaxExp, power: pNextPower };
+    });
+
     // Merge Items
     const combinedItems = [...player.items];
     const itemsToAward = [...(lootList || [])];
@@ -511,6 +824,18 @@ const App: React.FC = () => {
       newEquipment.push(droppedEq);
     }
 
+    const newLog: CombatLog = {
+      id: Date.now().toString() + Math.random().toString(),
+      type: 'win',
+      enemyName: currentEnemy?.name || '未知魔物',
+      exp: expReward,
+      gold: goldReward,
+      items: itemsToAward.map(i => ({ name: i.name, quantity: i.quantity || 1, icon: i.icon })).concat(
+        droppedEq ? [{ name: droppedEq.name, quantity: 1, icon: droppedEq.icon }] : []
+      )
+    };
+    setCombatLogs(prev => [...prev, newLog].slice(-6));
+
     const nextState = {
       ...player,
       level: nextLevel,
@@ -523,7 +848,8 @@ const App: React.FC = () => {
       gold: newGold,
       skills: newSkills,
       items: combinedItems,
-      equipment: newEquipment
+      equipment: newEquipment,
+      partners: updatedPartners
     };
 
     setPlayer(nextState);
@@ -543,6 +869,14 @@ const App: React.FC = () => {
     if (!player) return;
     const nextHp = finalHp ?? Math.floor(player.maxHp * 0.15);
     const nextState = { ...player, hp: nextHp };
+
+    const newLog: CombatLog = {
+      id: Date.now().toString() + Math.random().toString(),
+      type: 'lose',
+      enemyName: currentEnemy?.name || '未知魔物',
+      message: '扣除部分生命值'
+    };
+    setCombatLogs(prev => [...prev, newLog].slice(-6));
 
     setPlayer(nextState);
     saveProfile(nextState);
@@ -741,6 +1075,31 @@ const App: React.FC = () => {
     saveProfile(nextState);
   }, [player, saveProfile]);
 
+  const handleTravel = useCallback((destinationTown: Town) => {
+    if (!player || !inTown) return;
+
+    // Calculate distance-based cost (simplified: 10 gold per km)
+    const dist = getDistance(position[0], position[1], destinationTown.lat, destinationTown.lng);
+    const cost = Math.max(50, Math.floor(dist / 100)); // 1 gold per 100m, min 50
+
+    if (player.gold < cost) {
+      alert(`金幣不足！移動至 ${destinationTown.name} 需要 ${cost} 金幣`);
+      return;
+    }
+
+    const path = getRailwayPath(inTown.id, destinationTown.id);
+    if (path.length < 2) {
+      alert('目前無法到達該城市');
+      return;
+    }
+
+    setPlayer(prev => prev ? { ...prev, gold: prev.gold - cost } : null);
+    setInTown(null);
+    setTravelPath(path);
+    setTravelProgress(0);
+    setIsTraveling(true);
+  }, [player, inTown, position]);
+
   const effectiveAtk = player ? player.attack + totalEquipAtk(player) + totalPartnerAtk(player) : 0;
   const effectiveDef = player ? player.defense + totalEquipDef(player) + totalPartnerDef(player) : 0;
   const effectiveMaxHp = player ? player.maxHp + totalEquipHp(player) + totalPartnerHp(player) : 0;
@@ -804,6 +1163,7 @@ const App: React.FC = () => {
           }
         }
       }
+      activeMerchantPoiRef.current = poi.id;
       setIsMerchantOpen(true);
     } else if (poi.type === 'chest') {
       const goldBounty = 100 + player.level * 20;
@@ -871,6 +1231,31 @@ const App: React.FC = () => {
         fetchProfile(session.user.id);
       }
     })} />;
+  }
+
+  // Map Component to handle clicks
+  const MapClickHandler = () => {
+    useMapEvents({
+      click: (e) => {
+        if (!isTraveling && !inTown && !activePoiCombat) {
+          setTargetPosition([e.latlng.lat, e.latlng.lng]);
+        }
+      },
+    });
+    return null;
+  };
+
+  if (isDoubleTabbed) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-[#0a0e1a] text-white p-6 text-center">
+        <ShieldAlert size={64} className="text-game-danger mb-6 animate-pulse" />
+        <h1 className="text-2xl font-black text-game-danger mb-4">雙開偵測攔截</h1>
+        <p className="text-gray-400 max-w-md leading-relaxed">
+          系統偵測到您在其他分頁或視窗已經開啟了遊戲。<br />為了保護您的存檔與資源不被異常覆蓋（回檔），此視窗已被暫停操作。
+        </p>
+        <p className="text-sm text-game-accent mt-6 font-bold">請回到原本的視窗繼續遊戲，或者關閉本頁面。</p>
+      </div>
+    );
   }
 
   return (
@@ -948,8 +1333,8 @@ const App: React.FC = () => {
           <div className="w-full h-full relative">
             <MapContainer center={position} zoom={15} zoomControl={false} className="w-full h-full">
               <TileLayer
-                url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-                attribution='Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+                url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
               />
               {TOWN_DATABASE.map(t => (
                 <Circle key={t.id} center={[t.lat, t.lng]} radius={t.radius} pathOptions={{ color: t.color, fillColor: t.color, fillOpacity: 0.1, weight: 2 }}>
@@ -968,19 +1353,99 @@ const App: React.FC = () => {
                   </Marker>
                 );
               })}
-              <Marker position={position} icon={createPlayerIcon('🧙‍♂️')}>
+              <Marker position={position} icon={createPlayerIcon(isTraveling ? '🚂' : isWalking ? '🏃‍♂️' : '🧙‍♂️')}>
                 <Popup>你的位置</Popup>
               </Marker>
-              <MapUpdater center={position} />
+              <MapClickHandler />
+              <MapUpdater center={position} isTraveling={isTraveling} />
+
+              {/* Destination Marker */}
+              {targetPosition && (
+                <Marker position={targetPosition} icon={L.divIcon({ html: '<div class="animate-bounce text-2xl">📍</div>', className: 'target-marker', iconSize: [30, 30], iconAnchor: [15, 30] })} />
+              )}
+
+              {isTraveling && travelPath.length > 0 && (
+                <Polyline
+                  positions={travelPath}
+                  pathOptions={{
+                    color: '#f59e0b',
+                    weight: 6,
+                    opacity: 0.6,
+                    dashArray: '10, 10',
+                    lineCap: 'round',
+                    className: 'railway-line'
+                  }}
+                />
+              )}
             </MapContainer>
 
-            {/* D-Pad */}
-            <div className="absolute bottom-8 right-6 z-[1000] flex flex-col items-center gap-1.5">
-              <button onClick={() => move('n')} className="w-11 h-11 glass-panel rounded-xl flex items-center justify-center active:scale-90 transition-all hover:border-game-accent/50"><ChevronUp size={22} /></button>
+            {/* Deployed Partners */}
+            <div className="absolute top-4 left-4 z-[1000] flex gap-2 pointer-events-none flex-wrap max-w-[calc(100vw-100px)]">
+              {player.partners.filter(p => p.isDeployed).map((p) => {
+                const colors = RARITY_COLORS[p.rarity];
+                return (
+                  <div key={p.id} className={`relative w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center text-xl sm:text-2xl border-2 pointer-events-auto bg-black/60 backdrop-blur-md shadow-lg ${colors ? colors.border + ' ' + colors.glow : 'border-gray-500'} ${isTraveling ? 'opacity-50 grayscale' : ''}`} title={p.name}>
+                    {getPartnerAvatar(p.name, p.avatar)}
+                    <div className="absolute -bottom-2 px-1.5 py-0.5 rounded-full text-[9px] font-black bg-black border border-white/20 text-white shadow-sm whitespace-nowrap">
+                      Lv.{p.level}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Travel Overlay (during train ride) */}
+            {isTraveling && (
+              <div className="absolute top-[35%] left-1/2 -translate-x-1/2 -translate-y-1/2 z-[1200] w-[90%] max-w-xs pointer-events-none anim-scale-in">
+                <div className="bg-black/80 backdrop-blur-2xl p-6 rounded-3xl border border-white/20 flex flex-col items-center gap-4 shadow-[0_0_50px_rgba(0,0,0,0.5)]">
+                  <div className="text-3xl animate-bounce flex items-center justify-center text-game-gold shrink-0">
+                    <TrainFront size={32} strokeWidth={2.5} />
+                  </div>
+                  <div className="w-full text-center">
+                    <div className="text-xs font-black text-game-gold uppercase tracking-[0.2em] mb-1">Traveling...</div>
+                    <div className="text-lg font-bold text-white mb-3">火車行駛中</div>
+                    <div className="w-full h-2.5 bg-white/10 rounded-full overflow-hidden border border-white/5 relative">
+                      <div
+                        className="absolute inset-y-0 left-0 bg-gradient-to-r from-game-gold to-orange-400 shadow-[0_0_15px_#fbbf24] transition-all duration-100 ease-linear rounded-full"
+                        style={{ width: `${(travelProgress / (travelPath.length - 1)) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* D-Pad - Enhanced for Mobile */}
+            <div className="absolute bottom-8 right-6 z-[1000] flex flex-col items-center gap-1.5 touch-none">
+              <button
+                onMouseDown={() => startMove('n')} onMouseUp={stopMove} onMouseLeave={stopMove}
+                onTouchStart={(e) => { e.preventDefault(); startMove('n'); }} onTouchEnd={stopMove}
+                className="w-12 h-12 bg-black/60 backdrop-blur-xl rounded-2xl flex items-center justify-center border border-white/20 active:bg-game-accent/40 active:scale-95 transition-all shadow-xl"
+              >
+                <ChevronUp size={28} />
+              </button>
               <div className="flex gap-1.5">
-                <button onClick={() => move('w')} className="w-11 h-11 glass-panel rounded-xl flex items-center justify-center active:scale-90 transition-all hover:border-game-accent/50"><ChevronLeft size={22} /></button>
-                <button onClick={() => move('s')} className="w-11 h-11 glass-panel rounded-xl flex items-center justify-center active:scale-90 transition-all hover:border-game-accent/50"><ChevronDown size={22} /></button>
-                <button onClick={() => move('e')} className="w-11 h-11 glass-panel rounded-xl flex items-center justify-center active:scale-90 transition-all hover:border-game-accent/50"><ChevronRight size={22} /></button>
+                <button
+                  onMouseDown={() => startMove('w')} onMouseUp={stopMove} onMouseLeave={stopMove}
+                  onTouchStart={(e) => { e.preventDefault(); startMove('w'); }} onTouchEnd={stopMove}
+                  className="w-12 h-12 bg-black/60 backdrop-blur-xl rounded-2xl flex items-center justify-center border border-white/20 active:bg-game-accent/40 active:scale-95 transition-all shadow-xl"
+                >
+                  <ChevronLeft size={28} />
+                </button>
+                <button
+                  onMouseDown={() => startMove('s')} onMouseUp={stopMove} onMouseLeave={stopMove}
+                  onTouchStart={(e) => { e.preventDefault(); startMove('s'); }} onTouchEnd={stopMove}
+                  className="w-12 h-12 bg-black/60 backdrop-blur-xl rounded-2xl flex items-center justify-center border border-white/20 active:bg-game-accent/40 active:scale-95 transition-all shadow-xl"
+                >
+                  <ChevronDown size={28} />
+                </button>
+                <button
+                  onMouseDown={() => startMove('e')} onMouseUp={stopMove} onMouseLeave={stopMove}
+                  onTouchStart={(e) => { e.preventDefault(); startMove('e'); }} onTouchEnd={stopMove}
+                  className="w-12 h-12 bg-black/60 backdrop-blur-xl rounded-2xl flex items-center justify-center border border-white/20 active:bg-game-accent/40 active:scale-95 transition-all shadow-xl"
+                >
+                  <ChevronRight size={28} />
+                </button>
               </div>
             </div>
 
@@ -1037,38 +1502,81 @@ const App: React.FC = () => {
               )}
             </div>
 
-            {/* Area Card */}
-            <div className="absolute bottom-8 left-6 z-[1000] w-72 glass-panel p-4 rounded-2xl anim-fade-in-up">
-              <div className="flex items-center gap-2 mb-3">
-                <MapPin size={16} className="text-game-accent" />
-                <span className="font-bold text-sm text-game-accent tracking-wide">探索區域</span>
-                <span className="ml-auto text-[10px] bg-game-accent/10 text-game-accent px-2 py-0.5 rounded-full border border-game-accent/30">Lv.{Math.max(1, player!.level - 2)}~{player!.level + 3}</span>
-              </div>
-              <p className="text-base font-bold mb-1">{areaName}</p>
-              <p className="text-xs text-gray-400 mb-4">這片區域潛伏著各種危險的生物...</p>
-              <div className="flex flex-col gap-2">
-                {nearestTown && (
-                  <button onClick={() => setInTown(nearestTown)} className="w-full h-10 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-400 hover:to-purple-400 text-white font-bold rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20 px-3 text-sm">
-                    <Home size={18} /> 進入 {nearestTown.name}
+            {/* Bottom Left Area - Logs & Area Card */}
+            <div className="absolute bottom-8 left-6 z-[1000] flex flex-col gap-3 pointer-events-none items-start">
+
+              {/* Combat Logs */}
+              {combatLogs.length > 0 && logOpacity > 0 && (
+                <div className="flex flex-col gap-1.5 transition-opacity duration-300 pointer-events-none max-w-[calc(100vw-3rem)] md:max-w-[400px]" style={{ opacity: logOpacity }}>
+                  {combatLogs.map(log => (
+                    <div key={log.id} className="text-[11px] md:text-[12px] font-bold px-3 py-2 bg-black/60 backdrop-blur-md rounded-xl border border-white/10 text-white shadow-sm flex flex-wrap items-center gap-x-2 gap-y-1 anim-fade-in-up pointer-events-auto w-fit max-w-full">
+                      {log.type === 'win' ? (
+                        <>
+                          <span className="whitespace-nowrap">⚔️ 擊敗 {log.enemyName}</span>
+                          <span className="text-gray-400">|</span>
+                          <span className="text-sky-300 whitespace-nowrap">+{log.exp} EXP</span>
+                          <span className="text-gray-400">|</span>
+                          <span className="text-game-gold whitespace-nowrap">+{log.gold} 金幣</span>
+                          {log.items && log.items.length > 0 && (
+                            <>
+                              <span className="text-gray-400">|</span>
+                              <span className="text-emerald-300">
+                                {log.items.map(i => `${i.icon}${i.name}x${i.quantity}`).join(', ')}
+                              </span>
+                            </>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          <span className="whitespace-nowrap">💀 挑戰 {log.enemyName} 失敗</span>
+                          <span className="text-gray-400">|</span>
+                          <span className="text-red-400">{log.message}</span>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Area Card */}
+              <div className="max-w-[calc(100vw-3rem)] sm:w-72 glass-panel p-4 rounded-2xl anim-fade-in-up pointer-events-auto border-t-2 border-t-game-accent/50 shadow-2xl">
+                <div className="flex items-center gap-1.5 mb-3">
+                  <MapPin size={16} className="text-game-accent flex-shrink-0" />
+                  <span className="font-bold text-sm text-game-accent tracking-wide flex-shrink-0">探索區域</span>
+                  <span className="ml-auto text-[9px] bg-game-accent/10 text-game-accent px-1.5 py-0.5 rounded-full border border-game-accent/30 flex-shrink-0">Lv.{Math.max(1, player!.level - 2)}~{player!.level + 3}</span>
+                  <button
+                    onClick={() => setLogOpacity(o => o === 1 ? 0.7 : o === 0.7 ? 0.3 : o === 0.3 ? 0 : 1)}
+                    className="ml-1 px-1.5 py-0.5 text-[9px] font-bold rounded-lg bg-white/5 border border-white/20 text-gray-400 hover:text-white hover:bg-white/10 transition-colors flex-shrink-0 cursor-pointer"
+                    title="日誌透明度"
+                  >
+                    {logOpacity === 1 ? '👁️ 100%' : logOpacity === 0.7 ? '🌫️ 70%' : logOpacity === 0.3 ? '👻 30%' : '🙈 隱蔽'}
                   </button>
-                )}
-                <div className="flex gap-2">
-                  {nearestPoi ? (
-                    <button onClick={() => handlePoiInteract(nearestPoi)} className="flex-1 h-10 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-bold rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 px-3 text-sm">
-                      <MapPin size={18} /> 互動 ({POI_NAMES[nearestPoi.type] || '未知'})
-                    </button>
-                  ) : (
-                    <button onClick={() => startHunt(false)} disabled={autoExplore} className={`flex-1 h-10 ${autoExplore ? 'bg-gray-600' : 'bg-gradient-to-r from-game-accent to-indigo-500 hover:from-sky-400 hover:to-indigo-400'} text-white font-bold rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg px-3 text-sm ${autoExplore ? '' : 'shadow-game-accent/20'}`}>
-                      <Sword size={18} /> {autoExplore ? '自動探索中...' : '自由狩獵'}
+                </div>
+                <p className="text-base font-bold mb-1">{areaName}</p>
+                <p className="text-xs text-gray-400 mb-4">這片區域潛伏著各種危險的生物...</p>
+                <div className="flex flex-col gap-2">
+                  {nearestTown && (
+                    <button onClick={() => setInTown(nearestTown)} className="w-full h-10 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-400 hover:to-purple-400 text-white font-bold rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20 px-3 text-sm">
+                      <Home size={18} /> 進入 {nearestTown.name}
                     </button>
                   )}
-                  <button
-                    onClick={() => setAutoExplore(!autoExplore)}
-                    className={`h-10 w-10 flex-shrink-0 rounded-xl flex items-center justify-center transition-all ${autoExplore ? 'bg-green-500/20 text-green-400 border border-green-500/50 shadow-lg shadow-green-500/20' : 'bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10'}`}
-                    title={autoExplore ? "停止自動探索" : "開啟自動探索"}
-                  >
-                    <Zap size={18} className={autoExplore ? 'animate-pulse' : ''} />
-                  </button>
+                  <div className="flex gap-2">
+                    {nearestPoi ? (
+                      <button onClick={() => handlePoiInteract(nearestPoi)} className="flex-1 h-10 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-bold rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 px-3 text-sm">
+                        <MapPin size={18} /> 互動 ({POI_NAMES[nearestPoi.type] || '未知'})
+                      </button>
+                    ) : (
+                      <button onClick={() => startHunt(false)} disabled={autoExplore} className={`flex-1 h-10 ${autoExplore ? 'bg-gray-600' : 'bg-gradient-to-r from-game-accent to-indigo-500 hover:from-sky-400 hover:to-indigo-400'} text-white font-bold rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg px-3 text-sm ${autoExplore ? '' : 'shadow-game-accent/20'}`}>
+                        <Sword size={18} /> {autoExplore ? '自動探索' : '自由狩獵'}
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setAutoExplore(!autoExplore)}
+                      className={`h-10 w-10 flex-shrink-0 rounded-xl flex items-center justify-center transition-all ${autoExplore ? 'bg-green-500/20 text-green-400 border border-green-500/50 shadow-lg shadow-green-500/20' : 'bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10'}`}
+                    >
+                      <Zap size={18} className={autoExplore ? 'animate-pulse' : ''} />
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1107,7 +1615,7 @@ const App: React.FC = () => {
         {activeTab === 'partners' && <PartnersTab player={player!} onUpdatePlayer={setPlayer as any} saveProfile={saveProfile} isCombatAction={isCombatAction} />}
 
         {/* ─── HOME ─── */}
-        {activeTab === 'home' && <HomeTab player={player!} onUpdatePlayer={setPlayer as any} />}
+        {activeTab === 'home' && <HomeTab player={player!} onUpdatePlayer={setPlayer as any} saveProfile={saveProfile} />}
 
         {/* ─── STATS (勇者) ─── */}
         {activeTab === 'stats' && (
@@ -1324,7 +1832,15 @@ const App: React.FC = () => {
                   <h3 className="text-xl font-black text-amber-400 flex items-center gap-2">👳‍♂️ 流浪商人商店</h3>
                   <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-1">珍稀物資收購中</p>
                 </div>
-                <button onClick={() => setIsMerchantOpen(false)} className="p-2 rounded-xl bg-white/5 hover:bg-white/10 transition-colors">
+                <button onClick={async () => {
+                  setIsMerchantOpen(false);
+                  if (activeMerchantPoiRef.current) {
+                    const poiId = activeMerchantPoiRef.current;
+                    await supabase.rpc('resolve_poi_combat', { p_poi_id: poiId, p_win: true });
+                    setPois(prev => prev.filter(p => p.id !== poiId));
+                    activeMerchantPoiRef.current = null;
+                  }
+                }} className="p-2 rounded-xl bg-white/5 hover:bg-white/10 transition-colors">
                   <X size={20} />
                 </button>
               </div>
@@ -1369,7 +1885,15 @@ const App: React.FC = () => {
               </div>
 
               <button
-                onClick={() => setIsMerchantOpen(false)}
+                onClick={async () => {
+                  setIsMerchantOpen(false);
+                  if (activeMerchantPoiRef.current) {
+                    const poiId = activeMerchantPoiRef.current;
+                    await supabase.rpc('resolve_poi_combat', { p_poi_id: poiId, p_win: true });
+                    setPois(prev => prev.filter(p => p.id !== poiId));
+                    activeMerchantPoiRef.current = null;
+                  }
+                }}
                 className="w-full mt-6 py-3.5 rounded-2xl bg-white/5 hover:bg-white/10 text-white font-bold transition-all border border-white/10 active:scale-95"
               >
                 結束交易
@@ -1380,7 +1904,14 @@ const App: React.FC = () => {
 
         {/* Town Overlay */}
         {inTown && (
-          <TownScreen town={inTown} player={player!} onLeave={() => setInTown(null)} onCraftAlchemy={handleCraftAlchemy} onCraftEquipment={handleCraftEquipment} />
+          <TownScreen
+            town={inTown}
+            player={player!}
+            onLeave={() => setInTown(null)}
+            onCraftAlchemy={handleCraftAlchemy}
+            onCraftEquipment={handleCraftEquipment}
+            onTravel={handleTravel}
+          />
         )}
       </div>
 

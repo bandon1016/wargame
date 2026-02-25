@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Map as MapIcon, ChevronRight } from 'lucide-react';
+import { Map as MapIcon, ChevronRight, TrainFront } from 'lucide-react';
 import type { Town, CharacterStats, AlchemyRecipe, BlacksmithRecipe } from '../types/game';
-import { ALCHEMY_RECIPES, BLACKSMITH_RECIPES, ITEM_DATABASE, EQUIPMENT_DATABASE, RARITY_COLORS } from '../types/game';
+import { ALCHEMY_RECIPES, BLACKSMITH_RECIPES, ITEM_DATABASE, EQUIPMENT_DATABASE, RARITY_COLORS, TOWN_DATABASE, getRailwayPath } from '../types/game';
 
 interface TownScreenProps {
     town: Town;
@@ -9,9 +9,10 @@ interface TownScreenProps {
     onLeave: () => void;
     onCraftAlchemy: (recipe: AlchemyRecipe) => void;
     onCraftEquipment: (recipe: BlacksmithRecipe) => void;
+    onTravel: (destination: Town) => void;
 }
 
-export const TownScreen: React.FC<TownScreenProps> = ({ town, player, onLeave, onCraftAlchemy, onCraftEquipment }) => {
+export const TownScreen: React.FC<TownScreenProps> = ({ town, player, onLeave, onCraftAlchemy, onCraftEquipment, onTravel }) => {
     const [activeFacility, setActiveFacility] = useState<string | null>(null);
 
     return (
@@ -72,6 +73,20 @@ export const TownScreen: React.FC<TownScreenProps> = ({ town, player, onLeave, o
                                     <ChevronRight className="text-gray-500 group-hover:text-emerald-400 transition-colors" />
                                 </button>
                             )}
+
+                            {town.facilities.includes('station') && (
+                                <button onClick={() => setActiveFacility('station')} className="glass-panel p-6 rounded-2xl flex items-center gap-4 text-left transition-all hover:bg-white/5 group relative overflow-hidden">
+                                    <div className="absolute top-0 right-0 w-32 h-32 bg-sky-500/10 rounded-full blur-3xl -mr-16 -mt-16 transition-all group-hover:bg-sky-500/20" />
+                                    <div className="w-16 h-16 rounded-xl bg-sky-900/30 border border-sky-500/30 flex items-center justify-center text-3xl shadow-[0_0_15px_rgba(14,165,233,0.2)]">
+                                        <TrainFront className="text-sky-400" size={32} />
+                                    </div>
+                                    <div className="flex-1">
+                                        <div className="font-bold text-lg text-sky-100">城市火車站</div>
+                                        <div className="text-xs text-sky-500/70 mt-1">搭乘火車快速往返於各大主要城市。</div>
+                                    </div>
+                                    <ChevronRight className="text-gray-500 group-hover:text-sky-400 transition-colors" />
+                                </button>
+                            )}
                         </div>
                     </div>
                 ) : (
@@ -81,7 +96,10 @@ export const TownScreen: React.FC<TownScreenProps> = ({ town, player, onLeave, o
                                 <ChevronRight className="rotate-180" size={16} /> 返回城鎮大街
                             </button>
                             <h2 className="text-2xl font-bold">
-                                {activeFacility === 'market' ? '🛒 黑市交易所' : activeFacility === 'blacksmith' ? '🔨 鐵匠鍛造坊' : '⚗️ 鍊金試驗所'}
+                                {activeFacility === 'market' ? '🛒 黑市交易所' :
+                                    activeFacility === 'blacksmith' ? '🔨 鐵匠鍛造坊' :
+                                        activeFacility === 'station' ? '🚆 城市火車站' :
+                                            '⚗️ 鍊金試驗所'}
                             </h2>
                         </div>
 
@@ -120,7 +138,7 @@ export const TownScreen: React.FC<TownScreenProps> = ({ town, player, onLeave, o
                                 <div className="w-full md:w-2/3 glass-panel p-6 rounded-2xl flex flex-col h-full bg-[#0a0e1a]/80">
                                     <h3 className="text-emerald-400 font-bold mb-4 border-b border-emerald-500/20 pb-2">配方列表</h3>
                                     <div className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar">
-                                        {activeFacility === 'alchemy' && ALCHEMY_RECIPES.map(recipe => {
+                                        {activeFacility === 'alchemy' && ALCHEMY_RECIPES.filter(r => !r.cityId || r.cityId === town.id).map(recipe => {
                                             const targetItemDef = ITEM_DATABASE.find(i => i.id === recipe.targetItemId);
                                             if (!targetItemDef) return null;
 
@@ -180,7 +198,7 @@ export const TownScreen: React.FC<TownScreenProps> = ({ town, player, onLeave, o
                                             );
                                         })}
 
-                                        {activeFacility === 'blacksmith' && BLACKSMITH_RECIPES.map(recipe => {
+                                        {activeFacility === 'blacksmith' && BLACKSMITH_RECIPES.filter(r => !r.cityId || r.cityId === town.id).map(recipe => {
                                             const targetEquipDef = EQUIPMENT_DATABASE.find(i => i.id === recipe.targetEquipmentId);
                                             if (!targetEquipDef) return null;
 
@@ -245,6 +263,65 @@ export const TownScreen: React.FC<TownScreenProps> = ({ town, player, onLeave, o
                                             );
                                         })}
                                     </div>
+                                </div>
+                            </div>
+                        ) : activeFacility === 'station' ? (
+                            <div className="flex-1 flex flex-col gap-6">
+                                <div className="glass-panel p-6 rounded-3xl border border-sky-500/20 bg-sky-900/10">
+                                    <h3 className="text-sky-400 font-bold mb-4 flex items-center gap-2 text-lg">
+                                        <TrainFront size={20} /> 車站時刻表
+                                    </h3>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 overflow-y-auto max-h-[60vh] pr-2 custom-scrollbar">
+                                        {TOWN_DATABASE.filter(t => t.id !== town.id).map(dest => {
+                                            const getDistanceLocal = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+                                                const R = 6371e3;
+                                                const d1 = lat1 * Math.PI / 180;
+                                                const d2 = lat2 * Math.PI / 180;
+                                                const dr = (lat2 - lat1) * Math.PI / 180;
+                                                const dl = (lon2 - lon1) * Math.PI / 180;
+                                                const a = Math.sin(dr / 2) * Math.sin(dr / 2) + Math.cos(d1) * Math.cos(d2) * Math.sin(dl / 2) * Math.sin(dl / 2);
+                                                return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                                            };
+                                            const dist = getDistanceLocal(town.lat, town.lng, dest.lat, dest.lng);
+                                            const cost = Math.max(50, Math.floor(dist / 100));
+                                            const canAfford = player.gold >= cost;
+
+                                            // Calculate estimated time based on 0.0008 units per frame at ~60fps
+                                            const path = getRailwayPath(town.id, dest.id);
+                                            const pathLength = Math.max(0, path.length - 1);
+                                            const estimatedSeconds = Math.ceil(pathLength / (0.0008 * 60));
+                                            const timeDisplay = estimatedSeconds > 60
+                                                ? `${Math.floor(estimatedSeconds / 60)}m ${estimatedSeconds % 60}s`
+                                                : `${estimatedSeconds}s`;
+
+                                            return (
+                                                <div key={dest.id} className="p-5 rounded-2xl bg-white/5 border border-white/10 flex items-center gap-4 hover:bg-white/10 transition-all group">
+                                                    <div className="w-12 h-12 rounded-xl flex items-center justify-center text-3xl shrink-0" style={{ backgroundColor: dest.color + '20', border: `2px solid ${dest.color}` }}>
+                                                        🏰
+                                                    </div>
+                                                    <div className="flex-1">
+                                                        <div className="font-bold text-lg text-white group-hover:text-game-accent transition-colors">
+                                                            {dest.name} <span className="text-xs text-gray-400 font-normal ml-1">({timeDisplay})</span>
+                                                        </div>
+                                                        <div className="text-xs text-gray-500 flex items-center gap-3 mt-1">
+                                                            <span className="flex items-center gap-1"><MapIcon size={12} /> {Math.round(dist / 1000)} km</span>
+                                                            <span className={`flex items-center gap-1 font-bold ${canAfford ? 'text-game-gold' : 'text-game-danger'}`}>💰 {cost}</span>
+                                                        </div>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => onTravel(dest)}
+                                                        disabled={!canAfford}
+                                                        className={`px-5 py-2.5 rounded-xl font-black text-sm transition-all active:scale-95 ${canAfford ? 'bg-sky-600 hover:bg-sky-500 text-white shadow-lg shadow-sky-900/40' : 'bg-gray-800 text-gray-500 cursor-not-allowed border border-gray-700'}`}
+                                                    >
+                                                        前往
+                                                    </button>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                                <div className="text-center text-gray-500 text-xs italic">
+                                    ※ 票價依照城市間的物理距離計算 (100公尺 / 1金幣)
                                 </div>
                             </div>
                         ) : (

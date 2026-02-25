@@ -26,6 +26,7 @@ create table public.profiles (
   items jsonb default '[]'::jsonb,
   skills jsonb default '[]'::jsonb,
   partners jsonb default '[]'::jsonb,
+  session_id uuid,
   
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
