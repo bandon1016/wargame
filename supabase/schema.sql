@@ -55,7 +55,7 @@ begin
     -- 初始裝上的護甲
     '{"id":"ar_01","name":"皮甲","slot":"armor","rarity":1,"attack":0,"defense":5,"hp":20,"icon":"🧥","description":"簡單的皮製護甲，提供微薄保護。"}'::jsonb,
     -- 初始消耗道具
-    '[{"id":"it_01","name":"小型生命藥水","type":"potion","rarity":1,"icon":"🧪","description":"恢復 50 點生命值。","quantity":5},{"id":"it_05","name":"普通的藥草","type":"material","rarity":1,"icon":"🌿","description":"散發淡淡清香的藥草，可作為合成材料。","quantity":3}]'::jsonb,
+    '[{"id":"item_hp_pot","name":"小型生命藥水","type":"potion","icon":"🧪","description":"微微泛紅的初級藥水，能恢復 50 點生命值。","quantity":5},{"id":"item_herb","name":"藥草","type":"material","icon":"🌿","description":"生長在野外的普通草本植物，是煉製各類藥水的基本材料。","quantity":3}]'::jsonb,
     -- 技能
     '[]'::jsonb,
     -- 夥伴

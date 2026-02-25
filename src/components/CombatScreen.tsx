@@ -1,20 +1,21 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { CharacterStats, Enemy, Skill, WeatherType } from '../types/game';
-import { Shield, Sword, Heart, Play, Square, X, Award } from 'lucide-react';
+import { Shield, Sword, Heart, Play, Square, X, Award, PlusCircle } from 'lucide-react';
 
 interface CombatScreenProps {
     player: CharacterStats;
     enemy: Enemy;
-    onWin: (exp: number, gold: number, skill?: Skill) => void;
-    onLose: () => void;
+    onWin: (exp: number, gold: number, skill?: Skill, lootTable?: any[], equipmentDrop?: any, finalHp?: number) => void;
+    onLose: (finalHp?: number) => void;
     onFlee: () => void;
     autoExplore?: boolean;
     weather?: WeatherType;
     onAutoHeal?: () => void;
     onRevive?: () => void;
+    onUseItem?: (item: any) => void;
 }
 
-export const CombatScreen: React.FC<CombatScreenProps> = ({ player, enemy, onWin, onLose, onFlee, autoExplore, weather, onAutoHeal, onRevive }) => {
+export const CombatScreen: React.FC<CombatScreenProps> = ({ player, enemy, onWin, onLose, onFlee, autoExplore, weather, onAutoHeal, onRevive, onUseItem }) => {
     const [eHp, setEHp] = useState(enemy.hp);
     const [pHp, setPHp] = useState(player.hp);
     const [logs, setLogs] = useState<string[]>([`⚔️ 野外遭遇了 ${enemy.name} (Lv.${enemy.level})！`]);
@@ -31,7 +32,7 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({ player, enemy, onWin
 
     useEffect(() => {
         if (!auto || ended || awaitingRevive) return;
-        const tickRate = autoExplore ? 400 : 800; // Faster combat if global auto explore is on
+        const tickRate = 3000; // 每 3 秒操作一次
         const t = window.setTimeout(turn, tickRate);
         return () => clearTimeout(t);
     }, [auto, pHp, eHp, ended, awaitingRevive]);
@@ -75,6 +76,17 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({ player, enemy, onWin
         if (autoExplore && onAutoHeal && currentPHp < player.maxHp * 0.4) {
             log(`✨ 生命危急！自動嘗試使用藥水...`);
             onAutoHeal();
+            // SYNC FIX: Since we know a potion heals at least 50 (or more), 
+            // and App.tsx handles the actual item deduction, we update local pHp too.
+            // This is a bit simplified but ensures the combat loop doesn't fail due to stale state.
+            const pot = player.items.find(i => i.type === 'potion' && i.id !== 'item_revive_pot');
+            if (pot) {
+                let recover = 50;
+                if (pot.id === 'item_hp_pot_m') recover = 150;
+                const newHp = Math.min(currentPHp + recover, player.maxHp);
+                setPHp(newHp);
+                currentPHp = newHp; // Update local ref for subsequent enemy attack
+            }
         }
 
         // Enemy attacks
@@ -93,8 +105,27 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({ player, enemy, onWin
                 } else {
                     lose();
                 }
+            } else if (player.heal && player.heal > 0 && finalPHp < player.maxHp) {
+                // Partner Auto-Regen
+                const regen = Math.min(player.heal, player.maxHp - finalPHp);
+                setPHp(prev => Math.min(prev + regen, player.maxHp));
+                log(`✨ 夥伴支援！治癒光輝恢復了 ${regen} 點生命`);
             }
         }, 350);
+    };
+
+    const handleUsePotion = (pot: any) => {
+        if (!onUseItem || ended) return;
+        onUseItem(pot);
+
+        // Calculate recovery
+        let recoverAmount = 0;
+        if (pot.id === 'item_hp_pot' || pot.id === 'it_01') recoverAmount = 50;
+        else if (pot.id === 'item_hp_pot_m') recoverAmount = 150;
+
+        const newHp = Math.min(pHp + recoverAmount, player.maxHp);
+        setPHp(newHp);
+        log(`🧪 使用了【${pot.name}】，恢復了 ${Math.min(recoverAmount, player.maxHp - pHp)} 點生命值`);
     };
 
     const handleRevive = () => {
@@ -115,16 +146,13 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({ player, enemy, onWin
             sk = enemy.skillReward;
             log(`✨ 領悟新技能【${sk.icon} ${sk.name}】！`);
         }
-        if (enemy.lootTable.length > 0) {
-            enemy.lootTable.forEach(i => log(`📦 獲得道具：${i.icon} ${i.name} ×${i.quantity}`));
-        }
-        setTimeout(() => onWin(enemy.expReward, enemy.goldReward, sk), autoExplore ? 1000 : 3000);
+        setTimeout(() => onWin(enemy.expReward, enemy.goldReward, sk, enemy.lootTable, (enemy as any).equipmentDrop, pHp), autoExplore ? 5000 : 3000);
     };
 
     const lose = () => {
         setEnded(true); setAuto(false); setResult('lose');
         log(`💀 勇者倒下了…`);
-        setTimeout(() => onLose(), autoExplore ? 1500 : 2500);
+        setTimeout(() => onLose(pHp), autoExplore ? 5000 : 2500);
     };
 
     const hpPct = (cur: number, max: number) => Math.max(0, (cur / max) * 100);
@@ -154,9 +182,10 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({ player, enemy, onWin
                             <div className="h-full bar-hp transition-all duration-500 rounded-full" style={{ width: `${hpPct(pHp, player.maxHp)}%` }} />
                         </div>
                     </div>
-                    <div className="flex gap-3 mt-2 text-[11px] text-gray-400">
+                    <div className="flex flex-wrap justify-center gap-2 mt-2 text-[10px] text-gray-400">
                         <span className="flex items-center gap-1"><Sword size={10} className="text-red-400" /> {player.attack}</span>
                         <span className="flex items-center gap-1"><Shield size={10} className="text-blue-400" /> {player.defense}</span>
+                        {player.heal && player.heal > 0 && <span className="flex items-center gap-1 text-emerald-400"><PlusCircle size={10} /> {player.heal}</span>}
                     </div>
                 </div>
 
@@ -229,6 +258,31 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({ player, enemy, onWin
                     </>
                 )}
             </div>
+
+            {/* Quick Items for Manual Combat */}
+            {!auto && !ended && !awaitingRevive && (
+                <div className="mt-4">
+                    <div className="text-[10px] text-gray-500 font-bold mb-2 uppercase tracking-wider">可用藥水</div>
+                    <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                        {player.items.filter(i => i.type === 'potion' && i.id !== 'item_revive_pot').map(pot => (
+                            <button
+                                key={pot.id}
+                                onClick={() => handleUsePotion(pot)}
+                                className="flex-shrink-0 glass-panel border border-white/10 p-2 rounded-xl flex items-center gap-2 hover:bg-white/5 active:scale-95 transition-all"
+                            >
+                                <span className="text-xl">{pot.icon}</span>
+                                <div className="text-left">
+                                    <div className="text-[11px] font-bold leading-tight">{pot.name}</div>
+                                    <div className="text-[9px] text-gray-400">數量: {pot.quantity}</div>
+                                </div>
+                            </button>
+                        ))}
+                        {player.items.filter(i => i.type === 'potion' && i.id !== 'item_revive_pot').length === 0 && (
+                            <div className="text-[10px] text-gray-600 italic">背包中沒有可用藥水</div>
+                        )}
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

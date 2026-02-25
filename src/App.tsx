@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap, Circle } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Compass, Sword, Home, Users, Package, Settings as SettingsIcon, Book, Heart, Shield, Zap, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, MapPin, Loader2 } from 'lucide-react';
-import type { CharacterStats, Equipment, GameItem, Skill, MapPOI, Town, WeatherType, Enemy, AlchemyRecipe } from './types/game';
-import { MONSTER_DATABASE, SKILL_DATABASE, ITEM_DATABASE, RARITY_COLORS, WEATHER_TYPES, getRegionByCoordinates, getRegionalMaterials, TOWN_DATABASE } from './types/game';
+import { Compass, Sword, Home, Users, Package, Settings as SettingsIcon, Book, Heart, Shield, Zap, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, MapPin, Loader2, X, PlusCircle, Activity, Info } from 'lucide-react';
+import type { CharacterStats, Equipment, GameItem, Skill, MapPOI, Town, WeatherType, Enemy, AlchemyRecipe, BlacksmithRecipe } from './types/game';
+import { MONSTER_DATABASE, SKILL_DATABASE, ITEM_DATABASE, EQUIPMENT_DATABASE, RARITY_COLORS, WEATHER_TYPES, getRegionByCoordinates, getRegionalMaterials, TOWN_DATABASE } from './types/game';
 import { CombatScreen } from './components/CombatScreen';
 import { PartnersTab } from './components/PartnersTab';
 import { HomeTab } from './components/HomeTab';
@@ -11,6 +11,7 @@ import { AuthScreen } from './components/AuthScreen';
 import { TownScreen } from './components/TownScreen';
 import { supabase } from './lib/supabase';
 
+// Fix leaflet default icon paths in React
 import L from 'leaflet';
 import iconImg from 'leaflet/dist/images/marker-icon.png';
 import iconShadow from 'leaflet/dist/images/marker-shadow.png';
@@ -26,7 +27,7 @@ const createPlayerIcon = (emoji: string) => L.divIcon({
 
 const POI_ICONS = {
   chest: '📦',
-  merchant: '🐪',
+  merchant: '👳‍♂️',
   elite: '👹',
   altar: '⛩️'
 };
@@ -59,10 +60,11 @@ const totalEquipAtk = (p: CharacterStats) => [p.equippedWeapon, p.equippedArmor,
 const totalEquipDef = (p: CharacterStats) => [p.equippedWeapon, p.equippedArmor, p.equippedHelmet, p.equippedBoots, p.equippedAccessory].reduce((s, e) => s + (e?.defense ?? 0), 0);
 const totalEquipHp = (p: CharacterStats) => [p.equippedWeapon, p.equippedArmor, p.equippedHelmet, p.equippedBoots, p.equippedAccessory].reduce((s, e) => s + (e?.hp ?? 0), 0);
 
-// Partner Stat Bonuses
-const totalPartnerAtk = (p: CharacterStats) => p.partners.reduce((s, pt) => s + (pt.role === 'dps' ? pt.power : Math.floor(pt.power * 0.2)), 0);
-const totalPartnerDef = (p: CharacterStats) => p.partners.reduce((s, pt) => s + (pt.role === 'tank' ? Math.floor(pt.power * 0.5) : Math.floor(pt.power * 0.1)), 0);
-const totalPartnerHp = (p: CharacterStats) => p.partners.reduce((s, pt) => s + (pt.role === 'tank' || pt.role === 'healer' ? pt.power * 3 : pt.power), 0);
+// Partner Stat Bonuses (Only counts deployed partners)
+const totalPartnerAtk = (p: CharacterStats) => p.partners.filter(pt => pt.isDeployed).reduce((s, pt) => s + (pt.role === 'dps' ? pt.power : Math.floor(pt.power * 0.2)), 0);
+const totalPartnerDef = (p: CharacterStats) => p.partners.filter(pt => pt.isDeployed).reduce((s, pt) => s + (pt.role === 'tank' ? Math.floor(pt.power * 0.5) : Math.floor(pt.power * 0.1)), 0);
+const totalPartnerHp = (p: CharacterStats) => p.partners.filter(pt => pt.isDeployed).reduce((s, pt) => s + (pt.role === 'tank' || pt.role === 'healer' ? pt.power * 3 : pt.power), 0);
+const totalPartnerHeal = (p: CharacterStats) => p.partners.filter(pt => pt.isDeployed).reduce((s, pt) => s + (pt.role === 'healer' ? pt.power : 0), 0);
 
 const POI_NAMES: Record<string, string> = {
   chest: '遺落的物資',
@@ -70,6 +72,40 @@ const POI_NAMES: Record<string, string> = {
   altar: '神秘祭壇',
   merchant: '流浪商人'
 };
+
+const POI_DETAILS = {
+  merchant: {
+    name: '流浪商人',
+    icon: '👳‍♂️',
+    frequency: '每整點、30分出現，持續 15 分鐘',
+    effect: '可販售物品獲取金幣，並有 5% 機率贈送地區特產材料。'
+  },
+  chest: {
+    name: '遺落的物資',
+    icon: '📦',
+    frequency: '地圖隨機生成',
+    effect: '獲得隨等級提升的金幣，10% 機率得藥草×3，1% 機率得復甦精華。'
+  },
+  elite: {
+    name: '魔物棲息地',
+    icon: '👹',
+    frequency: '地圖隨機生成',
+    effect: '挑戰菁英魔物，勝利可獲得大量經驗值、金幣及稀有掉落物。'
+  },
+  altar: {
+    name: '神秘祭壇',
+    icon: '⛩️',
+    frequency: '地圖隨機生成',
+    effect: '立刻恢復勇者的生命值至 100% 狀態。'
+  }
+};
+
+const TAIWAN_BOUNDS = { minLat: 21.8, maxLat: 26.4, minLng: 119.0, maxLng: 122.5 };
+const DEFAULT_POSITION: [number, number] = [25.0340, 121.5645]; // 台北101
+
+const isInTaiwan = (lat: number, lng: number) =>
+  lat >= TAIWAN_BOUNDS.minLat && lat <= TAIWAN_BOUNDS.maxLat &&
+  lng >= TAIWAN_BOUNDS.minLng && lng <= TAIWAN_BOUNDS.maxLng;
 
 const App: React.FC = () => {
   const [position, setPosition] = useState<[number, number]>([25.0330, 121.5654]);
@@ -87,8 +123,12 @@ const App: React.FC = () => {
 
   const [inTown, setInTown] = useState<Town | null>(null);
   const [pois, setPois] = useState<MapPOI[]>([]);
+  const [lootMessage, setLootMessage] = useState<{ title: string; items: { name: string; quantity: number; icon: string }[] } | null>(null);
 
   const [activePoiCombat, setActivePoiCombat] = useState<string | null>(null);
+  const [isMerchantOpen, setIsMerchantOpen] = useState(false);
+  const [isLegendOpen, setIsLegendOpen] = useState(false);
+  const [selectedLegendPoi, setSelectedLegendPoi] = useState<keyof typeof POI_DETAILS | null>(null);
   const activePoiRef = React.useRef<string | null>(null);
   useEffect(() => { activePoiRef.current = activePoiCombat; }, [activePoiCombat]);
   const [eliteCooldowns, setEliteCooldowns] = useState<Record<string, number>>({});
@@ -169,6 +209,47 @@ const App: React.FC = () => {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Realtime Sync for multi-browser support
+  useEffect(() => {
+    if (!session?.user?.id) return;
+
+    const channel = supabase
+      .channel(`profile_realtime_${session.user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'profiles',
+          filter: `id=eq.${session.user.id}`,
+        },
+        (payload) => {
+          const data = payload.new;
+          // Only update if it's not the current player state (basic check via updated_at or just update to be sure)
+          setPlayer({
+            level: data.level, exp: data.exp, maxExp: data.max_exp,
+            hp: data.hp, maxHp: data.max_hp, attack: data.attack, defense: data.defense,
+            gold: data.gold, baseMaterials: data.base_materials,
+            buildings: data.buildings || [],
+            equipment: data.equipment || [],
+            equippedWeapon: data.equipped_weapon,
+            equippedArmor: data.equipped_armor,
+            equippedHelmet: data.equipped_helmet,
+            equippedBoots: data.equipped_boots,
+            equippedAccessory: data.equipped_accessory,
+            items: data.items || [],
+            skills: data.skills || [],
+            partners: data.partners || [],
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [session?.user?.id]);
+
   const fetchProfile = async (userId: string) => {
     setLoading(true);
     const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
@@ -190,7 +271,25 @@ const App: React.FC = () => {
         partners: data.partners || [],
       });
       // Load saved position
-      if (data.current_location_lat != null && data.current_location_lng != null) {
+      if (data.current_location_lat === 25.0330 && data.current_location_lng === 121.5654 && data.level === 1) {
+        // 新角色，嘗試使用 GPS
+        if ('geolocation' in navigator) {
+          navigator.geolocation.getCurrentPosition(
+            (pos) => {
+              const { latitude, longitude } = pos.coords;
+              if (isInTaiwan(latitude, longitude)) {
+                setPosition([latitude, longitude]);
+              } else {
+                setPosition(DEFAULT_POSITION);
+              }
+            },
+            () => setPosition(DEFAULT_POSITION),
+            { timeout: 5000, enableHighAccuracy: false }
+          );
+        } else {
+          setPosition(DEFAULT_POSITION);
+        }
+      } else if (data.current_location_lat != null && data.current_location_lng != null) {
         setPosition([data.current_location_lat, data.current_location_lng]);
       }
     } else if (error) {
@@ -200,11 +299,11 @@ const App: React.FC = () => {
   };
 
   // Sync to database
-  const saveProfile = async (newState?: CharacterStats) => {
+  const saveProfile = useCallback(async (newState?: CharacterStats) => {
     const p = newState || playerRef.current;
     if (!p || !session?.user?.id) return;
 
-    await supabase.from('profiles').update({
+    const { error } = await supabase.from('profiles').update({
       level: p.level, exp: p.exp, max_exp: p.maxExp,
       hp: p.hp, max_hp: p.maxHp, attack: p.attack, defense: p.defense,
       gold: p.gold, base_materials: p.baseMaterials,
@@ -222,13 +321,22 @@ const App: React.FC = () => {
       current_location_lng: positionRef.current[1],
       updated_at: new Date().toISOString()
     }).eq('id', session.user.id);
-  };
+
+    if (error) {
+      console.error('Save Profile Error:', error);
+    } else {
+      console.log('Profile Saved Successfully');
+    }
+  }, [session]);
 
   useEffect(() => {
-    // Save every 10 seconds to avoid spamming the DB
-    const saveInterval = setInterval(saveProfile, 10000);
-    return () => clearInterval(saveInterval);
-  }, [session]);
+    if (!player || !session?.user?.id) return;
+    // Debounced auto-save: 每當 player 變更後 1 秒進行儲存
+    const timer = setTimeout(() => {
+      saveProfile(player);
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [player, session]);
 
   // Resource tick
   useEffect(() => {
@@ -269,6 +377,22 @@ const App: React.FC = () => {
       loots.push({ ...it, quantity: 1 });
     }
 
+    // Equipment Drop Logic (Normal 1%, Elite 5%, Boss 10%)
+    const isBoss = isElite && template.name.includes('黑龍'); // Using Black Dragon as Boss definition for now
+
+    let eqDropChance = 0.01;
+    if (isBoss) eqDropChance = 0.10;
+    else if (isElite) eqDropChance = 0.05;
+
+    let droppedEquip: Equipment | undefined = undefined;
+    if (Math.random() < eqDropChance) {
+      // Pick a random equipment appropriate for level
+      const availableEqs = EQUIPMENT_DATABASE.filter(e => e.rarity <= (isBoss ? 5 : isElite ? 4 : 2));
+      if (availableEqs.length > 0) {
+        droppedEquip = { ...availableEqs[Math.floor(Math.random() * availableEqs.length)], id: `eq_${Date.now()}_${Math.random().toString(36).substring(2, 9)} ` };
+      }
+    }
+
     // Regional drops (50% chance to drop regional material)
     if (Math.random() > 0.5) {
       const region = getRegionByCoordinates(positionRef.current[0], positionRef.current[1]);
@@ -294,10 +418,10 @@ const App: React.FC = () => {
       eAtk += 3; // monsters hit harder in fog
     }
 
-    const enemy: Enemy = {
+    const enemy = {
       id: Math.random().toString(),
-      name: (isElite ? '【菁英】' : '') + template.name, avatar: template.avatar,
-      level: lv + Math.floor(Math.random() * 3) - 1 + (isElite ? 2 : 0),
+      name: (isBoss ? '【首領】' : isElite ? '【菁英】' : '') + template.name, avatar: template.avatar,
+      level: lv + Math.floor(Math.random() * 3) - 1 + (isBoss ? 5 : isElite ? 2 : 0),
       hp, maxHp: hp,
       attack: eAtk,
       defense: eDef,
@@ -305,8 +429,9 @@ const App: React.FC = () => {
       goldReward: Math.floor((8 + lv * 3) * statMultiplier),
       skillReward: (Math.random() < 0.25 || isElite) ? sk : undefined,
       lootTable: loots,
+      equipmentDrop: droppedEquip,
     };
-    setCurrentEnemy(enemy);
+    setCurrentEnemy(enemy as Enemy & { equipmentDrop?: Equipment });
     setIsCombatAction(true);
   }, [player?.level]);
 
@@ -331,72 +456,79 @@ const App: React.FC = () => {
     return () => clearInterval(encounterMover);
   }, [autoExplore, isCombatAction, activeTab, move, startHunt]);
 
-  const handleCombatWin = useCallback(async (expReward: number, goldReward: number, learnedSkill?: Skill, lootList?: GameItem[]) => {
-    setPlayer(p => {
-      if (!p) return null;
+  const handleCombatWin = useCallback(async (expReward: number, goldReward: number, learnedSkill?: Skill, lootList?: GameItem[], droppedEq?: Equipment, finalHp?: number) => {
+    if (!player) return;
 
-      // Basic Exp & Gold
-      const newExp = p.exp + expReward;
-      const newGold = p.gold + goldReward;
+    // Basic Exp & Gold
+    const newExp = player.exp + expReward;
+    const newGold = player.gold + goldReward;
 
-      // Handle Level Up
-      let nextLevel = p.level;
-      let nextExp = newExp;
-      let nextMaxExp = p.maxExp;
-      let nextMaxHp = p.maxHp;
-      let nextAttack = p.attack;
-      let nextDefense = p.defense;
+    // Handle Level Up
+    let nextLevel = player.level;
+    let nextExp = newExp;
+    let nextMaxExp = player.maxExp;
+    let nextMaxHp = player.maxHp;
+    let nextAttack = player.attack;
+    let nextDefense = player.defense;
 
-      while (nextExp >= nextMaxExp) {
-        nextExp -= nextMaxExp;
-        nextLevel++;
-        nextMaxExp = Math.floor(nextMaxExp * 1.5);
-        nextMaxHp += 20;
-        nextAttack += 3;
-        nextDefense += 2;
+    while (nextExp >= nextMaxExp) {
+      nextExp -= nextMaxExp;
+      nextLevel++;
+      nextMaxExp = Math.floor(nextMaxExp * 1.5);
+      nextMaxHp += 20;
+      nextAttack += 3;
+      nextDefense += 2;
+    }
+
+    // Merge Items
+    const combinedItems = [...player.items];
+    const itemsToAward = [...(lootList || [])];
+
+    // Elite Monster: 15% chance to drop revive potion
+    if (currentEnemy?.name.includes('【菁英】') && Math.random() < 0.15) {
+      const potDef = ITEM_DATABASE.find(i => i.id === 'item_revive_pot');
+      if (potDef) itemsToAward.push({ ...potDef, quantity: 1 });
+    }
+
+    itemsToAward.forEach(loot => {
+      const existing = combinedItems.find(i => i.id === loot.id);
+      if (existing) {
+        existing.quantity = (existing.quantity || 1) + (loot.quantity || 1);
+      } else {
+        combinedItems.push({ ...loot });
       }
-
-      // Merge Items
-      const combinedItems = [...p.items];
-      const itemsToAward = [...(lootList || [])];
-
-      // Elite Monster: 15% chance to drop revive potion
-      if (currentEnemy?.name.includes('【菁英】') && Math.random() < 0.15) { // Assuming elite monsters have '【菁英】' in their name
-        const potDef = ITEM_DATABASE.find(i => i.id === 'item_revive_pot');
-        if (potDef) itemsToAward.push({ ...potDef, quantity: 1 });
-      }
-
-      itemsToAward.forEach(loot => {
-        const existing = combinedItems.find(i => i.id === loot.id);
-        if (existing) {
-          existing.quantity = (existing.quantity || 1) + (loot.quantity || 1);
-        } else {
-          combinedItems.push({ ...loot });
-        }
-      });
-
-      // Handle learned skill
-      const newSkills = [...p.skills];
-      if (learnedSkill && !newSkills.find(s => s.id === learnedSkill.id)) {
-        newSkills.push(learnedSkill);
-      }
-
-      const nextState = {
-        ...p,
-        level: nextLevel,
-        exp: nextExp,
-        maxExp: nextMaxExp,
-        hp: nextMaxHp, // Heal to full on level up
-        maxHp: nextMaxHp,
-        attack: nextAttack,
-        defense: nextDefense,
-        gold: newGold,
-        skills: newSkills,
-        items: combinedItems
-      };
-      saveProfile(nextState);
-      return nextState;
     });
+
+    // Handle learned skill
+    const newSkills = [...player.skills];
+    if (learnedSkill && !newSkills.find(s => s.id === learnedSkill.id)) {
+      newSkills.push(learnedSkill);
+    }
+
+    // Equipment Drops
+    let newEquipment = [...player.equipment];
+    if (droppedEq) {
+      newEquipment.push(droppedEq);
+    }
+
+    const nextState = {
+      ...player,
+      level: nextLevel,
+      exp: nextExp,
+      maxExp: nextMaxExp,
+      hp: nextLevel > player.level ? nextMaxHp : (finalHp ?? player.hp), // Heal to full only on level up
+      maxHp: nextMaxHp,
+      attack: nextAttack,
+      defense: nextDefense,
+      gold: newGold,
+      skills: newSkills,
+      items: combinedItems,
+      equipment: newEquipment
+    };
+
+    setPlayer(nextState);
+    saveProfile(nextState);
+
     setIsCombatAction(false);
 
     if (activePoiRef.current) {
@@ -405,10 +537,15 @@ const App: React.FC = () => {
       setActivePoiCombat(null);
       fetchPois();
     }
-  }, [session, fetchPois]);
+  }, [player, currentEnemy, saveProfile, fetchPois]);
 
-  const handleCombatLose = useCallback(async () => {
-    setPlayer(p => p ? ({ ...p, hp: Math.floor(p.maxHp * 0.15) }) : null);
+  const handleCombatLose = useCallback(async (finalHp?: number) => {
+    if (!player) return;
+    const nextHp = finalHp ?? Math.floor(player.maxHp * 0.15);
+    const nextState = { ...player, hp: nextHp };
+
+    setPlayer(nextState);
+    saveProfile(nextState);
     setIsCombatAction(false);
 
     if (activePoiRef.current) {
@@ -416,81 +553,198 @@ const App: React.FC = () => {
       await supabase.rpc('resolve_poi_combat', { p_poi_id: poiId, p_win: false });
       setEliteCooldowns(prev => ({ ...prev, [poiId]: Date.now() + 10000 }));
       setActivePoiCombat(null);
-      fetchPois(); // Refresh to show it back
+      fetchPois();
     }
-  }, [fetchPois]);
+  }, [player, saveProfile, fetchPois]);
 
   const equipItem = useCallback((eq: Equipment) => {
-    setPlayer(prev => {
-      if (!prev) return null;
-      const slotKey = `equipped${eq.slot.charAt(0).toUpperCase() + eq.slot.slice(1)} ` as keyof CharacterStats;
-      return { ...prev, [slotKey]: eq } as CharacterStats;
-    });
-  }, []);
+    if (!player) return;
+    const slotKey = `equipped${eq.slot.charAt(0).toUpperCase() + eq.slot.slice(1)}` as keyof CharacterStats;
+    const currentEquipped = player[slotKey] as Equipment | undefined;
 
-  const useItem = useCallback((item: GameItem) => {
-    if (item.type !== 'potion') return;
+    // Remove the new equipment from inventory
+    let newInventory = player.equipment.filter(e => e.id !== eq.id);
 
-    setPlayer(prev => {
-      if (!prev) return null;
+    // If there was an old equipment, add it back to inventory
+    if (currentEquipped) {
+      newInventory.push(currentEquipped);
+    }
 
-      // Update items list
-      const newItems = prev.items.map(i => {
-        if (i.id === item.id) {
-          return { ...i, quantity: (i.quantity ?? 1) - 1 };
-        }
-        return i;
-      }).filter(i => (i.quantity ?? 1) > 0);
+    const nextState = {
+      ...player,
+      [slotKey]: eq,
+      equipment: newInventory
+    } as CharacterStats;
 
-      // Perform healing logic
-      let recoverAmount = 0;
-      if (item.id === 'item_hp_pot' || item.id === 'it_01') {
-        recoverAmount = 50;
+    setPlayer(nextState);
+    saveProfile(nextState);
+  }, [player, saveProfile]);
+
+  const unequipItem = useCallback((slot: string) => {
+    if (!player) return;
+    const slotKey = `equipped${slot.charAt(0).toUpperCase() + slot.slice(1)}` as keyof CharacterStats;
+    const currentEquipped = player[slotKey] as Equipment | undefined;
+
+    if (!currentEquipped) return;
+
+    const nextState = {
+      ...player,
+      [slotKey]: null,
+      equipment: [...player.equipment, currentEquipped]
+    } as CharacterStats;
+
+    setPlayer(nextState);
+    saveProfile(nextState);
+  }, [player, saveProfile]);
+
+  const useItem = useCallback((item: GameItem, silent = false) => {
+    if (!player || (item.type !== 'potion' && item.type !== 'consumable')) return;
+
+    // Update items list
+    const newItems = player.items.map(i => {
+      if (i.id === item.id) {
+        const q = i.quantity ?? 1;
+        return { ...i, quantity: q - 1 };
       }
+      return i;
+    }).filter(i => (i.quantity ?? 0) > 0);
 
-      const currentMaxHp = prev.maxHp + totalEquipHp(prev) + totalPartnerHp(prev);
-      const newHp = Math.min(prev.hp + recoverAmount, currentMaxHp);
+    let nextState = { ...player, items: newItems };
 
-      const nextState = { ...prev, items: newItems, hp: newHp };
-      saveProfile(nextState); // Immediately persist changes to avoid refresh loss
-      return nextState;
-    });
-  }, [session]);
+    if (item.type === 'potion') {
+      let recoverAmount = 0;
+      if (item.id === 'item_hp_pot' || item.id === 'it_01') recoverAmount = 50;
+      else if (item.id === 'item_hp_pot_m') recoverAmount = 150;
+      else if (item.id === 'item_revive_pot') recoverAmount = 9999;
+
+      const currentMaxHp = nextState.maxHp + totalEquipHp(nextState) + totalPartnerHp(nextState);
+      const actualHeal = Math.min(recoverAmount, currentMaxHp - nextState.hp);
+      nextState = { ...nextState, hp: Math.min(nextState.hp + recoverAmount, currentMaxHp) };
+
+      if (!silent) {
+        setLootMessage({
+          title: '藥水使用確認',
+          items: [{ name: item.name, quantity: 1, icon: item.icon }, { name: '恢復生命', quantity: actualHeal, icon: '💚' }]
+        });
+      }
+    } else if (item.type === 'consumable') {
+      if (item.id === 'item_str_seed') {
+        nextState = { ...nextState, attack: nextState.attack + 2 };
+        if (!silent) {
+          setLootMessage({
+            title: '永久能力提升！',
+            items: [{ name: '攻擊力', quantity: 2, icon: '⚔️' }]
+          });
+        }
+      } else if (item.id === 'item_def_seed') {
+        nextState = { ...nextState, defense: nextState.defense + 2 };
+        if (!silent) {
+          setLootMessage({
+            title: '永久能力提升！',
+            items: [{ name: '防禦力', quantity: 2, icon: '🛡️' }]
+          });
+        }
+      } else if (item.id === 'item_hp_seed') {
+        nextState = { ...nextState, maxHp: nextState.maxHp + 10, hp: nextState.hp + 10 };
+        if (!silent) {
+          setLootMessage({
+            title: '永久能力提升！',
+            items: [{ name: '生命上限', quantity: 10, icon: '❤️' }]
+          });
+        }
+      }
+    }
+
+    setPlayer(nextState);
+    saveProfile(nextState);
+  }, [player, saveProfile, totalEquipHp, totalPartnerHp]);
 
   const handleCraftAlchemy = useCallback((recipe: AlchemyRecipe) => {
-    setPlayer(prev => {
-      if (!prev) return null;
+    if (!player) return;
 
-      // 1. Deduct Mats
-      let currentItems = [...prev.items];
-      for (const req of recipe.materials) {
-        currentItems = currentItems.map(i => i.id === req.id ? { ...i, quantity: (i.quantity ?? 1) - req.quantity } : i).filter(i => (i.quantity ?? 1) > 0);
+    // 1. Deduct Mats
+    let currentItems = [...player.items];
+    for (const req of recipe.materials) {
+      currentItems = currentItems.map(i => i.id === req.id ? { ...i, quantity: (i.quantity ?? 1) - req.quantity } : i).filter(i => (i.quantity ?? 1) > 0);
+    }
+
+    // 2. Add Result
+    const existing = currentItems.find(i => i.id === recipe.targetItemId);
+    if (existing) {
+      existing.quantity = (existing.quantity ?? 1) + 1;
+    } else {
+      const itemDef = ITEM_DATABASE.find(i => i.id === recipe.targetItemId);
+      if (itemDef) {
+        currentItems.push({ ...itemDef, quantity: 1 });
       }
+    }
 
-      // 2. Add Result
-      const existing = currentItems.find(i => i.id === recipe.targetItemId);
-      if (existing) {
-        existing.quantity = (existing.quantity ?? 1) + 1;
-      } else {
-        const itemDef = ITEM_DATABASE.find(i => i.id === recipe.targetItemId);
-        if (itemDef) {
-          currentItems.push({ ...itemDef, quantity: 1 });
-        }
+    const nextState = {
+      ...player,
+      gold: player.gold - recipe.goldCost,
+      items: currentItems
+    };
+
+    setPlayer(nextState);
+    saveProfile(nextState);
+  }, [player, saveProfile]);
+
+  const handleCraftEquipment = useCallback((recipe: BlacksmithRecipe) => {
+    if (!player) return;
+
+    // Deduct materials
+    const currentItems = [...player.items];
+    recipe.materials.forEach(req => {
+      const itemIdx = currentItems.findIndex(i => i.id === req.id);
+      if (itemIdx >= 0) {
+        const newQty = (currentItems[itemIdx].quantity ?? 1) - req.quantity;
+        if (newQty <= 0) currentItems.splice(itemIdx, 1);
+        else currentItems[itemIdx] = { ...currentItems[itemIdx], quantity: newQty };
       }
-
-      const nextState = {
-        ...prev,
-        gold: prev.gold - recipe.goldCost,
-        items: currentItems
-      };
-      saveProfile(nextState);
-      return nextState;
     });
-  }, [session]);
+
+    // Find target equipment definition
+    const targetDef = EQUIPMENT_DATABASE.find(e => e.id === recipe.targetEquipmentId);
+    if (!targetDef) return;
+
+    // Add equipment with unique ID
+    const newEquip: Equipment = {
+      ...targetDef,
+      id: `eq_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
+    };
+
+    const nextState = {
+      ...player,
+      gold: player.gold - recipe.goldCost,
+      items: currentItems,
+      equipment: [...player.equipment, newEquip]
+    };
+
+    setPlayer(nextState);
+    saveProfile(nextState);
+  }, [player, saveProfile]);
+
+  const handleSellItem = useCallback((item: GameItem) => {
+    if (!player) return;
+
+    // Define simple sell prices (30% of relative value)
+    let sellPrice = 10;
+    if (item.type === 'gem') sellPrice = 200;
+    if (item.type === 'material') sellPrice = 15;
+    if (item.type === 'potion') sellPrice = 50;
+    if (item.id === 'item_revive_pot') sellPrice = 500;
+
+    const newItems = player.items.map(i => i.id === item.id ? { ...i, quantity: (i.quantity ?? 1) - 1 } : i).filter(i => (i.quantity ?? 1) > 0);
+    const nextState = { ...player, gold: player.gold + sellPrice, items: newItems };
+
+    setPlayer(nextState);
+    saveProfile(nextState);
+  }, [player, saveProfile]);
 
   const effectiveAtk = player ? player.attack + totalEquipAtk(player) + totalPartnerAtk(player) : 0;
   const effectiveDef = player ? player.defense + totalEquipDef(player) + totalPartnerDef(player) : 0;
   const effectiveMaxHp = player ? player.maxHp + totalEquipHp(player) + totalPartnerHp(player) : 0;
+  const effectiveHeal = player ? totalPartnerHeal(player) : 0;
 
   // Interaction Handler for POIs
   const handlePoiInteract = useCallback(async (poi: MapPOI) => {
@@ -520,46 +774,88 @@ const App: React.FC = () => {
     if (poi.type === 'chest') {
       setPois(prev => prev.filter(p => p.id !== poi.id)); // Remove the POI locally
     } else if (poi.type === 'elite') {
-      setPois(prev => prev.map(p => p.id === poi.id ? { ...p, lockedBy: session.user.id, lockedAt: Date.now() } : p));
+      setPois(prev => prev.map(p => p.id === poi.id ? { ...p, lockedBy: session?.user?.id, lockedAt: Date.now() } : p));
       setActivePoiCombat(poi.id);
     }
 
-    setPlayer(prev => {
-      if (!prev) return null;
-      if (poi.type === 'chest') {
-        const goldBounty = 100 + prev.level * 20;
-        let newItems = [...prev.items];
+    if (!player) return;
 
-        // 10% chance to drop a revive potion from chests
-        if (Math.random() < 0.1) {
-          const potDef = ITEM_DATABASE.find(i => i.id === 'item_revive_pot');
-          if (potDef) {
-            const existingPot = newItems.find(i => i.id === 'item_revive_pot');
-            if (existingPot) existingPot.quantity = (existingPot.quantity ?? 1) + 1;
-            else newItems.push({ ...potDef, quantity: 1 });
+    if (poi.type === 'merchant') {
+      // 5% Chance for Regional Gift
+      if (Math.random() < 0.05) {
+        const region = getRegionByCoordinates(position[0], position[1]);
+        const mats = getRegionalMaterials(region);
+        if (mats.length > 0) {
+          const targetId = mats[Math.floor(Math.random() * mats.length)];
+          const itemDef = ITEM_DATABASE.find(i => i.id === targetId);
+          if (itemDef) {
+            const currentList = [...player.items];
+            const existing = currentList.find(i => i.id === targetId);
+            if (existing) existing.quantity = (existing.quantity || 1) + 2;
+            else currentList.push({ ...itemDef, quantity: 2 } as GameItem);
+
+            setLootMessage({
+              title: '商人好感贈禮！',
+              items: [{ name: itemDef.name, quantity: 2, icon: itemDef.icon }]
+            });
+            const nextState = { ...player, items: currentList };
+            setPlayer(nextState);
+            saveProfile(nextState);
           }
         }
-        return { ...prev, gold: prev.gold + goldBounty, items: newItems };
       }
-      if (poi.type === 'altar') {
-        // Heal to full
-        const currentMax = prev.maxHp + totalEquipHp(prev) + totalPartnerHp(prev);
-        return { ...prev, hp: currentMax };
-      }
-      if (poi.type === 'merchant') {
-        // Give free base materials for now
-        return { ...prev, baseMaterials: prev.baseMaterials + 50 };
-      }
-      return prev;
-    });
+      setIsMerchantOpen(true);
+    } else if (poi.type === 'chest') {
+      const goldBounty = 100 + player.level * 20;
+      let newItems = [...player.items];
+      const itemsGot: { name: string; quantity: number; icon: string }[] = [];
 
-    // We can also trigger a save with the current ref slightly after
-    setTimeout(() => saveProfile(), 500);
+      itemsGot.push({ name: '金幣', quantity: goldBounty, icon: '💰' });
+
+      const rand = Math.random();
+      // 10% chance for 3 herbs
+      if (rand < 0.1) {
+        const herbDef = ITEM_DATABASE.find(i => i.id === 'item_herb');
+        if (herbDef) {
+          const existing = newItems.find(i => i.id === 'item_herb');
+          if (existing) existing.quantity = (existing.quantity ?? 1) + 3;
+          else newItems.push({ ...herbDef, quantity: 3 } as GameItem);
+          itemsGot.push({ name: herbDef.name, quantity: 3, icon: herbDef.icon });
+        }
+      }
+      // 1% chance to drop a revive potion (calculated independently or separately, 
+      // here we use a separate roll for the 1% chance to allow both or exclusive)
+      // User said "10% herb 3, 1% revive", usually means separate chances.
+      if (Math.random() < 0.01) {
+        const potDef = ITEM_DATABASE.find(i => i.id === 'item_revive_pot');
+        if (potDef) {
+          const existingPot = newItems.find(i => i.id === 'item_revive_pot');
+          if (existingPot) existingPot.quantity = (existingPot.quantity ?? 1) + 1;
+          else newItems.push({ ...potDef, quantity: 1 } as GameItem);
+          itemsGot.push({ name: potDef.name, quantity: 1, icon: potDef.icon });
+        }
+      }
+
+      setLootMessage({
+        title: '發現了物資箱！',
+        items: itemsGot
+      });
+
+      const nextState = { ...player, gold: player.gold + goldBounty, items: newItems };
+      setPlayer(nextState);
+      saveProfile(nextState);
+    } else if (poi.type === 'altar') {
+      // Heal to full
+      const currentMax = player.maxHp + totalEquipHp(player) + totalPartnerHp(player);
+      const nextState = { ...player, hp: currentMax };
+      setPlayer(nextState);
+      saveProfile(nextState);
+    }
 
     if (poi.type === 'elite') {
       startHunt(true);
     }
-  }, [startHunt, session, fetchPois]);
+  }, [startHunt, session, fetchPois, player, saveProfile]);
 
   const nearestTown = TOWN_DATABASE.find(t => getDistance(position[0], position[1], t.lat, t.lng) <= t.radius);
   const nearestPoi = pois.find(p => getDistance(position[0], position[1], p.lat, p.lng) <= 200);
@@ -593,12 +889,25 @@ const App: React.FC = () => {
             </div>
           </div>
           <div className="min-w-0">
-            <div className="text-sm font-bold truncate">勇者 <span className="text-gray-500 font-normal text-xs">Lv.{player.level}</span></div>
+            <div className="text-sm font-bold flex items-center gap-3">
+              <span className="truncate">勇者 <span className="text-gray-500 font-normal text-xs ml-1">Lv.{player.level}</span></span>
+              <div className="flex items-center gap-2 border-l border-white/10 pl-2">
+                <div className="flex items-center gap-0.5 text-[11px] font-bold text-red-400">
+                  <Sword size={10} /> {effectiveAtk}
+                </div>
+                <div className="flex items-center gap-0.5 text-[11px] font-bold text-blue-400">
+                  <Shield size={10} /> {effectiveDef}
+                </div>
+                <div className="flex items-center gap-0.5 text-[11px] font-bold text-emerald-400">
+                  <PlusCircle size={10} /> {effectiveHeal}
+                </div>
+              </div>
+            </div>
             {/* HP bar */}
-            <div className="flex items-center gap-2 mt-0.5">
+            <div className="flex items-center gap-2 mt-1">
               <Heart size={10} className="text-red-400 flex-shrink-0" />
               <div className="w-28 h-[6px] bg-gray-800 rounded-full overflow-hidden">
-                <div className="h-full bar-hp transition-all duration-500 rounded-full" style={{ width: `${(player.hp / effectiveMaxHp) * 100}% ` }} />
+                <div className="h-full bar-hp transition-all duration-500 rounded-full" style={{ width: `${(player.hp / effectiveMaxHp) * 100}%` }} />
               </div>
               <span className="text-[10px] text-gray-400 tabular-nums w-16 text-right">{player.hp}/{effectiveMaxHp}</span>
             </div>
@@ -606,7 +915,7 @@ const App: React.FC = () => {
             <div className="flex items-center gap-2 mt-0.5">
               <Zap size={10} className="text-sky-400 flex-shrink-0" />
               <div className="w-28 h-[4px] bg-gray-800 rounded-full overflow-hidden">
-                <div className="h-full bar-exp transition-all duration-500 rounded-full" style={{ width: `${(player.exp / player.maxExp) * 100}% ` }} />
+                <div className="h-full bar-exp transition-all duration-500 rounded-full" style={{ width: `${(player.exp / player.maxExp) * 100}%` }} />
               </div>
               <span className="text-[10px] text-gray-500 tabular-nums w-16 text-right">{player.exp}/{player.maxExp}</span>
             </div>
@@ -625,7 +934,7 @@ const App: React.FC = () => {
           </div>
           <div className="stat-badge"><span className="text-amber-500">🧱</span> {Math.floor(player.baseMaterials)}</div>
           <div className="stat-badge"><span className="text-game-gold">💰</span> {Math.floor(player.gold)}</div>
-          <button className="p-2 hover:bg-white/10 rounded-xl transition-colors text-gray-400 hover:text-white">
+          <button onClick={() => supabase.auth.signOut()} className="p-2 hover:bg-white/10 rounded-xl transition-colors text-gray-400 hover:text-white" title="登出">
             <SettingsIcon size={20} />
           </button>
         </div>
@@ -675,6 +984,59 @@ const App: React.FC = () => {
               </div>
             </div>
 
+            {/* Map Legend (Cartoonish Style) */}
+            <div className={`absolute top-4 right-4 z-[1000] transition-all duration-300 ease-out flex ${isLegendOpen ? 'w-64' : 'w-14'}`}>
+              {!isLegendOpen && (
+                <button
+                  onClick={() => setIsLegendOpen(true)}
+                  className="w-14 h-14 bg-white border-4 border-black rounded-2xl flex items-center justify-center shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-y-0.5 hover:translate-x-0.5 hover:shadow-none transition-all"
+                >
+                  <Info size={24} className="text-black" strokeWidth={3} />
+                </button>
+              )}
+
+              {isLegendOpen && (
+                <div className="w-full bg-white border-4 border-black rounded-3xl p-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex flex-col anim-fade-in text-black font-bold">
+                  <div className="flex justify-between items-center mb-4 pb-2 border-b-4 border-black">
+                    <div className="flex items-center gap-2">
+                      <MapPin size={18} className="text-black" strokeWidth={3} />
+                      <span className="font-black text-base uppercase tracking-tight">點位圖例</span>
+                    </div>
+                    <button onClick={() => setIsLegendOpen(false)} className="p-1 hover:bg-black/5 rounded-lg transition-colors">
+                      <ChevronRight size={22} className="text-black" strokeWidth={3} />
+                    </button>
+                  </div>
+
+                  <div className="space-y-3">
+                    {(Object.entries(POI_DETAILS) as [keyof typeof POI_DETAILS, any][]).map(([key, info]) => (
+                      <div key={key} className="flex flex-col">
+                        <button
+                          onClick={() => setSelectedLegendPoi(selectedLegendPoi === key ? null : key)}
+                          className={`flex items-center gap-3 p-2 rounded-xl transition-all border-2 ${selectedLegendPoi === key ? 'bg-yellow-300 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]' : 'bg-gray-100 border-transparent hover:bg-white hover:border-black hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'}`}
+                        >
+                          <div className="text-2xl w-10 h-10 flex items-center justify-center bg-white border-2 border-black rounded-lg">{info.icon}</div>
+                          <span className="text-sm font-black text-black">{info.name}</span>
+                        </button>
+
+                        {selectedLegendPoi === key && (
+                          <div className="mt-2 ml-2 px-3 py-2 border-l-4 border-black bg-blue-50 rounded-r-xl space-y-2 anim-scale-in shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] border-2 border-black">
+                            <div>
+                              <div className="text-[10px] text-black font-black uppercase tracking-wider mb-0.5 bg-yellow-300 inline-block px-1 border border-black">出現頻率</div>
+                              <div className="text-[11px] text-gray-800 leading-tight font-bold">{info.frequency}</div>
+                            </div>
+                            <div>
+                              <div className="text-[10px] text-black font-black uppercase tracking-wider mb-0.5 bg-green-300 inline-block px-1 border border-black">互動效果</div>
+                              <div className="text-[11px] text-gray-800 leading-tight font-bold">{info.effect}</div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Area Card */}
             <div className="absolute bottom-8 left-6 z-[1000] w-72 glass-panel p-4 rounded-2xl anim-fade-in-up">
               <div className="flex items-center gap-2 mb-3">
@@ -686,23 +1048,23 @@ const App: React.FC = () => {
               <p className="text-xs text-gray-400 mb-4">這片區域潛伏著各種危險的生物...</p>
               <div className="flex flex-col gap-2">
                 {nearestTown && (
-                  <button onClick={() => setInTown(nearestTown)} className="w-full bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-400 hover:to-purple-400 text-white font-bold py-2 rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20">
+                  <button onClick={() => setInTown(nearestTown)} className="w-full h-10 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-400 hover:to-purple-400 text-white font-bold rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20 px-3 text-sm">
                     <Home size={18} /> 進入 {nearestTown.name}
                   </button>
                 )}
-                <div className="flex gap-2 h-[40px]">
+                <div className="flex gap-2">
                   {nearestPoi ? (
-                    <button onClick={() => handlePoiInteract(nearestPoi)} className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-bold rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20">
-                      <MapPin size={18} /> 互動 ({POI_NAMES[nearestPoi.type]})
+                    <button onClick={() => handlePoiInteract(nearestPoi)} className="flex-1 h-10 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-bold rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 px-3 text-sm">
+                      <MapPin size={18} /> 互動 ({POI_NAMES[nearestPoi.type] || '未知'})
                     </button>
                   ) : (
-                    <button onClick={() => startHunt(false)} disabled={autoExplore} className={`flex - 1 ${autoExplore ? 'bg-gray-600' : 'bg-gradient-to-r from-game-accent to-indigo-500 hover:from-sky-400 hover:to-indigo-400'} text - white font - bold rounded - xl transition - all active: scale - 95 flex items - center justify - center gap - 2 shadow - lg ${autoExplore ? '' : 'shadow-game-accent/20'} `}>
+                    <button onClick={() => startHunt(false)} disabled={autoExplore} className={`flex-1 h-10 ${autoExplore ? 'bg-gray-600' : 'bg-gradient-to-r from-game-accent to-indigo-500 hover:from-sky-400 hover:to-indigo-400'} text-white font-bold rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg px-3 text-sm ${autoExplore ? '' : 'shadow-game-accent/20'}`}>
                       <Sword size={18} /> {autoExplore ? '自動探索中...' : '自由狩獵'}
                     </button>
                   )}
                   <button
                     onClick={() => setAutoExplore(!autoExplore)}
-                    className={`min - w - [40px] w - [40px] rounded - xl flex items - center justify - center transition - all ${autoExplore ? 'bg-green-500/20 text-green-400 border border-green-500/50 shadow-[0_0_10px_rgba(34,197,94,0.3)]' : 'bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10'} `}
+                    className={`h-10 w-10 flex-shrink-0 rounded-xl flex items-center justify-center transition-all ${autoExplore ? 'bg-green-500/20 text-green-400 border border-green-500/50 shadow-lg shadow-green-500/20' : 'bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10'}`}
                     title={autoExplore ? "停止自動探索" : "開啟自動探索"}
                   >
                     <Zap size={18} className={autoExplore ? 'animate-pulse' : ''} />
@@ -713,59 +1075,151 @@ const App: React.FC = () => {
           </div>
         )}
 
+        {/* LOOT POPUP */}
+        {lootMessage && (
+          <div className="absolute inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-[2px]">
+            <div className="glass-panel w-full max-w-sm rounded-3xl p-6 border border-white/20 shadow-2xl animate-in zoom-in-95 duration-200">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xl font-bold text-amber-400">{lootMessage.title}</h3>
+                <button onClick={() => setLootMessage(null)} className="p-1 rounded-full bg-white/10 hover:bg-white/20 transition-colors cursor-pointer">
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="space-y-3">
+                {lootMessage.items.map((item, idx) => (
+                  <div key={idx} className="flex items-center gap-4 bg-white/5 p-3 rounded-2xl border border-white/10">
+                    <div className="text-3xl drop-shadow-md">{item.icon}</div>
+                    <div className="flex-1">
+                      <div className="font-bold text-lg">{item.name}</div>
+                      <div className="text-sm text-gray-400">數量: <span className="text-white font-bold">+{item.quantity}</span></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <button onClick={() => setLootMessage(null)} className="w-full mt-6 py-3 rounded-2xl bg-amber-600 hover:bg-amber-500 text-white font-bold transition-colors shadow-[0_0_15px_rgba(217,119,6,0.5)]">
+                確認
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* ─── PARTNERS ─── */}
-        {activeTab === 'partners' && <PartnersTab player={player!} onUpdatePlayer={setPlayer as any} />}
+        {activeTab === 'partners' && <PartnersTab player={player!} onUpdatePlayer={setPlayer as any} saveProfile={saveProfile} isCombatAction={isCombatAction} />}
 
         {/* ─── HOME ─── */}
         {activeTab === 'home' && <HomeTab player={player!} onUpdatePlayer={setPlayer as any} />}
 
-        {/* ─── BAG / CHARACTER ─── */}
-        {activeTab === 'bag' && (
-          <div className="p-5 h-full overflow-y-auto w-full space-y-5">
-
-            {/* Character Card */}
-            <div className="glass-panel rounded-2xl p-6 relative overflow-hidden">
-              <div className="absolute -right-10 -top-10 w-40 h-40 bg-game-accent/5 rounded-full blur-3xl" />
-              <div className="flex items-start gap-6">
-                <div className="flex-shrink-0">
-                  <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-game-medium to-game-dark border-2 border-game-accent/50 flex items-center justify-center text-4xl anim-float anim-pulse-glow">
-                    🧙‍♂️
-                  </div>
+        {/* ─── STATS (勇者) ─── */}
+        {activeTab === 'stats' && (
+          <div className="p-5 h-full overflow-y-auto w-full space-y-5 flex flex-col">
+            <div className="glass-panel p-6 rounded-3xl bg-gradient-to-br from-indigo-900/20 to-transparent border border-white/10 flex flex-col md:flex-row gap-6 items-center">
+              <div className="relative group">
+                <div className="absolute inset-0 bg-game-accent/20 blur-xl rounded-full opacity-50 group-hover:opacity-100 transition-opacity" />
+                <div className="w-24 h-24 rounded-3xl border-2 border-game-accent bg-slate-900 flex items-center justify-center text-5xl relative z-10 shadow-2xl">
+                  🧙‍♂️
                 </div>
-                <div className="flex-1 min-w-0">
-                  <h2 className="text-xl font-bold flex items-center gap-2">勇者 <span className="text-sm text-game-accent font-normal bg-game-accent/10 px-2 py-0.5 rounded-full">Lv.{player.level}</span></h2>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3">
-                    <div className="stat-badge"><Sword size={14} className="text-red-400" /> <span className="text-red-400">{effectiveAtk}</span></div>
-                    <div className="stat-badge"><Shield size={14} className="text-blue-400" /> <span className="text-blue-400">{effectiveDef}</span></div>
-                    <div className="stat-badge"><Heart size={14} className="text-green-400" /> <span className="text-green-400">{effectiveMaxHp}</span></div>
-                    <div className="stat-badge"><span className="text-game-gold">💰</span> <span className="text-game-gold">{Math.floor(player.gold)}</span></div>
-                  </div>
+              </div>
+              <div className="flex-1 text-center md:text-left">
+                <h2 className="text-2xl font-black flex items-center justify-center md:justify-start gap-3">
+                  勇者 <span className="text-sm text-game-accent font-bold bg-game-accent/15 px-3 py-1 rounded-full border border-game-accent/30 tracking-tight">Lv.{player.level}</span>
+                </h2>
+                <div className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-black/20">
+                  <table className="w-full text-sm text-left">
+                    <thead className="bg-white/5 text-sm uppercase text-gray-400 font-bold border-b border-white/5">
+                      <tr>
+                        <th className="px-4 py-2 font-black">屬性與說明</th>
+                        <th className="px-4 py-2 font-black text-right">數值</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      <tr className="hover:bg-white/5 transition-colors">
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2 text-gray-300 font-bold mb-1"><Sword size={14} className="text-red-400" /> 攻擊力</div>
+                          <div className="text-[12px] text-gray-500 font-normal leading-relaxed">決定對魔物造成的基礎傷害量，受武器與夥伴加成。</div>
+                        </td>
+                        <td className="px-4 py-3 font-mono font-bold text-red-400 text-lg text-right whitespace-nowrap">{effectiveAtk}</td>
+                      </tr>
+                      <tr className="hover:bg-white/5 transition-colors">
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2 text-gray-300 font-bold mb-1"><Shield size={14} className="text-blue-400" /> 物理防禦</div>
+                          <div className="text-[12px] text-gray-500 font-normal leading-relaxed">抵消魔物的攻擊傷害，減少探險過程中的體力損耗。</div>
+                        </td>
+                        <td className="px-4 py-3 font-mono font-bold text-blue-400 text-lg text-right whitespace-nowrap">{effectiveDef}</td>
+                      </tr>
+                      <tr className="hover:bg-white/5 transition-colors">
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2 text-gray-300 font-bold mb-1"><Heart size={14} className="text-red-400" /> 生命上限</div>
+                          <div className="text-[12px] text-gray-500 font-normal leading-relaxed">勇者的最大體力承載量，提升等級或裝備可增加。</div>
+                        </td>
+                        <td className="px-4 py-3 font-mono font-bold text-red-400 text-lg text-right whitespace-nowrap">{effectiveMaxHp}</td>
+                      </tr>
+                      <tr className="hover:bg-white/5 transition-colors">
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2 text-gray-300 font-bold mb-1"><PlusCircle size={14} className="text-emerald-400" /> 治癒能力</div>
+                          <div className="text-[12px] text-gray-500 font-normal leading-relaxed">戰鬥中每回合自動恢復的生命值，由輔助型夥伴提供。</div>
+                        </td>
+                        <td className="px-4 py-3 font-mono font-bold text-emerald-400 text-lg text-right whitespace-nowrap">{effectiveHeal}</td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </div>
 
+            {/* My Skills */}
+            <div className="glass-panel p-5 rounded-3xl">
+              <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><Book size={18} className="text-game-accent" /> 我的技能</h3>
+              {player.skills.length === 0 ? (
+                <div className="text-center py-12 text-gray-500 italic bg-black/10 rounded-2xl border border-dashed border-white/5">
+                  目前尚未領悟任何技能...
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {player.skills.map(sk => (
+                    <div key={sk.id} className="p-4 rounded-2xl bg-white/5 border border-white/10 flex items-center gap-4 hover:bg-white/10 transition-colors">
+                      <div className="text-3xl filter drop-shadow-md">✨</div>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-bold text-sm text-white">{sk.name}</div>
+                        <div className="text-[11px] text-gray-400 truncate mt-1">{sk.description}</div>
+                      </div>
+                      <div className="text-[10px] font-black tracking-tighter text-game-accent bg-game-accent/10 px-2.5 py-1.5 rounded-lg border border-game-accent/20">
+                        威力 {sk.power}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ─── BAG (行囊) ─── */}
+        {activeTab === 'bag' && (
+          <div className="p-5 h-full overflow-y-auto w-full space-y-5">
             {/* Equipment Slots */}
-            <div className="glass-panel rounded-2xl p-5">
-              <h3 className="text-base font-bold mb-4 flex items-center gap-2">⚔️ 裝備欄</h3>
+            <div className="glass-panel rounded-2xl p-6 relative overflow-hidden">
+              <div className="absolute -right-10 -top-10 w-40 h-40 bg-game-accent/5 rounded-full blur-3xl" />
+              <h3 className="text-base font-bold mb-4 flex items-center gap-2">⚔️ 當前裝備</h3>
               <div className="grid grid-cols-5 gap-3">
                 {(['weapon', 'armor', 'helmet', 'boots', 'accessory'] as const).map(slot => {
-                  const slotKey = `equipped${slot.charAt(0).toUpperCase() + slot.slice(1)} ` as keyof CharacterStats;
+                  const slotKey = `equipped${slot.charAt(0).toUpperCase() + slot.slice(1)}` as keyof CharacterStats;
                   const eq = player[slotKey] as Equipment | undefined;
                   const r = eq ? RARITY_COLORS[eq.rarity] : null;
                   return (
-                    <div key={slot} className="tooltip-wrap">
-                      <div className={`inv - slot ${r ? `border-2 ${r.border} ${r.bg} ${r.glow}` : ''} `}>
-                        {eq ? <span className="text-3xl">{eq.icon}</span> : <span className="text-gray-600 text-xs">{slot === 'weapon' ? '武器' : slot === 'armor' ? '護甲' : slot === 'helmet' ? '頭盔' : slot === 'boots' ? '鞋子' : '飾品'}</span>}
+                    <div key={slot} className="tooltip-wrap" onClick={() => eq && unequipItem(slot)}>
+                      <div className={`inv-slot ${r ? `border-2 ${r.border} ${r.bg} ${r.glow} cursor-pointer` : ''}`}>
+                        {eq ? <span className="text-3xl">{eq.icon}</span> : <span className="text-gray-600 text-[10px] font-bold uppercase tracking-tighter">{slot === 'weapon' ? '武器' : slot === 'armor' ? '護甲' : slot === 'helmet' ? '頭盔' : slot === 'boots' ? '鞋子' : '飾品'}</span>}
                       </div>
                       {eq && (
                         <div className="tooltip-text">
-                          <div className={`font - bold ${r?.text} `}>{eq.name}</div>
+                          <div className={`font-bold ${r?.text}`}>{eq.name}</div>
                           <div className="text-gray-400 text-[11px]">{eq.description}</div>
                           <div className="mt-1 text-[11px] space-x-2">
                             {eq.attack > 0 && <span className="text-red-400">ATK +{eq.attack}</span>}
                             {eq.defense > 0 && <span className="text-blue-400">DEF +{eq.defense}</span>}
                             {eq.hp > 0 && <span className="text-green-400">HP +{eq.hp}</span>}
                           </div>
+                          <div className="mt-2 text-[10px] text-game-accent font-bold">點擊脫下</div>
                         </div>
                       )}
                     </div>
@@ -778,24 +1232,23 @@ const App: React.FC = () => {
             {player.equipment.length > 0 && (
               <div className="glass-panel rounded-2xl p-5">
                 <h3 className="text-base font-bold mb-4 flex items-center gap-2">🎒 背包裝備</h3>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div className="flex flex-wrap gap-3">
                   {player.equipment.map(eq => {
                     const r = RARITY_COLORS[eq.rarity];
                     return (
-                      <div key={eq.id} onClick={() => equipItem(eq)} className={`glass - panel p - 3 rounded - xl border - 2 ${r.border} ${r.glow} cursor - pointer hover: bg - white / 5 transition - all active: scale - 95 anim - fade -in -up`}>
-                        <div className="flex items-center gap-3">
+                      <div key={eq.id} className="tooltip-wrap" onClick={() => equipItem(eq)}>
+                        <div className={`inv-slot border-2 ${r.border} ${r.bg} ${r.glow} cursor-pointer hover:scale-105 transition-transform`}>
                           <span className="text-3xl">{eq.icon}</span>
-                          <div>
-                            <div className={`font - bold text - sm ${r.text} `}>{eq.name}</div>
-                            <div className="text-[10px] text-gray-400">{r.label} · {eq.slot === 'weapon' ? '武器' : eq.slot === 'armor' ? '護甲' : eq.slot === 'helmet' ? '頭盔' : eq.slot === 'boots' ? '鞋子' : '飾品'}</div>
+                        </div>
+                        <div className="tooltip-text">
+                          <div className={`font-bold ${r.text}`}>{eq.name}</div>
+                          <div className="text-gray-400 text-[11px] font-bold uppercase">{r.label} · {eq.slot === 'weapon' ? '武器' : eq.slot === 'armor' ? '護甲' : eq.slot === 'helmet' ? '頭盔' : eq.slot === 'boots' ? '鞋子' : '飾品'}</div>
+                          <div className="mt-1 text-[11px] space-x-2">
+                            {eq.attack > 0 && <span className="text-red-400">ATK +{eq.attack}</span>}
+                            {eq.defense > 0 && <span className="text-blue-400">DEF +{eq.defense}</span>}
+                            {eq.hp > 0 && <span className="text-green-400">HP +{eq.hp}</span>}
                           </div>
                         </div>
-                        <div className="mt-2 flex gap-2 text-[11px]">
-                          {eq.attack > 0 && <span className="text-red-400">ATK +{eq.attack}</span>}
-                          {eq.defense > 0 && <span className="text-blue-400">DEF +{eq.defense}</span>}
-                          {eq.hp > 0 && <span className="text-green-400">HP +{eq.hp}</span>}
-                        </div>
-                        <div className="mt-2 text-center text-[10px] text-game-accent cursor-pointer">點擊裝備</div>
                       </div>
                     );
                   })}
@@ -804,44 +1257,23 @@ const App: React.FC = () => {
             )}
 
             {/* Items */}
-            <div className="glass-panel rounded-2xl p-5">
-              <h3 className="text-base font-bold mb-4 flex items-center gap-2">🧪 道具</h3>
+            <div className="glass-panel rounded-2xl p-5 mb-10">
+              <h3 className="text-base font-bold mb-4 flex items-center gap-2">🧪 道具行李</h3>
               {player.items.length === 0 ? (
                 <div className="text-center text-gray-500 py-8 text-sm">背包空空如也…去探索看看吧！</div>
               ) : (
                 <div className="flex flex-wrap gap-3">
                   {player.items.map(item => (
-                    <div key={item.id} className="tooltip-wrap" onClick={() => useItem(item)}>
-                      <div className={`inv - slot ${item.type === 'potion' ? 'cursor-pointer hover:ring-2 hover:ring-game-accent/50' : ''} `}>
+                    <div key={item.id} className="tooltip-wrap" onClick={() => (item.type === 'potion' || item.type === 'consumable') && useItem(item)}>
+                      <div className={`inv-slot ${(item.type === 'potion' || item.type === 'consumable') ? 'cursor-pointer hover:ring-2 hover:ring-game-accent/50' : 'opacity-80'}`}>
                         <span className="text-2xl">{item.icon}</span>
                         <span className="inv-qty">×{item.quantity}</span>
                       </div>
                       <div className="tooltip-text">
                         <div className="font-bold">{item.name}</div>
                         <div className="text-gray-400 text-[11px]">{item.description}</div>
-                        {item.type === 'potion' && <div className="mt-1 text-[10px] text-game-accent font-bold">點擊使用</div>}
+                        {(item.type === 'potion' || item.type === 'consumable') && <div className="mt-1 text-[10px] text-game-accent font-bold">點擊使用</div>}
                       </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Skills */}
-            <div className="glass-panel rounded-2xl p-5">
-              <h3 className="text-base font-bold mb-4 flex items-center gap-2"><Book size={16} /> 技能書</h3>
-              {player.skills.length === 0 ? (
-                <div className="text-center text-gray-500 py-8 text-sm">尚未習得任何技能</div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {player.skills.map((sk, i) => (
-                    <div key={sk.id} className="flex items-center gap-3 bg-white/[0.03] p-3 rounded-xl border border-white/5 anim-slide-in" style={{ animationDelay: `${i * 60}ms` }}>
-                      <span className="text-2xl flex-shrink-0">{sk.icon}</span>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-bold text-sm">{sk.name}</div>
-                        <div className="text-[11px] text-gray-400 truncate">{sk.description}</div>
-                      </div>
-                      <div className="text-xs font-bold text-game-accent bg-game-accent/10 px-2 py-1 rounded-lg">{sk.power}</div>
                     </div>
                   ))}
                 </div>
@@ -858,28 +1290,97 @@ const App: React.FC = () => {
               attack: effectiveAtk,
               // Rainy slightly lowers player defense
               defense: weather === 'rainy' ? Math.max(0, effectiveDef - 2) : effectiveDef,
-              maxHp: effectiveMaxHp
+              maxHp: effectiveMaxHp,
+              heal: effectiveHeal
             }}
             enemy={currentEnemy}
-            onWin={(exp, gold, skill) => handleCombatWin(exp, gold, skill, currentEnemy.lootTable)}
-            onLose={handleCombatLose}
+            onWin={(exp: number, gold: number, skill?: Skill, loot?: GameItem[], eq?: Equipment, finalHp?: number) => {
+              handleCombatWin(exp, gold, skill, loot, eq, finalHp);
+            }}
+            onLose={(finalHp?: number) => {
+              handleCombatLose(finalHp);
+            }}
             onFlee={() => { setIsCombatAction(false); setAutoExplore(false); }}
             autoExplore={autoExplore}
             weather={weather}
             onAutoHeal={() => {
               const pot = player.items.find(i => i.type === 'potion' && i.id !== 'item_revive_pot');
-              if (pot) useItem(pot);
+              if (pot) useItem(pot, true);
             }}
             onRevive={() => {
               const revivePot = player.items.find(i => i.id === 'item_revive_pot');
-              if (revivePot) useItem(revivePot);
+              if (revivePot) useItem(revivePot, true);
             }}
+            onUseItem={(it: GameItem) => useItem(it, true)}
           />
+        )}
+
+        {/* Merchant Shop Overlay */}
+        {isMerchantOpen && (
+          <div className="absolute inset-0 z-[2500] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm anim-fade-in-up">
+            <div className="glass-panel w-full max-w-md rounded-3xl p-6 border border-amber-500/30 shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                  <h3 className="text-xl font-black text-amber-400 flex items-center gap-2">👳‍♂️ 流浪商人商店</h3>
+                  <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-1">珍稀物資收購中</p>
+                </div>
+                <button onClick={() => setIsMerchantOpen(false)} className="p-2 rounded-xl bg-white/5 hover:bg-white/10 transition-colors">
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2 bg-amber-500/10 p-3 rounded-2xl border border-amber-500/20 mb-4">
+                <div className="text-2xl">💰</div>
+                <div>
+                  <div className="text-[10px] text-amber-400 font-bold">你的資金</div>
+                  <div className="text-lg font-mono font-bold">{Math.floor(player.gold)} <span className="text-xs font-sans">金幣</span></div>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+                <p className="text-xs font-bold text-gray-400 mb-2 px-1">你可以販售以下獲得的物品：</p>
+                {player.items.length === 0 ? (
+                  <div className="text-center py-12 text-gray-500 italic text-sm">背包空空如也...</div>
+                ) : (
+                  player.items.map(item => {
+                    let sellPrice = 10;
+                    if (item.type === 'gem') sellPrice = 200;
+                    if (item.type === 'material') sellPrice = 15;
+                    if (item.type === 'potion') sellPrice = 50;
+                    if (item.id === 'item_revive_pot') sellPrice = 500;
+
+                    return (
+                      <div key={item.id} className="flex items-center gap-3 bg-white/5 p-3 rounded-2xl border border-white/5 hover:bg-white/10 transition-all group">
+                        <div className="text-3xl bg-white/5 w-12 h-12 rounded-xl flex items-center justify-center border border-white/10">{item.icon}</div>
+                        <div className="flex-1">
+                          <div className="font-bold text-sm">{item.name}</div>
+                          <div className="text-[10px] text-gray-500">持有: {item.quantity}</div>
+                        </div>
+                        <button
+                          onClick={() => handleSellItem(item)}
+                          className="px-4 py-2 bg-amber-600/20 hover:bg-amber-600 text-amber-400 hover:text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border border-amber-500/20"
+                        >
+                          <span className="font-mono">{sellPrice}</span> 金幣 販售
+                        </button>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              <button
+                onClick={() => setIsMerchantOpen(false)}
+                className="w-full mt-6 py-3.5 rounded-2xl bg-white/5 hover:bg-white/10 text-white font-bold transition-all border border-white/10 active:scale-95"
+              >
+                結束交易
+              </button>
+            </div>
+          </div>
         )}
 
         {/* Town Overlay */}
         {inTown && (
-          <TownScreen town={inTown} player={player!} onLeave={() => setInTown(null)} onCraftAlchemy={handleCraftAlchemy} />
+          <TownScreen town={inTown} player={player!} onLeave={() => setInTown(null)} onCraftAlchemy={handleCraftAlchemy} onCraftEquipment={handleCraftEquipment} />
         )}
       </div>
 
@@ -890,16 +1391,21 @@ const App: React.FC = () => {
           { key: 'partners', icon: <Users size={22} />, label: '夥伴' },
           { key: 'home', icon: <Home size={22} />, label: '家園' },
           { key: 'bag', icon: <Package size={22} />, label: '行囊' },
-          { key: 'settings', icon: <SettingsIcon size={22} />, label: '設置' },
+          { key: 'stats', icon: <Activity size={22} />, label: '勇者' },
         ].map(tab => (
-          <button key={tab.key} onClick={() => tab.key === 'settings' ? supabase.auth.signOut() : setActiveTab(tab.key)}
-            className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all ${activeTab === tab.key ? 'text-game-accent bg-game-accent/10 scale-105' : 'text-gray-500 hover:text-gray-300'}`}>
+          <button key={tab.key}
+            disabled={isCombatAction && tab.key !== activeTab}
+            onClick={() => {
+              if (isCombatAction) return;
+              setActiveTab(tab.key);
+            }}
+            className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all ${activeTab === tab.key ? 'text-game-accent bg-game-accent/10 scale-105' : 'text-gray-500 hover:text-gray-300'} ${isCombatAction && tab.key !== activeTab ? 'opacity-20 cursor-not-allowed' : ''}`}>
             {tab.icon}
-            <span className="text-[10px] font-medium">{tab.key === 'settings' ? '登出' : tab.label}</span>
+            <span className="text-[10px] font-medium">{tab.label}</span>
           </button>
         ))}
       </div>
-    </div>
+    </div >
   );
 };
 

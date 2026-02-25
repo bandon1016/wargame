@@ -22,7 +22,7 @@ export interface Equipment {
 export interface GameItem {
     id: string;
     name: string;
-    type: 'potion' | 'material' | 'scroll' | 'gem';
+    type: 'potion' | 'material' | 'scroll' | 'gem' | 'consumable';
     icon: string;
     quantity: number;
     description: string;
@@ -36,6 +36,7 @@ export interface Partner {
     level: number;
     power: number;
     avatar: string; // emoji
+    isDeployed?: boolean;
 }
 
 export interface Building {
@@ -57,17 +58,18 @@ export interface CharacterStats {
     maxHp: number;
     attack: number;
     defense: number;
+    heal?: number;
     gold: number;
     baseMaterials: number;
     skills: Skill[];
     partners: Partner[];
     buildings: Building[];
     equipment: Equipment[];
-    equippedWeapon?: Equipment;
-    equippedArmor?: Equipment;
-    equippedHelmet?: Equipment;
-    equippedBoots?: Equipment;
-    equippedAccessory?: Equipment;
+    equippedWeapon?: Equipment | null;
+    equippedArmor?: Equipment | null;
+    equippedHelmet?: Equipment | null;
+    equippedBoots?: Equipment | null;
+    equippedAccessory?: Equipment | null;
     items: GameItem[];
 }
 
@@ -112,30 +114,81 @@ export const EQUIPMENT_DATABASE: Equipment[] = [
     { id: 'eq_wood_sword', name: '木劍', slot: 'weapon', rarity: 1, attack: 5, defense: 0, hp: 0, icon: '🗡️', description: '新手的初始武器' },
     { id: 'eq_iron_sword', name: '鐵劍', slot: 'weapon', rarity: 2, attack: 12, defense: 0, hp: 0, icon: '⚔️', description: '堅固的鐵製長劍' },
     { id: 'eq_flame_blade', name: '烈焰之刃', slot: 'weapon', rarity: 4, attack: 30, defense: 0, hp: 0, icon: '🔥', description: '附有火焰附魔的神兵' },
+    { id: 'eq_dragon_slayer', name: '屠龍巨劍', slot: 'weapon', rarity: 5, attack: 55, defense: 0, hp: 0, icon: '🗡️', description: '傳說中曾斬下高階黑龍頭顱的巨劍' },
     { id: 'eq_leather_armor', name: '皮甲', slot: 'armor', rarity: 1, attack: 0, defense: 5, hp: 20, icon: '🧥', description: '簡易的皮革護甲' },
     { id: 'eq_chain_mail', name: '鎖子甲', slot: 'armor', rarity: 2, attack: 0, defense: 12, hp: 40, icon: '🛡️', description: '環環相扣的金屬鎧甲' },
     { id: 'eq_dragon_armor', name: '龍鱗鎧甲', slot: 'armor', rarity: 5, attack: 5, defense: 35, hp: 100, icon: '🐲', description: '以黑龍鱗片打造的傳說級鎧甲' },
     { id: 'eq_iron_helm', name: '鐵盔', slot: 'helmet', rarity: 2, attack: 0, defense: 8, hp: 15, icon: '⛑️', description: '保護頭部的鐵製頭盔' },
+    { id: 'eq_crystal_crown', name: '水晶王冠', slot: 'helmet', rarity: 4, attack: 0, defense: 15, hp: 50, icon: '👑', description: '以花東水晶雕刻而成的魔法王冠' },
     { id: 'eq_leather_boots', name: '皮靴', slot: 'boots', rarity: 1, attack: 0, defense: 3, hp: 10, icon: '👢', description: '輕便的冒險者皮靴' },
+    { id: 'eq_steel_greaves', name: '鋼鐵護腿', slot: 'boots', rarity: 3, attack: 0, defense: 10, hp: 20, icon: '🥾', description: '沉重但提供極佳防護的鋼製戰靴' },
     { id: 'eq_ruby_ring', name: '紅寶石戒指', slot: 'accessory', rarity: 3, attack: 10, defense: 5, hp: 30, icon: '💍', description: '鑲嵌紅寶石的魔法戒指' },
+    { id: 'eq_pearl_necklace', name: '海淵珍珠項鍊', slot: 'accessory', rarity: 4, attack: 0, defense: 10, hp: 80, icon: '📿', description: '散發柔和水屬性魔力的珍貴項鍊' },
 ];
 
 export const ITEM_DATABASE: Omit<GameItem, 'quantity'>[] = [
-    { id: 'item_hp_pot', name: '生命藥水', type: 'potion', icon: '🧪', description: '恢復 50 HP' },
-    { id: 'item_str_scroll', name: '力量卷軸', type: 'scroll', icon: '📜', description: '暫時提升 10 點攻擊力' },
-    { id: 'item_iron_ore', name: '鐵礦石', type: 'material', icon: '🪨', description: '用於鍛造武器的基礎素材' },
-    { id: 'item_magic_gem', name: '魔力寶石', type: 'gem', icon: '💎', description: '散發著微光的神秘寶石' },
-    { id: 'item_herb', name: '藥草', type: 'material', icon: '🌿', description: '用於煉製藥水的草本植物' },
-    { id: 'item_dragon_scale', name: '龍鱗碎片', type: 'material', icon: '🔮', description: '黑龍掉落的珍貴材料' },
-    { id: 'item_revive_pot', name: '復甦精華', type: 'potion', icon: '💧', description: '散發著奇蹟光芒的泉水，能在戰敗時將角色滿血復活。' },
+    { id: 'item_hp_pot', name: '小型生命藥水', type: 'potion', icon: '🧪', description: '微微泛紅的初級藥水，能恢復 50 點生命值。' },
+    { id: 'item_hp_pot_m', name: '中型生命藥水', type: 'potion', icon: '⚗️', description: '濃郁的紅色藥劑，能恢復 150 點生命值。' },
+    { id: 'item_str_seed', name: '力量種子', type: 'consumable', icon: '💪', description: '蘊含神秘力量的種子，服用後永久提升 2 點攻擊力。' },
+    { id: 'item_def_seed', name: '鐵壁種子', type: 'consumable', icon: '🛡️', description: '堅硬如鐵的種子，服用後永久提升 2 點防禦力。' },
+    { id: 'item_hp_seed', name: '生命之果', type: 'consumable', icon: '🍎', description: '散發著生命氣息的果實，服用後永久提升 10 點最大生命值。' },
+    { id: 'item_iron_ore', name: '鐵礦石', type: 'material', icon: '🪨', description: '可以用來鍛造基礎裝備的金屬原礦。' },
+    { id: 'item_magic_gem', name: '魔力寶石', type: 'gem', icon: '🔮', description: '散發著幽藍微光的奇異寶石，蘊藏大量精純魔力。' },
+    { id: 'item_herb', name: '藥草', type: 'material', icon: '🌿', description: '生長在野外的普通草本植物，是煉製各類藥水的基本材料。' },
+    { id: 'item_dragon_scale', name: '龍鱗碎片', type: 'material', icon: '🐲', description: '強大黑龍掉落的珍貴鱗片，堅硬無比，散發著危險的氣息。' },
+    { id: 'item_revive_pot', name: '復甦精華', type: 'potion', icon: '💧', description: '閃耀著奇蹟般光芒的泉水，不僅能恢復生命，還能在戰敗時將角色滿血復活。' },
     // Regional Materials
-    { id: 'mat_north_tech', name: '科技廢料', type: 'material', icon: '⚙️', description: '北部特產：殘留微弱能量的廢棄晶片' },
-    { id: 'mat_north_glass', name: '魔法玻璃', type: 'material', icon: '🪞', description: '北部特產：折射著奇幻光芒的玻璃碎片' },
-    { id: 'mat_central_iron', name: '高山鐵礦', type: 'material', icon: '⛰️', description: '中部特產：只有在中央山脈深處才挖得到的堅硬礦石' },
-    { id: 'mat_central_wood', name: '神木枝枒', type: 'material', icon: '🪵', description: '中部特產：受到自然魔力滋養的千年樹枝' },
-    { id: 'mat_south_sand', name: '炎漠紅砂', type: 'material', icon: '🏜️', description: '南部特產：蘊含濃烈火屬性魔力的紅色砂礫' },
-    { id: 'mat_south_pearl', name: '海淵珍珠', type: 'material', icon: '🦪', description: '南部特產：凝聚大洋精華的璀璨珍珠' },
-    { id: 'mat_east_crystal', name: '花東水晶', type: 'material', icon: '💠', description: '東部特產：純淨無瑕的天然水晶' },
+    { id: 'mat_north_tech', name: '科技廢料', type: 'material', icon: '⚙️', description: '北部特產：沾染微弱魔力的報廢電路板。' },
+    { id: 'mat_north_glass', name: '魔法玻璃', type: 'material', icon: '💎', description: '北部特產：折射著奇幻光芒的玻璃碎片，可用於光學附魔。' },
+    { id: 'mat_central_iron', name: '高山鐵礦', type: 'material', icon: '⛰️', description: '中部特產：只有在中央山脈深處才挖得到的極堅硬礦石。' },
+    { id: 'mat_central_wood', name: '神木枝枒', type: 'material', icon: '🎋', description: '中部特產：受到古老森林魔力滋養的千年樹枝。' },
+    { id: 'mat_south_sand', name: '炎漠紅砂', type: 'material', icon: '🏜️', description: '南部特產：蘊含濃烈火屬性魔力的紅色砂礫。' },
+    { id: 'mat_south_pearl', name: '海淵珍珠', type: 'material', icon: '🦪', description: '南部特產：凝聚大洋水屬性精華的璀璨珍珠。' },
+    { id: 'mat_east_crystal', name: '花東水晶', type: 'material', icon: '💠', description: '東部特產：純淨無瑕的天然水晶，能大幅增幅魔力。' },
+];
+
+// Crafting Recipes
+export interface BlacksmithRecipe {
+    id: string;
+    targetEquipmentId: string;
+    materials: { id: string, name: string, quantity: number }[];
+    goldCost: number;
+}
+
+export const BLACKSMITH_RECIPES: BlacksmithRecipe[] = [
+    {
+        id: 'forge_iron_sword',
+        targetEquipmentId: 'eq_iron_sword',
+        materials: [{ id: 'item_iron_ore', name: '鐵礦石', quantity: 5 }],
+        goldCost: 200
+    },
+    {
+        id: 'forge_steel_greaves',
+        targetEquipmentId: 'eq_steel_greaves',
+        materials: [
+            { id: 'mat_central_iron', name: '高山鐵礦', quantity: 3 },
+            { id: 'item_iron_ore', name: '鐵礦石', quantity: 10 }
+        ],
+        goldCost: 800
+    },
+    {
+        id: 'forge_pearl_necklace',
+        targetEquipmentId: 'eq_pearl_necklace',
+        materials: [
+            { id: 'mat_south_pearl', name: '海淵珍珠', quantity: 2 },
+            { id: 'item_magic_gem', name: '魔力寶石', quantity: 3 }
+        ],
+        goldCost: 1500
+    },
+    {
+        id: 'forge_dragon_armor',
+        targetEquipmentId: 'eq_dragon_armor',
+        materials: [
+            { id: 'item_dragon_scale', name: '龍鱗碎片', quantity: 5 },
+            { id: 'mat_central_iron', name: '高山鐵礦', quantity: 10 }
+        ],
+        goldCost: 5000
+    }
 ];
 
 // Alchemy Recipes
@@ -154,6 +207,15 @@ export const ALCHEMY_RECIPES: AlchemyRecipe[] = [
             { id: 'item_herb', name: '藥草', quantity: 2 }
         ],
         goldCost: 20
+    },
+    {
+        id: 'rec_hp_pot_m',
+        targetItemId: 'item_hp_pot_m',
+        materials: [
+            { id: 'item_herb', name: '藥草', quantity: 4 },
+            { id: 'item_hp_pot', name: '小型生命藥水', quantity: 1 }
+        ],
+        goldCost: 50
     },
     {
         id: 'rec_revive_pot',
@@ -207,11 +269,11 @@ export const WEATHER_TYPES: Record<WeatherType, WeatherEffect> = {
 };
 
 export const RARITY_COLORS: Record<number, { border: string, bg: string, text: string, glow: string, label: string }> = {
-    1: { border: 'border-gray-500', bg: 'bg-gray-800', text: 'text-gray-300', glow: '', label: '普通' },
-    2: { border: 'border-green-500', bg: 'bg-green-900/30', text: 'text-green-400', glow: 'shadow-[0_0_8px_rgba(34,197,94,0.3)]', label: '優秀' },
-    3: { border: 'border-blue-500', bg: 'bg-blue-900/30', text: 'text-blue-400', glow: 'shadow-[0_0_12px_rgba(59,130,246,0.4)]', label: '稀有' },
-    4: { border: 'border-purple-500', bg: 'bg-purple-900/30', text: 'text-purple-400', glow: 'shadow-[0_0_16px_rgba(168,85,247,0.5)]', label: '史詩' },
-    5: { border: 'border-game-gold', bg: 'bg-yellow-900/30', text: 'text-game-gold', glow: 'shadow-[0_0_20px_rgba(251,191,36,0.6)]', label: '傳說' },
+    1: { border: 'border-slate-500', bg: 'bg-slate-900/50', text: 'text-slate-300', glow: '', label: '普通' },
+    2: { border: 'border-emerald-500', bg: 'bg-emerald-900/40', text: 'text-emerald-400', glow: 'shadow-[0_0_15px_rgba(16,185,129,0.2)]', label: '優秀' },
+    3: { border: 'border-sky-500', bg: 'bg-sky-900/40', text: 'text-sky-400', glow: 'shadow-[0_0_20px_rgba(14,165,233,0.3)]', label: '稀有' },
+    4: { border: 'border-purple-500', bg: 'bg-purple-900/40', text: 'text-purple-400', glow: 'shadow-[0_0_25px_rgba(168,85,247,0.4)]', label: '史詩' },
+    5: { border: 'border-amber-500', bg: 'bg-amber-900/40', text: 'text-amber-400', glow: 'shadow-[0_0_30px_rgba(245,158,11,0.5)]', label: '傳說' },
 };
 
 // Towns & Field Events
