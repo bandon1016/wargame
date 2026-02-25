@@ -2,8 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Compass, Sword, Home, Users, Package, Settings as SettingsIcon, Book, Heart, Shield, Zap, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, MapPin, Loader2 } from 'lucide-react';
-import type { CharacterStats, Enemy, Skill, GameItem, Equipment } from './types/game';
-import { MONSTER_DATABASE, SKILL_DATABASE, ITEM_DATABASE, RARITY_COLORS } from './types/game';
+import type { CharacterStats, Enemy, Skill, GameItem, Equipment, WeatherType } from './types/game';
+import { MONSTER_DATABASE, SKILL_DATABASE, ITEM_DATABASE, RARITY_COLORS, WEATHER_TYPES, getRegionByCoordinates, getRegionalMaterials } from './types/game';
 import { CombatScreen } from './components/CombatScreen';
 import { PartnersTab } from './components/PartnersTab';
 import { HomeTab } from './components/HomeTab';
@@ -14,6 +14,14 @@ import L from 'leaflet';
 import iconImg from 'leaflet/dist/images/marker-icon.png';
 import iconShadow from 'leaflet/dist/images/marker-shadow.png';
 L.Marker.prototype.options.icon = L.icon({ iconUrl: iconImg, shadowUrl: iconShadow, iconSize: [25, 41], iconAnchor: [12, 41] });
+
+// Custom Player Icon (Avatar Emoji)
+const createPlayerIcon = (emoji: string) => L.divIcon({
+  html: `<div style="font-size: 32px; filter: drop-shadow(0 0 8px rgba(0,0,0,0.5)); transform: translate(-10%, -10%);">${emoji}</div>`,
+  className: 'custom-player-marker',
+  iconSize: [40, 40],
+  iconAnchor: [20, 20],
+});
 
 function MapUpdater({ center }: { center: [number, number] }) {
   const map = useMap();
@@ -35,13 +43,15 @@ const App: React.FC = () => {
   const [position, setPosition] = useState<[number, number]>([25.0330, 121.5654]);
   const positionRef = React.useRef<[number, number]>(position);
   const [activeTab, setActiveTab] = useState('explore');
-  const [areaName] = useState('信義區 — 台北市');
 
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   const [player, setPlayer] = useState<CharacterStats | null>(null);
   const playerRef = React.useRef<CharacterStats | null>(null);
+  const [weather, setWeather] = useState<WeatherType>('sunny');
+  const weatherRef = React.useRef<WeatherType>(weather);
+  const [areaName] = useState('信義區 — 台北市');
 
   // Sync ref structure
   useEffect(() => {
@@ -51,6 +61,21 @@ const App: React.FC = () => {
   useEffect(() => {
     positionRef.current = position;
   }, [position]);
+
+  useEffect(() => {
+    weatherRef.current = weather;
+  }, [weather]);
+
+  // Weather cycle logic
+  useEffect(() => {
+    const rollWeather = () => {
+      const types: WeatherType[] = ['sunny', 'sunny', 'sunny', 'rainy', 'rainy', 'foggy', 'stormy'];
+      setWeather(types[Math.floor(Math.random() * types.length)]);
+    };
+    const weatherTimer = setInterval(rollWeather, 180000); // 3 minutes
+    rollWeather();
+    return () => clearInterval(weatherTimer);
+  }, []);
 
   // Auth flow
   useEffect(() => {
@@ -165,13 +190,39 @@ const App: React.FC = () => {
       const it = ITEM_DATABASE[Math.floor(Math.random() * ITEM_DATABASE.length)];
       loots.push({ ...it, quantity: 1 });
     }
+
+    // Regional drops (50% chance to drop regional material)
+    if (Math.random() > 0.5) {
+      const region = getRegionByCoordinates(positionRef.current[0], positionRef.current[1]);
+      const matIds = getRegionalMaterials(region);
+      if (matIds.length > 0) {
+        const matId = matIds[Math.floor(Math.random() * matIds.length)];
+        const regionalMat = ITEM_DATABASE.find(i => i.id === matId);
+        if (regionalMat) {
+          // check if already in loots
+          const existing = loots.find(l => l.id === matId);
+          if (existing) existing.quantity++;
+          else loots.push({ ...regionalMat, quantity: 1 });
+        }
+      }
+    }
+
+    // Weather Effects on Stats (simplified)
+    let eAtk = template.baseAtk + lv * 2;
+    let eDef = template.baseDef + Math.floor(lv * 0.8);
+    if (weatherRef.current === 'rainy') {
+      eDef += 2; // monsters slightly tougher in rain
+    } else if (weatherRef.current === 'foggy') {
+      eAtk += 3; // monsters hit harder in fog
+    }
+
     const enemy: Enemy = {
       id: Math.random().toString(),
       name: template.name, avatar: template.avatar,
       level: lv + Math.floor(Math.random() * 3) - 1,
       hp, maxHp: hp,
-      attack: template.baseAtk + lv * 2,
-      defense: template.baseDef + Math.floor(lv * 0.8),
+      attack: eAtk,
+      defense: eDef,
       expReward: 18 + lv * 6,
       goldReward: 8 + lv * 3,
       skillReward: Math.random() < 0.25 ? sk : undefined,
@@ -192,8 +243,9 @@ const App: React.FC = () => {
       const d = dirs[Math.floor(Math.random() * dirs.length)];
       move(d);
 
-      // 30% chance to encounter monster while moving in auto mode
-      if (Math.random() > 0.7) {
+      // Foggy weather increases encounter rate from 30% to 50%
+      const encounterThreshold = weatherRef.current === 'foggy' ? 0.5 : 0.7;
+      if (Math.random() > encounterThreshold) {
         startHunt();
       }
     }, 2000); // Move every 2 seconds
@@ -248,8 +300,8 @@ const App: React.FC = () => {
       let newHp = prev.hp;
       if (item.id === 'item_hp_pot' || item.id === 'it_01') {
         const recoverAmount = 50;
-        const maxHp = prev.maxHp + totalEquipHp(prev);
-        newHp = Math.min(newHp + recoverAmount, maxHp);
+        const currentMaxHp = prev.maxHp + totalEquipHp(prev) + totalPartnerHp(prev);
+        newHp = Math.min(newHp + recoverAmount, currentMaxHp);
       }
 
       return { ...prev, items: newItems, hp: newHp };
@@ -309,10 +361,21 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        {/* Right: Resources */}
-        <div className="flex items-center gap-3 flex-shrink-0">
+        {/* Right: Weather & Config */}
+        <div className="flex items-center gap-3">
+          <div className="hidden sm:flex items-center gap-2 bg-black/40 px-3 py-1.5 rounded-full border border-white/10 tooltip-wrap cursor-help">
+            <span className="text-xl">{WEATHER_TYPES[weather].icon}</span>
+            <span className="text-xs font-bold text-gray-200">{WEATHER_TYPES[weather].label}</span>
+            <div className="tooltip-text">
+              <div className="font-bold text-white mb-1">{WEATHER_TYPES[weather].label}</div>
+              <div className="text-gray-400 text-[10px]">{WEATHER_TYPES[weather].description}</div>
+            </div>
+          </div>
           <div className="stat-badge"><span className="text-amber-500">🧱</span> {Math.floor(player.baseMaterials)}</div>
           <div className="stat-badge"><span className="text-game-gold">💰</span> {Math.floor(player.gold)}</div>
+          <button className="p-2 hover:bg-white/10 rounded-xl transition-colors text-gray-400 hover:text-white">
+            <SettingsIcon size={20} />
+          </button>
         </div>
       </div>
 
@@ -326,7 +389,10 @@ const App: React.FC = () => {
               <TileLayer
                 url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
                 attribution='Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
-              /><Marker position={position}><Popup>你的位置</Popup></Marker>
+              />
+              <Marker position={position} icon={createPlayerIcon('🧙‍♂️')}>
+                <Popup>你的位置</Popup>
+              </Marker>
               <MapUpdater center={position} />
             </MapContainer>
 
@@ -505,12 +571,19 @@ const App: React.FC = () => {
         {/* Combat Overlay */}
         {isCombatAction && currentEnemy && (
           <CombatScreen
-            player={{ ...player, attack: effectiveAtk, defense: effectiveDef, maxHp: effectiveMaxHp }}
+            player={{
+              ...player,
+              attack: effectiveAtk,
+              // Rainy slightly lowers player defense
+              defense: weather === 'rainy' ? Math.max(0, effectiveDef - 2) : effectiveDef,
+              maxHp: effectiveMaxHp
+            }}
             enemy={currentEnemy}
             onWin={(exp, gold, skill) => handleCombatWin(exp, gold, skill, currentEnemy.lootTable)}
             onLose={handleCombatLose}
             onFlee={() => { setIsCombatAction(false); setAutoExplore(false); }}
             autoExplore={autoExplore}
+            weather={weather}
             onAutoHeal={() => {
               const pot = player.items.find(i => i.type === 'potion');
               if (pot) useItem(pot);

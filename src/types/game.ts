@@ -127,7 +127,54 @@ export const ITEM_DATABASE: Omit<GameItem, 'quantity'>[] = [
     { id: 'item_magic_gem', name: '魔力寶石', type: 'gem', icon: '💎', description: '散發著微光的神秘寶石' },
     { id: 'item_herb', name: '藥草', type: 'material', icon: '🌿', description: '用於煉製藥水的草本植物' },
     { id: 'item_dragon_scale', name: '龍鱗碎片', type: 'material', icon: '🔮', description: '黑龍掉落的珍貴材料' },
+    // Regional Materials
+    { id: 'mat_north_tech', name: '科技廢料', type: 'material', icon: '⚙️', description: '北部特產：殘留微弱能量的廢棄晶片' },
+    { id: 'mat_north_glass', name: '魔法玻璃', type: 'material', icon: '🪞', description: '北部特產：折射著奇幻光芒的玻璃碎片' },
+    { id: 'mat_central_iron', name: '高山鐵礦', type: 'material', icon: '⛰️', description: '中部特產：只有在中央山脈深處才挖得到的堅硬礦石' },
+    { id: 'mat_central_wood', name: '神木枝枒', type: 'material', icon: '🪵', description: '中部特產：受到自然魔力滋養的千年樹枝' },
+    { id: 'mat_south_sand', name: '炎漠紅砂', type: 'material', icon: '🏜️', description: '南部特產：蘊含濃烈火屬性魔力的紅色砂礫' },
+    { id: 'mat_south_pearl', name: '海淵珍珠', type: 'material', icon: '🦪', description: '南部特產：凝聚大洋精華的璀璨珍珠' },
+    { id: 'mat_east_crystal', name: '花東水晶', type: 'material', icon: '💠', description: '東部特產：純淨無瑕的天然水晶' },
 ];
+
+// Region definitions
+export type RegionType = 'north' | 'central' | 'south' | 'east' | 'unknown';
+
+export const getRegionByCoordinates = (lat: number, lng: number): RegionType => {
+    // Rough bounding box for Taiwan regions
+    if (lat > 24.5) return 'north';
+    if (lat > 23.5 && lat <= 24.5) return 'central';
+    if (lat > 22.0 && lat <= 23.5) return 'south';
+    if (lng > 121.2 && lat > 22.5 && lat <= 24.5) return 'east'; // Extremely rough east coast classification overlapping others slightly
+    return 'unknown';
+};
+
+export const getRegionalMaterials = (region: RegionType): string[] => {
+    switch (region) {
+        case 'north': return ['mat_north_tech', 'mat_north_glass'];
+        case 'central': return ['mat_central_iron', 'mat_central_wood'];
+        case 'south': return ['mat_south_sand', 'mat_south_pearl'];
+        case 'east': return ['mat_east_crystal'];
+        default: return [];
+    }
+};
+
+// Weather System
+export type WeatherType = 'sunny' | 'rainy' | 'foggy' | 'stormy';
+
+export interface WeatherEffect {
+    weather: WeatherType;
+    icon: string;
+    label: string;
+    description: string;
+}
+
+export const WEATHER_TYPES: Record<WeatherType, WeatherEffect> = {
+    sunny: { weather: 'sunny', icon: '☀️', label: '晴天', description: '天氣晴朗，視野清晰。' },
+    rainy: { weather: 'rainy', icon: '🌧️', label: '雨天', description: '大雨滂沱，水系怪物稍微轉強。' },
+    foggy: { weather: 'foggy', icon: '🌫️', label: '濃霧', description: '能見度極低，遇敵機率大幅上升。' },
+    stormy: { weather: 'stormy', icon: '⚡', label: '雷暴', description: '狂雷交加，戰鬥中有機率受到環境傷害。' },
+};
 
 export const RARITY_COLORS: Record<number, { border: string, bg: string, text: string, glow: string, label: string }> = {
     1: { border: 'border-gray-500', bg: 'bg-gray-800', text: 'text-gray-300', glow: '', label: '普通' },

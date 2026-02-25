@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import type { CharacterStats, Enemy, Skill } from '../types/game';
+import type { CharacterStats, Enemy, Skill, WeatherType } from '../types/game';
 import { Shield, Sword, Heart, Play, Square, X, Award } from 'lucide-react';
 
 interface CombatScreenProps {
@@ -9,10 +9,11 @@ interface CombatScreenProps {
     onLose: () => void;
     onFlee: () => void;
     autoExplore?: boolean;
+    weather?: WeatherType;
     onAutoHeal?: () => void;
 }
 
-export const CombatScreen: React.FC<CombatScreenProps> = ({ player, enemy, onWin, onLose, onFlee, autoExplore, onAutoHeal }) => {
+export const CombatScreen: React.FC<CombatScreenProps> = ({ player, enemy, onWin, onLose, onFlee, autoExplore, weather, onAutoHeal }) => {
     const [eHp, setEHp] = useState(enemy.hp);
     const [pHp, setPHp] = useState(player.hp);
     const [logs, setLogs] = useState<string[]>([`⚔️ 野外遭遇了 ${enemy.name} (Lv.${enemy.level})！`]);
@@ -46,8 +47,29 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({ player, enemy, onWin
 
         if (newEHp <= 0) { win(); return; }
 
+        // Environmental Damage (Stormy)
+        let stormDmgPlayer = 0;
+        let stormDmgEnemy = 0;
+        let currentPHp = pHp;
+        let currentEHp = newEHp;
+
+        if (weather === 'stormy' && Math.random() > 0.7) {
+            stormDmgPlayer = Math.floor(player.maxHp * 0.05);
+            stormDmgEnemy = Math.floor(enemy.maxHp * 0.05);
+            currentPHp = Math.max(0, currentPHp - stormDmgPlayer);
+            currentEHp = Math.max(0, currentEHp - stormDmgEnemy);
+            setPHp(currentPHp);
+            setEHp(currentEHp);
+            setPShake(true); setEShake(true);
+            setTimeout(() => { setPShake(false); setEShake(false); }, 300);
+            log(`⚡ 狂雷劈下！雙方分別受到 ${stormDmgPlayer} / ${stormDmgEnemy} 點環境傷害`);
+
+            if (currentEHp <= 0) { win(); return; }
+            if (currentPHp <= 0) { lose(); return; }
+        }
+
         // Auto Heal check for auto explore
-        if (autoExplore && onAutoHeal && pHp < player.maxHp * 0.4) {
+        if (autoExplore && onAutoHeal && currentPHp < player.maxHp * 0.4) {
             log(`✨ 生命危急！自動嘗試使用藥水...`);
             onAutoHeal();
         }
@@ -55,11 +77,11 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({ player, enemy, onWin
         // Enemy attacks
         setTimeout(() => {
             const eDmg = Math.max(1, enemy.attack - player.defense + Math.floor(Math.random() * 4));
-            const newPHp = Math.max(0, pHp - eDmg);
-            setPHp(newPHp);
+            const finalPHp = Math.max(0, currentPHp - eDmg);
+            setPHp(finalPHp);
             setPShake(true); setTimeout(() => setPShake(false), 300);
             log(`${enemy.avatar} ${enemy.name} 反擊，造成 ${eDmg} 傷害`);
-            if (newPHp <= 0) lose();
+            if (finalPHp <= 0) lose();
         }, 350);
     };
 
