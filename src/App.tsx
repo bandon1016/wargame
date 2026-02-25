@@ -547,27 +547,30 @@ const App: React.FC = () => {
               </div>
               <p className="text-base font-bold mb-1">{areaName}</p>
               <p className="text-xs text-gray-400 mb-4">這片區域潛伏著各種危險的生物...</p>
-              <div className="flex gap-2">
-                {nearestTown ? (
-                  <button onClick={() => setInTown(nearestTown)} className="flex-1 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-400 hover:to-purple-400 text-white font-bold py-2.5 rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20">
+              <div className="flex flex-col gap-2">
+                {nearestTown && (
+                  <button onClick={() => setInTown(nearestTown)} className="w-full bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-400 hover:to-purple-400 text-white font-bold py-2 rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20">
                     <Home size={18} /> 進入 {nearestTown.name}
                   </button>
-                ) : nearestPoi ? (
-                  <button onClick={() => handlePoiInteract(nearestPoi)} className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-bold py-2.5 rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20">
-                    <MapPin size={18} /> 互動 ({POI_NAMES[nearestPoi.type]})
-                  </button>
-                ) : (
-                  <button onClick={() => startHunt(false)} disabled={autoExplore} className={`flex-1 ${autoExplore ? 'bg-gray-600' : 'bg-gradient-to-r from-game-accent to-indigo-500 hover:from-sky-400 hover:to-indigo-400'} text-white font-bold py-2.5 rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg ${autoExplore ? '' : 'shadow-game-accent/20'}`}>
-                    <Sword size={18} /> {autoExplore ? '自動探索中...' : '開始狩獵'}
-                  </button>
                 )}
-                <button
-                  onClick={() => setAutoExplore(!autoExplore)}
-                  className={`w-12 h-[44px] rounded-xl flex items-center justify-center transition-all ${autoExplore ? 'bg-green-500/20 text-green-400 border border-green-500/50 shadow-[0_0_10px_rgba(34,197,94,0.3)]' : 'bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10'}`}
-                  title={autoExplore ? "停止自動探索" : "開啟自動探索"}
-                >
-                  <Zap size={18} className={autoExplore ? 'animate-pulse' : ''} />
-                </button>
+                <div className="flex gap-2 h-[40px]">
+                  {nearestPoi ? (
+                    <button onClick={() => handlePoiInteract(nearestPoi)} className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-bold rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20">
+                      <MapPin size={18} /> 互動 ({POI_NAMES[nearestPoi.type]})
+                    </button>
+                  ) : (
+                    <button onClick={() => startHunt(false)} disabled={autoExplore} className={`flex-1 ${autoExplore ? 'bg-gray-600' : 'bg-gradient-to-r from-game-accent to-indigo-500 hover:from-sky-400 hover:to-indigo-400'} text-white font-bold rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg ${autoExplore ? '' : 'shadow-game-accent/20'}`}>
+                      <Sword size={18} /> {autoExplore ? '自動探索中...' : '自由狩獵'}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setAutoExplore(!autoExplore)}
+                    className={`min-w-[40px] w-[40px] rounded-xl flex items-center justify-center transition-all ${autoExplore ? 'bg-green-500/20 text-green-400 border border-green-500/50 shadow-[0_0_10px_rgba(34,197,94,0.3)]' : 'bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10'}`}
+                    title={autoExplore ? "停止自動探索" : "開啟自動探索"}
+                  >
+                    <Zap size={18} className={autoExplore ? 'animate-pulse' : ''} />
+                  </button>
+                </div>
               </div>
             </div>
           </div>
