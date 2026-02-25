@@ -616,7 +616,7 @@ const App: React.FC = () => {
   const [autoExplore, setAutoExplore] = useState(false);
 
   const move = useCallback((d: 'n' | 's' | 'e' | 'w') => {
-    const s = 0.0005;
+    const s = 0.00025;
     setPosition(p => {
       const next: [number, number] = d === 'n' ? [p[0] + s, p[1]] : d === 's' ? [p[0] - s, p[1]] : d === 'e' ? [p[0], p[1] + s] : [p[0], p[1] - s];
       return next;
@@ -657,7 +657,7 @@ const App: React.FC = () => {
   // Continuous Movement Loop (for Hold-to-Move)
   useEffect(() => {
     let frameId: number;
-    const CONTINUOUS_SPEED = 0.0001; // Speed per frame during hold
+    const CONTINUOUS_SPEED = 0.00006; // Speed per frame during hold
 
     const animate = () => {
       if (moveDirRef.current && !isTraveling && activeTab === 'explore' && !inTown && !activePoiCombat) {
@@ -695,7 +695,7 @@ const App: React.FC = () => {
     }
 
     let frameId: number;
-    const WALKING_SPEED = 0.00015; // Speed of walking per frame
+    const WALKING_SPEED = 0.00008; // Speed of walking per frame
 
     const animate = () => {
       setPosition(prev => {
