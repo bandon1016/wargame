@@ -162,81 +162,83 @@ const App: React.FC = () => {
   const [combatLogs, setCombatLogs] = useState<CombatLog[]>([]);
   const [logOpacity, setLogOpacity] = useState(1);
 
-  // Railway Travel States
+  // Railway Travel States (Time-Based)
   const [isTraveling, setIsTraveling] = useState(false);
   const [travelPath, setTravelPath] = useState<[number, number][]>([]);
+  const [travelDepartedAt, setTravelDepartedAt] = useState<Date | null>(null);
+  const [travelDurationSec, setTravelDurationSec] = useState(0);
+  // Keep travelProgress for progress bar display only
   const [travelProgress, setTravelProgress] = useState(0);
-  const TRAVEL_SPEED_FACTOR = 0.0008; // Even slower as requested (was 0.002)
+
+  // Refs for animation loop to access travel state without stale closures
+  const travelPathRef = React.useRef<[number, number][]>([]);
+  const travelDepartedAtRef = React.useRef<Date | null>(null);
+  const travelDurationSecRef = React.useRef<number>(0);
+
+  useEffect(() => { travelPathRef.current = travelPath; }, [travelPath]);
+  useEffect(() => { travelDepartedAtRef.current = travelDepartedAt; }, [travelDepartedAt]);
+  useEffect(() => { travelDurationSecRef.current = travelDurationSec; }, [travelDurationSec]);
 
   // Sync ref structure
   useEffect(() => {
     playerRef.current = player;
   }, [player]);
 
-  // Railway Animation Loop
+  // Ref to saveProfile - avoids forward-reference issues since saveProfile is declared later via useCallback
+  const saveProfileRef = React.useRef<((newState?: CharacterStats) => Promise<void>) | null>(null);
+
+  // Railway Animation Loop (Time-Based - cross-device safe)
   useEffect(() => {
-    if (!isTraveling || travelPath.length < 2) return;
+    if (!isTraveling) return;
 
     let frameId: number;
 
     const animate = () => {
-      setTravelProgress(prev => {
-        const next = prev + TRAVEL_SPEED_FACTOR;
+      const path = travelPathRef.current;
+      const departedAt = travelDepartedAtRef.current;
+      const durationSec = travelDurationSecRef.current;
 
-        // Save progress to local storage for persistence
-        localStorage.setItem('war_game_travel_v1', JSON.stringify({
-          isTraveling: true,
-          travelPath,
-          travelProgress: next,
-          lastUpdated: Date.now()
-        }));
+      if (!departedAt || path.length < 2 || durationSec <= 0) {
+        frameId = requestAnimationFrame(animate);
+        return;
+      }
 
-        if (next >= travelPath.length - 1) {
-          setIsTraveling(false);
-          setTravelProgress(0);
-          setTravelPath([]);
-          localStorage.removeItem('war_game_travel_v1');
-          const finalPos = travelPath[travelPath.length - 1];
-          setPosition(finalPos);
-          // Force save profile on arrival
-          saveProfile();
-          return 0;
-        }
+      const elapsedSec = (Date.now() - departedAt.getTime()) / 1000;
+      const progress = Math.min(elapsedSec / durationSec, 1);
+      setTravelProgress(progress);
 
-        const segmentIndex = Math.floor(next);
-        const segmentProgress = next - segmentIndex;
-        const p1 = travelPath[segmentIndex];
-        const p2 = travelPath[segmentIndex + 1];
+      if (progress >= 1) {
+        // Arrived!
+        const finalPos = path[path.length - 1];
+        setPosition(finalPos);
+        setIsTraveling(false);
+        setTravelPath([]);
+        setTravelDepartedAt(null);
+        setTravelDurationSec(0);
+        setTravelProgress(0);
+        // Use ref to avoid forward-reference lint error
+        saveProfileRef.current?.();
+        return;
+      }
 
-        const lat = p1[0] + (p2[0] - p1[0]) * segmentProgress;
-        const lng = p1[1] + (p2[1] - p1[1]) * segmentProgress;
-        setPosition([lat, lng]);
+      // Interpolate position along path
+      const totalSegments = path.length - 1;
+      const rawIndex = progress * totalSegments;
+      const segmentIndex = Math.floor(rawIndex);
+      const segmentProgress = rawIndex - segmentIndex;
+      const p1 = path[Math.min(segmentIndex, path.length - 2)];
+      const p2 = path[Math.min(segmentIndex + 1, path.length - 1)];
 
-        return next;
-      });
+      const lat = p1[0] + (p2[0] - p1[0]) * segmentProgress;
+      const lng = p1[1] + (p2[1] - p1[1]) * segmentProgress;
+      setPosition([lat, lng]);
+
       frameId = requestAnimationFrame(animate);
     };
 
     frameId = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(frameId);
-  }, [isTraveling, travelPath]);
-
-  // Load persistence state on start
-  useEffect(() => {
-    const saved = localStorage.getItem('war_game_travel_v1');
-    if (saved) {
-      try {
-        const data = JSON.parse(saved);
-        if (data.isTraveling && data.travelPath && data.travelPath.length > 0) {
-          setTravelPath(data.travelPath);
-          setTravelProgress(data.travelProgress);
-          setIsTraveling(true);
-        }
-      } catch (e) {
-        console.error("Failed to restore travel state:", e);
-      }
-    }
-  }, []);
+  }, [isTraveling]);
 
   useEffect(() => {
     positionRef.current = position;
@@ -450,6 +452,28 @@ const App: React.FC = () => {
     } else if (error) {
       console.error('Fetch profile error:', error);
     }
+
+    // Restore travel state from DB if present
+    if (data && data.travel_path && data.travel_started_at && data.travel_duration_seconds) {
+      const path: [number, number][] = data.travel_path;
+      const departedAt = new Date(data.travel_started_at);
+      const durationSec: number = data.travel_duration_seconds;
+      const elapsedSec = (Date.now() - departedAt.getTime()) / 1000;
+
+      if (elapsedSec >= durationSec) {
+        // Already arrived, jump to destination immediately
+        const finalPos = path[path.length - 1];
+        setPosition(finalPos);
+        // Clear travel state on DB (will be done by next saveProfile)
+      } else {
+        // Journey in progress, restore travel state
+        setTravelPath(path);
+        setTravelDepartedAt(departedAt);
+        setTravelDurationSec(durationSec);
+        setIsTraveling(true);
+      }
+    }
+
     setLoading(false);
   };
 
@@ -458,7 +482,18 @@ const App: React.FC = () => {
     const p = newState || playerRef.current;
     if (!p || !session?.user?.id) return;
 
-    console.log('Attempting to save profile...', { sessionId: mySessionId });
+    // Build travel persistence payload
+    const travelSaveData = isTraveling && travelPathRef.current.length > 0 && travelDepartedAtRef.current
+      ? {
+        travel_path: travelPathRef.current,
+        travel_started_at: travelDepartedAtRef.current.toISOString(),
+        travel_duration_seconds: travelDurationSecRef.current,
+      }
+      : {
+        travel_path: null,
+        travel_started_at: null,
+        travel_duration_seconds: null,
+      };
 
     const { error } = await supabase.from('profiles').update({
       level: p.level, exp: p.exp, max_exp: p.maxExp,
@@ -477,15 +512,16 @@ const App: React.FC = () => {
       session_id: mySessionId,
       current_location_lat: positionRef.current[0],
       current_location_lng: positionRef.current[1],
+      ...travelSaveData,
       updated_at: new Date().toISOString()
-    }).eq('id', session.user.id); // Removed session_id constraint to ensure saves stick during transitions
+    }).eq('id', session.user.id);
 
     if (error) {
       console.error('Save Profile Error:', error);
     } else {
       console.log('Profile Saved Successfully');
     }
-  }, [session, mySessionId]);
+  }, [session, mySessionId, isTraveling]);
 
   const pendingSaveRef = React.useRef<any>(null);
 
@@ -506,6 +542,11 @@ const App: React.FC = () => {
       if (pendingSaveRef.current) clearTimeout(pendingSaveRef.current);
     };
   }, []);
+
+  // Keep the saveProfileRef in sync with the latest saveProfile function
+  useEffect(() => {
+    saveProfileRef.current = saveProfile;
+  }, [saveProfile]);
 
   // Resource tick
   useEffect(() => {
@@ -1075,7 +1116,7 @@ const App: React.FC = () => {
     saveProfile(nextState);
   }, [player, saveProfile]);
 
-  const handleTravel = useCallback((destinationTown: Town) => {
+  const handleTravel = useCallback(async (destinationTown: Town) => {
     if (!player || !inTown) return;
 
     // Calculate distance-based cost (simplified: 10 gold per km)
@@ -1093,12 +1134,30 @@ const App: React.FC = () => {
       return;
     }
 
-    setPlayer(prev => prev ? { ...prev, gold: prev.gold - cost } : null);
+    // Time-based travel: compute total seconds based on path length
+    // TRAVEL_SPEED_FACTOR = 0.0008 units/frame at 60fps
+    // progress goes from 0 to (path.length-1), so total frames = (path.length-1)/0.0008
+    const TRAVEL_SPEED_FACTOR = 0.0008;
+    const totalDurationSec = (path.length - 1) / TRAVEL_SPEED_FACTOR / 60;
+    const departedAt = new Date();
+
+    const nextState = { ...player, gold: player.gold - cost };
+    setPlayer(nextState);
     setInTown(null);
     setTravelPath(path);
-    setTravelProgress(0);
+    setTravelDepartedAt(departedAt);
+    setTravelDurationSec(totalDurationSec);
     setIsTraveling(true);
-  }, [player, inTown, position]);
+
+    // Immediately persist to DB so other devices can resume
+    await supabase.from('profiles').update({
+      gold: nextState.gold,
+      travel_path: path,
+      travel_started_at: departedAt.toISOString(),
+      travel_duration_seconds: totalDurationSec,
+      updated_at: new Date().toISOString()
+    }).eq('id', session!.user.id);
+  }, [player, inTown, position, session]);
 
   const effectiveAtk = player ? player.attack + totalEquipAtk(player) + totalPartnerAtk(player) : 0;
   const effectiveDef = player ? player.defense + totalEquipDef(player) + totalPartnerDef(player) : 0;
@@ -1407,7 +1466,7 @@ const App: React.FC = () => {
                     <div className="w-full h-2.5 bg-white/10 rounded-full overflow-hidden border border-white/5 relative">
                       <div
                         className="absolute inset-y-0 left-0 bg-gradient-to-r from-game-gold to-orange-400 shadow-[0_0_15px_#fbbf24] transition-all duration-100 ease-linear rounded-full"
-                        style={{ width: `${(travelProgress / (travelPath.length - 1)) * 100}%` }}
+                        style={{ width: `${travelProgress * 100}%` }}
                       />
                     </div>
                   </div>

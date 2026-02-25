@@ -28,6 +28,11 @@ create table public.profiles (
   partners jsonb default '[]'::jsonb,
   session_id uuid,
   
+  -- 火車旅行狀態 (時間倒數方案 - 可跨裝置同步)
+  travel_path jsonb default null,
+  travel_started_at timestamp with time zone default null,
+  travel_duration_seconds double precision default null,
+  
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
