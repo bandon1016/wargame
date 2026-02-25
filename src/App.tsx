@@ -402,6 +402,7 @@ const App: React.FC = () => {
           }
           // Only update if it's not the current player state (basic check via updated_at or just update to be sure)
           setPlayer({
+            nickname: data.nickname,
             level: data.level, exp: data.exp, maxExp: data.max_exp,
             hp: data.hp, maxHp: data.max_hp, attack: data.attack, defense: data.defense,
             gold: data.gold, baseMaterials: data.base_materials,
@@ -431,6 +432,7 @@ const App: React.FC = () => {
     if (data) {
       // Decode json fields if they were stored as JSON strings or raw objects
       setPlayer({
+        nickname: data.nickname,
         level: data.level, exp: data.exp, maxExp: data.max_exp,
         hp: data.hp, maxHp: data.max_hp, attack: data.attack, defense: data.defense,
         gold: data.gold, baseMaterials: data.base_materials,
@@ -1361,7 +1363,7 @@ const App: React.FC = () => {
           </div>
           <div className="min-w-0">
             <div className="text-sm font-bold flex items-center gap-3">
-              <span className="truncate">勇者 <span className="text-gray-500 font-normal text-xs ml-1">Lv.{player.level}</span></span>
+              <span className="truncate">{player.nickname || '勇者'} <span className="text-gray-500 font-normal text-xs ml-1">Lv.{player.level}</span></span>
               <div className="flex items-center gap-2 border-l border-white/10 pl-2">
                 <div className="flex items-center gap-0.5 text-[11px] font-bold text-red-400">
                   <Sword size={10} /> {effectiveAtk}

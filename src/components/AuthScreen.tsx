@@ -6,6 +6,7 @@ export const AuthScreen: React.FC<{ onSignIn: () => void }> = ({ onSignIn }) => 
     const [isLogin, setIsLogin] = useState(true);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [nickname, setNickname] = useState('');
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState('');
 
@@ -20,7 +21,16 @@ export const AuthScreen: React.FC<{ onSignIn: () => void }> = ({ onSignIn }) => 
                 if (error) throw error;
                 onSignIn();
             } else {
-                const { error } = await supabase.auth.signUp({ email, password });
+                if (!nickname.trim()) throw new Error('請輸入角色名稱');
+                const { error } = await supabase.auth.signUp({
+                    email,
+                    password,
+                    options: {
+                        data: {
+                            nickname: nickname.trim()
+                        }
+                    }
+                });
                 if (error) throw error;
                 setMessage('註冊成功！系統已為您建立冒險者檔案。按登入進入遊戲。');
                 setIsLogin(true);
@@ -45,11 +55,24 @@ export const AuthScreen: React.FC<{ onSignIn: () => void }> = ({ onSignIn }) => 
                     </div>
 
                     <h1 className="text-2xl font-bold text-center mb-2 tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">
-                        世界之痕
+                        浪跡戰域
                     </h1>
-                    <p className="text-gray-400 text-center text-sm mb-8">World Scar - 現實地理 RPG</p>
+                    <p className="text-gray-400 text-center text-sm mb-8">Wanderer's Realm - 現實地理 RPG</p>
 
                     <form onSubmit={handleAuth} className="space-y-4">
+                        {!isLogin && (
+                            <div>
+                                <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">角色名稱 (Nickname)</label>
+                                <input
+                                    type="text"
+                                    required={!isLogin}
+                                    value={nickname}
+                                    onChange={(e) => setNickname(e.target.value)}
+                                    className="w-full bg-gray-900/50 border border-gray-700/50 rounded-xl px-4 py-3 outline-none focus:border-game-accent/50 transition-colors"
+                                    placeholder="這將是你在世界之痕的稱號"
+                                />
+                            </div>
+                        )}
                         <div>
                             <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Email</label>
                             <input

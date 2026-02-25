@@ -49,9 +49,10 @@ create policy "使用者可以建立自己的資料" on profiles for insert with
 create or replace function public.handle_new_user()
 returns trigger as $$
 begin
-  insert into public.profiles (id, buildings, equipment, equipped_weapon, equipped_armor, items, skills, partners)
+  insert into public.profiles (id, nickname, buildings, equipment, equipped_weapon, equipped_armor, items, skills, partners)
   values (
     new.id,
+    new.raw_user_meta_data->>'nickname',
     -- 初始建築 (資源工坊, 淘金礦場)
     '[{"id": "b1", "name": "資源工坊", "type": "material_camp", "level": 1, "baseProduction": 60, "upgradeCost": 50, "description": "自動產出家園建材", "icon": "🧱"}, {"id": "b2", "name": "淘金礦場", "type": "gold_mine", "level": 1, "baseProduction": 30, "upgradeCost": 100, "description": "自動產出金幣", "icon": "⛏️"}]'::jsonb,
     -- 背包初始裝備

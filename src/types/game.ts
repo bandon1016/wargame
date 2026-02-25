@@ -54,6 +54,7 @@ export interface Building {
 }
 
 export interface CharacterStats {
+    nickname?: string;
     level: number;
     exp: number;
     maxExp: number;
