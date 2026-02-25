@@ -332,8 +332,8 @@ const App: React.FC = () => {
       if (learnedSkill && !skills.find(s => s.id === learnedSkill.id)) skills.push(learnedSkill);
       if (loot) loot.forEach(li => {
         const ex = items.find(i => i.id === li.id);
-        if (ex) ex.quantity = (ex.quantity || 1) + (li.quantity || 1);
-        else items.push({ ...li, quantity: li.quantity || 1 });
+        if (ex) ex.quantity = (ex.quantity ?? 1) + (li.quantity ?? 1);
+        else items.push({ ...li, quantity: li.quantity ?? 1 });
       });
       const nextState = { ...prev, level: lv, exp: xp, maxExp: mx, hp, maxHp, attack: atk, defense: def, gold: prev.gold + gold, skills, items };
       saveProfile(nextState);
@@ -364,10 +364,10 @@ const App: React.FC = () => {
       // Update items list
       const newItems = prev.items.map(i => {
         if (i.id === item.id) {
-          return { ...i, quantity: (i.quantity || 1) - 1 };
+          return { ...i, quantity: (i.quantity ?? 1) - 1 };
         }
         return i;
-      }).filter(i => (i.quantity || 1) > 0);
+      }).filter(i => (i.quantity ?? 1) > 0);
 
       // Perform healing logic
       let recoverAmount = 0;
