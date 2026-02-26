@@ -152,6 +152,7 @@ const App: React.FC = () => {
   const walkTargetRef = React.useRef<[number, number] | null>(null);
   const walkStartRef = React.useRef<[number, number] | null>(null);
   const walkStartedAtRef = React.useRef<Date | null>(null);
+  const lastSafePositionRef = React.useRef<[number, number]>([25.0330, 121.5654]); // 紀錄最後在陸地的安全座標
   const [lootMessage, setLootMessage] = useState<{ title: string; items: { name: string; quantity: number; icon: string }[] } | null>(null);
 
   const [activePoiCombat, setActivePoiCombat] = useState<string | null>(null);
@@ -278,10 +279,26 @@ const App: React.FC = () => {
           headers: { 'Accept-Language': 'zh-TW' }
         });
         const data = await res.json();
+
+        let city = '未知海域';
         if (data && data.address) {
-          // Priority: city, town, village, state
-          const city = data.address.city || data.address.town || data.address.village || data.address.state || '未知海域';
+          city = data.address.city || data.address.town || data.address.village || data.address.state || '未知海域';
+        }
+
+        if (city === '未知海域' || (data && data.error)) {
+          // Player hit the ocean! Bounce back to last safe land
+          setPosition(lastSafePositionRef.current);
+          setTargetPosition(null);
+          setIsWalking(false);
+          walkTargetRef.current = null;
+          walkStartRef.current = null;
+          walkStartedAtRef.current = null;
+          moveDirRef.current = null;
+          // Notice: We don't change areaName here, we just bounced them back.
+          setTimeout(() => saveProfileRef.current?.(), 0);
+        } else {
           setAreaName(city);
+          lastSafePositionRef.current = position;
         }
       } catch (e) {
         console.error("Geocoding error:", e);
@@ -730,7 +747,7 @@ const App: React.FC = () => {
           const s = CONTINUOUS_SPEED;
           const nextPos: [number, number] = d === 'n' ? [p[0] + s, p[1]] : d === 's' ? [p[0] - s, p[1]] : d === 'e' ? [p[0], p[1] + s] : [p[0], p[1] - s];
 
-          if (!isInTaiwan(nextPos[0], nextPos[1]) || areaName === '未知海域') {
+          if (!isInTaiwan(nextPos[0], nextPos[1])) {
             stopMove(); // hit the wall
             return p;
           }
@@ -807,7 +824,7 @@ const App: React.FC = () => {
       const currentLat = startLat + dLat * currentProgress;
       const currentLng = startLng + dLng * currentProgress;
 
-      if (!isInTaiwan(currentLat, currentLng) || areaName === '未知海域') {
+      if (!isInTaiwan(currentLat, currentLng)) {
         // Stop walking if we hit the boundary mid-walk
         setTargetPosition(null);
         setIsWalking(false);
