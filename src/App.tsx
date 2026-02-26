@@ -928,8 +928,12 @@ const App: React.FC = () => {
       }
     }
 
-    // Regional drops (50% chance to drop regional material)
-    if (Math.random() > 0.5) {
+    // Regional drops (Boss 100%, Elite 30%, Normal 10%)
+    let regionalDropChance = 0.10;
+    if (isBoss) regionalDropChance = 1.00;
+    else if (isElite) regionalDropChance = 0.30;
+
+    if (Math.random() < regionalDropChance) {
       const region = getRegionByCityName(areaName);
       const matIds = getRegionalMaterials(region);
       if (matIds.length > 0) {
