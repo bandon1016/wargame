@@ -1601,6 +1601,20 @@ const App: React.FC = () => {
                         )}
                       </div>
                     ))}
+
+                    <div className="pt-2 mt-2 border-t-2 border-black/20">
+                      <div className="flex items-center gap-2 mb-2">
+                        <MapPin size={14} className="text-game-accent" strokeWidth={3} />
+                        <span className="font-black text-[12px] uppercase">特產材料情報</span>
+                      </div>
+                      <div className="text-[11px] text-gray-800 font-bold space-y-1">
+                        <div className="flex items-start gap-1.5"><span className="w-8 text-right shrink-0">北部:</span> 科技廢料 ⚙️, 魔法玻璃 🪷</div>
+                        <div className="flex items-start gap-1.5"><span className="w-8 text-right shrink-0">中部:</span> 高山鐵礦 ⛰️, 神木枝枒 🍃</div>
+                        <div className="flex items-start gap-1.5"><span className="w-8 text-right shrink-0">南部:</span> 炎漠紅砂 🏜️, 海淵珍珠 🦪</div>
+                        <div className="flex items-start gap-1.5"><span className="w-8 text-right shrink-0">東部:</span> 花東水晶 💠, 玄武岩礦石 🌑</div>
+                        <div className="text-[10px] text-game-accent mt-1.5 italic font-black">* 狩獵魔物時有極高機率掉落當地特產。</div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
