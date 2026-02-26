@@ -896,14 +896,45 @@ const App: React.FC = () => {
   };
 
   const startHunt = useCallback((isElite = false) => {
-    if (!player) return;
-    const lv = player.level;
+    const p = playerRef.current;
+    if (!p) return;
+    const lv = p.level;
     const pool = MONSTER_DATABASE.filter(m => lv >= m.minLv && lv <= m.maxLv + 5);
     const template = pool.length > 0 ? pool[Math.floor(Math.random() * pool.length)] : MONSTER_DATABASE[0];
 
-    // Elite stats boost
+    const isBoss = isElite && template.name.includes('黑龍'); // Using Black Dragon as Boss definition for now
     const statMultiplier = isElite ? 2.5 : 1;
-    const hp = Math.floor((template.baseHp + lv * 8) * statMultiplier);
+
+    let hp, eAtk, eDef;
+
+    if (isElite || isBoss) {
+      // Dynamic Scaling System: Scale based on player's overall combat power
+      const pHP = p.maxHp + totalEquipHp(p) + totalPartnerHp(p);
+      const pATK = p.attack + totalEquipAtk(p) + totalPartnerAtk(p);
+      const pDEF = p.defense + totalEquipDef(p) + totalPartnerDef(p);
+
+      const diffMultiplier = isBoss ? 1.5 : 1.0;
+
+      // HP: Set to require 5-8 hits from player's total ATK to kill
+      const baseHp = Math.max(template.baseHp * statMultiplier, pATK * (5 + Math.random() * 3) * diffMultiplier);
+
+      // ATK: Target 15-20% of player's total HP per hit (after DEF reduction is considered)
+      // Elite Attack - Player Def = Target Damage => Elite Attack = Target Damage + Player Def
+      const targetDmgPerHit = pHP * (0.15 + Math.random() * 0.05) * diffMultiplier;
+      const baseAtk = Math.max(template.baseAtk * statMultiplier, pDEF + targetDmgPerHit);
+
+      // DEF: Elite negates about 30% of player ATK
+      const baseDef = Math.max(template.baseDef * statMultiplier, pATK * 0.3 * diffMultiplier);
+
+      hp = Math.floor(baseHp);
+      eAtk = Math.floor(baseAtk);
+      eDef = Math.floor(baseDef);
+    } else {
+      hp = Math.floor((template.baseHp + lv * 8) * statMultiplier);
+      eAtk = Math.floor((template.baseAtk + lv * 2) * statMultiplier);
+      eDef = Math.floor((template.baseDef + Math.floor(lv * 0.8)) * statMultiplier);
+    }
+
     const sk = SKILL_DATABASE[Math.floor(Math.random() * SKILL_DATABASE.length)];
     const lootCount = isElite ? 3 : (Math.random() > 0.6 ? 1 : 0);
     const loots: GameItem[] = [];
@@ -949,8 +980,6 @@ const App: React.FC = () => {
     }
 
     // Weather Effects on Stats (simplified)
-    let eAtk = Math.floor((template.baseAtk + lv * 2) * statMultiplier);
-    let eDef = Math.floor((template.baseDef + Math.floor(lv * 0.8)) * statMultiplier);
     if (weatherRef.current === 'rainy') {
       eDef += 2; // monsters slightly tougher in rain
     } else if (weatherRef.current === 'foggy') {
