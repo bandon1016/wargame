@@ -147,6 +147,11 @@ const App: React.FC = () => {
   const [targetPosition, setTargetPosition] = useState<[number, number] | null>(null);
   const [isWalking, setIsWalking] = useState(false);
   const moveDirRef = React.useRef<'n' | 's' | 'e' | 'w' | null>(null);
+
+  // Walking persistence refs
+  const walkTargetRef = React.useRef<[number, number] | null>(null);
+  const walkStartRef = React.useRef<[number, number] | null>(null);
+  const walkStartedAtRef = React.useRef<Date | null>(null);
   const [lootMessage, setLootMessage] = useState<{ title: string; items: { name: string; quantity: number; icon: string }[] } | null>(null);
 
   const [activePoiCombat, setActivePoiCombat] = useState<string | null>(null);
@@ -478,6 +483,45 @@ const App: React.FC = () => {
       console.error('Fetch profile error:', error);
     }
 
+    // Restore walk state from DB if present
+    if (data && data.walk_target_lat && data.walk_target_lng && data.walk_started_at && data.walk_start_lat && data.walk_start_lng && !data.travel_path) {
+      const targetLat: number = data.walk_target_lat;
+      const targetLng: number = data.walk_target_lng;
+      const startLat: number = data.walk_start_lat;
+      const startLng: number = data.walk_start_lng;
+      const startedAt = new Date(data.walk_started_at);
+      const elapsedSec = (Date.now() - startedAt.getTime()) / 1000;
+
+      const dLat = targetLat - startLat;
+      const dLng = targetLng - startLng;
+      const dist = Math.hypot(dLat, dLng);
+      // Speed is ~0.00008 lat/lng units per frame (assuming 60fps = ~0.0048 per sec limit)
+      // Actually walking is 0.00008 hypot distance per frame ~ 0.0048 per second
+      const speedPerSec = 0.0048;
+      const durationSec = dist / speedPerSec;
+
+      if (elapsedSec >= durationSec) {
+        // Arrived at walking target while offline
+        setPosition([targetLat, targetLng]);
+        setTargetPosition(null);
+        setIsWalking(false);
+        walkTargetRef.current = null;
+        walkStartRef.current = null;
+        walkStartedAtRef.current = null;
+      } else {
+        // Still walking towards target
+        const currentProgress = elapsedSec / durationSec;
+        const currentLat = startLat + dLat * currentProgress;
+        const currentLng = startLng + dLng * currentProgress;
+        setPosition([currentLat, currentLng]);
+        setTargetPosition([targetLat, targetLng]);
+        walkTargetRef.current = [targetLat, targetLng];
+        walkStartRef.current = [startLat, startLng];
+        walkStartedAtRef.current = startedAt;
+        setIsWalking(true);
+      }
+    }
+
     // Restore travel state from DB if present
     if (data && data.travel_path && data.travel_started_at && data.travel_duration_seconds) {
       const path: [number, number][] = data.travel_path;
@@ -526,6 +570,23 @@ const App: React.FC = () => {
         travel_duration_seconds: null,
       };
 
+    const isCurrentlyWalking = walkTargetRef.current && walkStartedAtRef.current && walkStartRef.current;
+    const walkSaveData = isCurrentlyWalking
+      ? {
+        walk_target_lat: walkTargetRef.current![0],
+        walk_target_lng: walkTargetRef.current![1],
+        walk_start_lat: walkStartRef.current![0],
+        walk_start_lng: walkStartRef.current![1],
+        walk_started_at: walkStartedAtRef.current!.toISOString(),
+      }
+      : {
+        walk_target_lat: null,
+        walk_target_lng: null,
+        walk_start_lat: null,
+        walk_start_lng: null,
+        walk_started_at: null,
+      };
+
     const { error } = await supabase.from('profiles').update({
       level: p.level, exp: p.exp, max_exp: p.maxExp,
       hp: p.hp, max_hp: p.maxHp, attack: p.attack, defense: p.defense,
@@ -544,6 +605,7 @@ const App: React.FC = () => {
       current_location_lat: positionRef.current[0],
       current_location_lng: positionRef.current[1],
       ...travelSaveData,
+      ...walkSaveData,
       updated_at: new Date().toISOString()
     }).eq('id', session.user.id);
 
@@ -689,7 +751,7 @@ const App: React.FC = () => {
     moveDirRef.current = null;
   };
 
-  // Click-to-Move Walking Animation
+  // Click-to-Move Walking Animation (Time-based for persistence)
   useEffect(() => {
     if (!targetPosition || isTraveling) {
       setIsWalking(false);
@@ -697,27 +759,49 @@ const App: React.FC = () => {
     }
 
     let frameId: number;
-    const WALKING_SPEED = 0.00008; // Speed of walking per frame
+    // Speed is ~0.00008 lat/lng units per frame (assuming 60fps = ~0.0048 per sec limit)
+    // Actually walking is 0.00008 hypot distance per frame ~ 0.0048 per second
+    const speedPerSec = 0.0048;
+
+    // Initialize refs if starting a new walk
+    if (!walkStartRef.current || !walkStartedAtRef.current || !walkTargetRef.current || walkTargetRef.current[0] !== targetPosition[0] || walkTargetRef.current[1] !== targetPosition[1]) {
+      walkStartRef.current = [...positionRef.current] as [number, number];
+      walkTargetRef.current = [...targetPosition] as [number, number];
+      walkStartedAtRef.current = new Date();
+      saveProfileRef.current?.(); // Trigger save to register new walk start
+    }
 
     const animate = () => {
-      setPosition(prev => {
-        const [currLat, currLng] = prev;
-        const [tgtLat, tgtLng] = targetPosition;
+      const startLat = walkStartRef.current![0];
+      const startLng = walkStartRef.current![1];
+      const targetLat = walkTargetRef.current![0];
+      const targetLng = walkTargetRef.current![1];
+      const startedAt = walkStartedAtRef.current!;
 
-        const dLat = tgtLat - currLat;
-        const dLng = tgtLng - currLng;
-        const dist = Math.hypot(dLat, dLng);
+      const elapsedSec = (Date.now() - startedAt.getTime()) / 1000;
+      const dLat = targetLat - startLat;
+      const dLng = targetLng - startLng;
+      const dist = Math.hypot(dLat, dLng);
+      const durationSec = dist / speedPerSec;
 
-        if (dist < WALKING_SPEED) {
-          setTargetPosition(null);
-          setIsWalking(false);
-          return targetPosition;
-        }
+      if (durationSec <= 0 || elapsedSec >= durationSec) {
+        // Arrived
+        setPosition([targetLat, targetLng]);
+        setTargetPosition(null);
+        setIsWalking(false);
+        walkTargetRef.current = null;
+        walkStartRef.current = null;
+        walkStartedAtRef.current = null;
+        saveProfileRef.current?.(); // Save arrival
+        return;
+      }
 
-        setIsWalking(true);
-        const ratio = WALKING_SPEED / dist;
-        return [currLat + dLat * ratio, currLng + dLng * ratio] as [number, number];
-      });
+      setIsWalking(true);
+      const currentProgress = elapsedSec / durationSec;
+      const currentLat = startLat + dLat * currentProgress;
+      const currentLng = startLng + dLng * currentProgress;
+      setPosition([currentLat, currentLng]);
+
       frameId = requestAnimationFrame(animate);
     };
 

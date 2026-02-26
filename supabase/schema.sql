@@ -33,6 +33,13 @@ create table public.profiles (
   travel_started_at timestamp with time zone default null,
   travel_duration_seconds double precision default null,
   
+  -- 徒步旅行狀態 (時間倒數方案 - 可跨裝置同步)
+  walk_target_lat double precision default null,
+  walk_target_lng double precision default null,
+  walk_start_lat double precision default null,
+  walk_start_lng double precision default null,
+  walk_started_at timestamp with time zone default null,
+  
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
