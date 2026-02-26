@@ -1,10 +1,36 @@
+export interface SkillDebuff {
+    type: 'burn' | 'reflect' | 'regen' | 'freeze' | 'rend' | 'shock';
+    baseChance: number;      // Lv.1 時的基礎觸發機率 (%)
+    chanceGrowth: number;    // 每級提升的觸發機率 (%)
+    baseDuration: number;    // 基礎持續回合數
+    durationGrowth: number;  // 每級提升的回合數
+    baseDamage: number;      // 基礎持續傷害 / 基礎恢復量 / 反射比例等數值
+    damageGrowth: number;    // 每級提升的傷害 / 恢復量 / 反射比例
+}
+
 export interface Skill {
     id: string;
     name: string;
-    power: number;
-    type: 'attack' | 'heal';
+    type: 'attack' | 'heal' | 'buff';
     description: string;
     icon: string; // emoji
+
+    // 數值
+    basePower: number;
+    powerGrowth: number;
+    baseMpCost: number;
+    mpCostGrowth: number;
+
+    // Buff 型態專用
+    durationTurns?: number; // 持續回合
+
+    debuff?: SkillDebuff;
+}
+
+export interface PlayerSkill {
+    id: string;
+    level: number;
+    fragments: number; // 持有碎片數量
 }
 
 export interface Equipment {
@@ -78,7 +104,9 @@ export interface CharacterStats {
     heal?: number;
     gold: number;
     baseMaterials: number;
-    skills: Skill[];
+    mp: number;
+    maxMp: number;
+    skills: PlayerSkill[];
     partners: Partner[];
     buildings: Building[];
     equipment: Equipment[];
@@ -121,12 +149,36 @@ export const MONSTER_DATABASE = [
 ];
 
 export const SKILL_DATABASE: Skill[] = [
-    { id: 'sk_slash', name: '旋風斬', power: 25, type: 'attack', description: '揮動武器造成範圍傷害', icon: '🌪️' },
-    { id: 'sk_fireball', name: '火球術', power: 35, type: 'attack', description: '召喚火焰轟擊敵人', icon: '🔥' },
-    { id: 'sk_heal', name: '治癒之光', power: 30, type: 'heal', description: '恢復自身 HP', icon: '💚' },
-    { id: 'sk_thunder', name: '雷擊', power: 40, type: 'attack', description: '閃電從天而降', icon: '⚡' },
-    { id: 'sk_iceblast', name: '冰爆', power: 30, type: 'attack', description: '冰晶碎片刺穿敵人', icon: '❄️' },
-    { id: 'sk_shield', name: '鐵壁', power: 20, type: 'heal', description: '暫時提升防禦', icon: '🛡️' },
+    {
+        id: 'sk_slash', name: '旋風斬', type: 'attack', description: '揮動武器造成範圍傷害', icon: '🌪️',
+        basePower: 25, powerGrowth: 10, baseMpCost: 15, mpCostGrowth: 2,
+        debuff: { type: 'rend', baseChance: 30, chanceGrowth: 2, baseDuration: 2, durationGrowth: 0, baseDamage: 10, damageGrowth: 4 }
+    },
+    {
+        id: 'sk_fireball', name: '火球術', type: 'attack', description: '召喚火焰轟擊敵人', icon: '🔥',
+        basePower: 35, powerGrowth: 15, baseMpCost: 25, mpCostGrowth: 3,
+        debuff: { type: 'burn', baseChance: 40, chanceGrowth: 3, baseDuration: 3, durationGrowth: 0.1, baseDamage: 10, damageGrowth: 5 }
+    },
+    {
+        id: 'sk_heal', name: '治癒之光', type: 'heal', description: '恢復自身 HP', icon: '💚',
+        basePower: 30, powerGrowth: 12, baseMpCost: 20, mpCostGrowth: 2,
+        debuff: { type: 'regen', baseChance: 100, chanceGrowth: 0, baseDuration: 3, durationGrowth: 0, baseDamage: 15, damageGrowth: 5 }
+    },
+    {
+        id: 'sk_thunder', name: '雷擊', type: 'attack', description: '閃電從天而降', icon: '⚡',
+        basePower: 40, powerGrowth: 18, baseMpCost: 30, mpCostGrowth: 4,
+        debuff: { type: 'shock', baseChance: 25, chanceGrowth: 2, baseDuration: 2, durationGrowth: 0, baseDamage: 15, damageGrowth: 6 }
+    },
+    {
+        id: 'sk_iceblast', name: '冰爆', type: 'attack', description: '冰晶碎片刺穿敵人', icon: '❄️',
+        basePower: 30, powerGrowth: 15, baseMpCost: 20, mpCostGrowth: 3,
+        debuff: { type: 'freeze', baseChance: 20, chanceGrowth: 1.5, baseDuration: 1, durationGrowth: 0.2, baseDamage: 5, damageGrowth: 2 }
+    },
+    {
+        id: 'sk_shield', name: '鐵壁', type: 'buff', description: '暫時提升防禦', icon: '🛡️',
+        basePower: 20, powerGrowth: 8, baseMpCost: 25, mpCostGrowth: 3, durationTurns: 3,
+        debuff: { type: 'reflect', baseChance: 100, chanceGrowth: 0, baseDuration: 3, durationGrowth: 0, baseDamage: 15, damageGrowth: 2 } // baseDamage used as % reflect
+    },
 ];
 
 export const EQUIPMENT_DATABASE: Equipment[] = [
@@ -361,19 +413,26 @@ export const ALCHEMY_RECIPES: AlchemyRecipe[] = [
 export type RegionType = 'north' | 'central' | 'south' | 'east' | 'unknown';
 
 export const getRegionByCoordinates = (lat: number, lng: number): RegionType => {
-    // East coast: high lng
-    if (lng > 121.2 && lat > 22.5 && lat <= 24.5) return 'east';
+    // 東部地區判定：中央山脈以東 (約 121.0E 以東，但不含宜蘭)
+    if (lng > 121.0 && lat <= 24.5) return 'east';
+
+    // 西部地區依據緯度判定
     if (lat > 24.5) return 'north';
     if (lat > 23.5 && lat <= 24.5) return 'central';
-    if (lat > 22.0 && lat <= 23.5) return 'south';
+    if (lat > 21.8 && lat <= 23.5) return 'south';
     return 'unknown';
 };
 
 export const getRegionByCityName = (cityName: string): RegionType => {
-    if (['臺北市', '台北市', '新北市', '基隆市', '桃園市', '新竹縣', '新竹市', '宜蘭縣'].includes(cityName)) return 'north';
-    if (['臺中市', '台中市', '苗栗縣', '彰化縣', '南投縣', '雲林縣'].includes(cityName)) return 'central';
-    if (['高雄市', '臺南市', '台南市', '嘉義縣', '嘉義市', '屏東縣', '澎湖縣'].includes(cityName)) return 'south';
-    if (['花蓮縣', '臺東縣', '台東縣'].includes(cityName)) return 'east';
+    const north = ['臺北', '台北', '新北', '基隆', '桃園', '新竹', '宜蘭'];
+    const central = ['臺中', '台中', '苗栗', '彰化', '南投', '雲林'];
+    const south = ['高雄', '臺南', '台南', '嘉義', '屏東', '澎湖'];
+    const east = ['花蓮', '臺東', '台東'];
+
+    if (north.some(c => cityName.includes(c))) return 'north';
+    if (central.some(c => cityName.includes(c))) return 'central';
+    if (south.some(c => cityName.includes(c))) return 'south';
+    if (east.some(c => cityName.includes(c))) return 'east';
     return 'unknown';
 };
 

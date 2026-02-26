@@ -3,7 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup, useMap, Circle, Polyline, useMa
 import 'leaflet/dist/leaflet.css';
 import { Compass, Sword, Home, Users, Package, Settings as SettingsIcon, Book, Heart, Shield, Zap, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, MapPin, Loader2, X, PlusCircle, Activity, Info, ShieldAlert, TrainFront } from 'lucide-react';
 import type { CharacterStats, Equipment, GameItem, Skill, MapPOI, Town, WeatherType, Enemy, AlchemyRecipe, BlacksmithRecipe } from './types/game';
-import { MONSTER_DATABASE, SKILL_DATABASE, ITEM_DATABASE, EQUIPMENT_DATABASE, RARITY_COLORS, WEATHER_TYPES, getRegionByCityName, getRegionalMaterials, TOWN_DATABASE, getPartnerAvatar, getRailwayPath } from './types/game';
+import { MONSTER_DATABASE, SKILL_DATABASE, ITEM_DATABASE, EQUIPMENT_DATABASE, RARITY_COLORS, WEATHER_TYPES, getRegionByCityName, getRegionalMaterials, getRegionByCoordinates, TOWN_DATABASE, getPartnerAvatar, getRailwayPath } from './types/game';
 import { CombatScreen } from './components/CombatScreen';
 import { PartnersTab } from './components/PartnersTab';
 import { HomeTab } from './components/HomeTab';
@@ -109,6 +109,26 @@ const POI_DETAILS = {
     frequency: '地圖隨機生成',
     effect: '立刻恢復勇者的生命值至 100% 狀態。'
   }
+};
+
+export const getSkillUpgradeInfo = (currentLevel: number) => {
+  if (currentLevel >= 10) return null;
+  const targetLv = currentLevel + 1;
+  const fragCost = [0, 1, 2, 3, 5, 8, 13, 21, 34, 55];
+  const goldCost = [0, 1000, 2000, 3000, 5000, 8000, 13000, 21000, 34000, 55000];
+
+  const fragments = fragCost[currentLevel] || 55;
+  const gold = goldCost[currentLevel] || 55000;
+
+  let successRate = 100;
+  if (targetLv === 5) successRate = 70;
+  else if (targetLv === 6) successRate = 60;
+  else if (targetLv === 7) successRate = 50;
+  else if (targetLv === 8) successRate = 40;
+  else if (targetLv === 9) successRate = 15;
+  else if (targetLv === 10) successRate = 10;
+
+  return { fragments, gold, successRate };
 };
 
 interface CombatLog {
@@ -225,6 +245,8 @@ const App: React.FC = () => {
 
   // Railway Travel States (Time-Based)
   const [isTraveling, setIsTraveling] = useState(false);
+  const isTravelingRef = React.useRef(isTraveling);
+  useEffect(() => { isTravelingRef.current = isTraveling; }, [isTraveling]);
   const [travelPath, setTravelPath] = useState<[number, number][]>([]);
   const [travelDepartedAt, setTravelDepartedAt] = useState<Date | null>(null);
   const [travelDurationSec, setTravelDurationSec] = useState(0);
@@ -319,7 +341,7 @@ const App: React.FC = () => {
 
         let city = '未知海域';
         if (data && data.address) {
-          city = data.address.city || data.address.town || data.address.village || data.address.state || '未知海域';
+          city = data.address.city || data.address.town || data.address.village || data.address.county || data.address.state || '未知海域';
         }
 
         if (city === '未知海域' || (data && data.error)) {
@@ -465,7 +487,7 @@ const App: React.FC = () => {
           setPlayer({
             nickname: data.nickname,
             level: data.level, exp: data.exp, maxExp: data.max_exp,
-            hp: data.hp, maxHp: data.max_hp, attack: data.attack, defense: data.defense,
+            hp: data.hp, maxHp: data.max_hp, mp: data.mp ?? 50, maxMp: data.max_mp ?? (40 + (data.level * 10)), attack: data.attack, defense: data.defense,
             gold: data.gold, baseMaterials: data.base_materials,
             buildings: data.buildings || [],
             equipment: data.equipment || [],
@@ -475,7 +497,11 @@ const App: React.FC = () => {
             equippedBoots: data.equipped_boots,
             equippedAccessory: data.equipped_accessory,
             items: data.items || [],
-            skills: data.skills || [],
+            skills: (data.skills || []).map((s: any) => ({
+              id: s.id,
+              level: s.level ?? 1,
+              fragments: s.fragments ?? 0
+            })),
             partners: data.partners || [],
           });
         }
@@ -495,7 +521,7 @@ const App: React.FC = () => {
       setPlayer({
         nickname: data.nickname,
         level: data.level, exp: data.exp, maxExp: data.max_exp,
-        hp: data.hp, maxHp: data.max_hp, attack: data.attack, defense: data.defense,
+        hp: data.hp, maxHp: data.max_hp, mp: data.mp ?? 50, maxMp: data.max_mp ?? (40 + (data.level * 10)), attack: data.attack, defense: data.defense,
         gold: data.gold, baseMaterials: data.base_materials,
         buildings: data.buildings || [],
         equipment: data.equipment || [],
@@ -505,7 +531,11 @@ const App: React.FC = () => {
         equippedBoots: data.equipped_boots,
         equippedAccessory: data.equipped_accessory,
         items: data.items || [],
-        skills: data.skills || [],
+        skills: (data.skills || []).map((s: any) => ({
+          id: s.id,
+          level: s.level ?? 1,
+          fragments: s.fragments ?? 0
+        })),
         partners: data.partners || [],
       });
 
@@ -643,7 +673,7 @@ const App: React.FC = () => {
 
     const { error } = await supabase.from('profiles').update({
       level: p.level, exp: p.exp, max_exp: p.maxExp,
-      hp: p.hp, max_hp: p.maxHp, attack: p.attack, defense: p.defense,
+      hp: p.hp, max_hp: p.maxHp, mp: p.mp, max_mp: p.maxMp, attack: p.attack, defense: p.defense,
       gold: p.gold, base_materials: p.baseMaterials,
       buildings: p.buildings,
       equipment: p.equipment,
@@ -896,6 +926,7 @@ const App: React.FC = () => {
   };
 
   const startHunt = useCallback((isElite = false) => {
+    if (isTravelingRef.current) return; // (If in train, cannot hunt)
     const p = playerRef.current;
     if (!p) return;
     const lv = p.level;
@@ -938,9 +969,14 @@ const App: React.FC = () => {
     const sk = SKILL_DATABASE[Math.floor(Math.random() * SKILL_DATABASE.length)];
     const lootCount = isElite ? 3 : (Math.random() > 0.6 ? 1 : 0);
     const loots: GameItem[] = [];
-    if (lootCount > 0) {
-      const it = ITEM_DATABASE[Math.floor(Math.random() * ITEM_DATABASE.length)];
-      loots.push({ ...it, quantity: 1 });
+
+    // General loots (Exclude regional materials from general pool)
+    const generalLootPool = ITEM_DATABASE.filter(i => !i.id.startsWith('mat_'));
+    for (let i = 0; i < lootCount; i++) {
+      const it = generalLootPool[Math.floor(Math.random() * generalLootPool.length)];
+      const existing = loots.find(l => l.id === it.id);
+      if (existing) existing.quantity++;
+      else loots.push({ ...it, quantity: 1 } as GameItem);
     }
 
     // Equipment Drop Logic (Normal 1%, Elite 5%, Boss 10%)
@@ -963,7 +999,12 @@ const App: React.FC = () => {
     else if (isElite) regionalDropChance = 0.30;
 
     if (Math.random() < regionalDropChance) {
-      const region = getRegionByCityName(areaName);
+      // Combined Region Check: Coordinates (primary) + City Name (secondary)
+      let region = getRegionByCoordinates(positionRef.current[0], positionRef.current[1]);
+      if (region === 'unknown') {
+        region = getRegionByCityName(areaName);
+      }
+
       const matIds = getRegionalMaterials(region);
       if (matIds.length > 0) {
         const matId = matIds[Math.floor(Math.random() * matIds.length)];
@@ -972,7 +1013,7 @@ const App: React.FC = () => {
           // check if already in loots
           const existing = loots.find(l => l.id === matId);
           if (existing) existing.quantity++;
-          else loots.push({ ...regionalMat, quantity: 1 });
+          else loots.push({ ...regionalMat, quantity: 1 } as GameItem);
         }
       }
     }
@@ -1003,7 +1044,7 @@ const App: React.FC = () => {
 
   // Auto Explore Logic
   useEffect(() => {
-    if (!autoExplore || isCombatAction || activeTab !== 'explore') return;
+    if (!autoExplore || isCombatAction || activeTab !== 'explore' || isTraveling) return;
 
     // Movement & Encounter cycle
     const encounterMover = setInterval(() => {
@@ -1022,7 +1063,7 @@ const App: React.FC = () => {
     return () => clearInterval(encounterMover);
   }, [autoExplore, isCombatAction, activeTab, move, startHunt]);
 
-  const handleCombatWin = useCallback(async (expReward: number, goldReward: number, learnedSkill?: Skill, lootList?: GameItem[], droppedEq?: Equipment, finalHp?: number) => {
+  const handleCombatWin = useCallback(async (expReward: number, goldReward: number, learnedSkill?: Skill, lootList?: GameItem[], droppedEq?: Equipment, finalHp?: number, finalMp?: number) => {
     if (!player) return;
 
     // Basic Exp & Gold
@@ -1034,6 +1075,7 @@ const App: React.FC = () => {
     let nextExp = newExp;
     let nextMaxExp = player.maxExp;
     let nextMaxHp = player.maxHp;
+    let nextMaxMp = player.maxMp;
     let nextAttack = player.attack;
     let nextDefense = player.defense;
 
@@ -1042,6 +1084,7 @@ const App: React.FC = () => {
       nextLevel++;
       nextMaxExp = Math.floor(nextMaxExp * 1.5);
       nextMaxHp += 20;
+      nextMaxMp += 10;
       nextAttack += 3;
       nextDefense += 2;
     }
@@ -1085,10 +1128,23 @@ const App: React.FC = () => {
       }
     });
 
-    // Handle learned skill
+    // Handle learned skill / fragments
     const newSkills = [...player.skills];
-    if (learnedSkill && !newSkills.find(s => s.id === learnedSkill.id)) {
-      newSkills.push(learnedSkill);
+    let skillRewardLog = null;
+    if (learnedSkill) {
+      const existingSkillIdx = newSkills.findIndex(s => s.id === learnedSkill.id);
+      if (existingSkillIdx >= 0) {
+        // Gain fragments instead
+        newSkills[existingSkillIdx] = {
+          ...newSkills[existingSkillIdx],
+          fragments: (newSkills[existingSkillIdx].fragments || 0) + 1
+        };
+        skillRewardLog = { name: `${learnedSkill.name}碎片`, quantity: 1, icon: '🧩' };
+      } else {
+        // Learn new skill
+        newSkills.push({ id: learnedSkill.id, level: 1, fragments: 0 });
+        skillRewardLog = { name: `技能:${learnedSkill.name}`, quantity: 1, icon: '✨' };
+      }
     }
 
     // Equipment Drops
@@ -1103,11 +1159,14 @@ const App: React.FC = () => {
       enemyName: currentEnemy?.name || '未知魔物',
       exp: expReward,
       gold: goldReward,
-      items: itemsToAward.map(i => ({ name: i.name, quantity: i.quantity || 1, icon: ITEM_DATABASE.find(itemDef => itemDef.id === i.id)?.icon ?? i.icon })).concat(
-        droppedEq ? [{ name: droppedEq.name, quantity: 1, icon: EQUIPMENT_DATABASE.find(eqDef => eqDef.id === droppedEq.id)?.icon ?? droppedEq.icon }] : []
-      )
+      items: itemsToAward.map(i => ({ name: i.name, quantity: i.quantity || 1, icon: ITEM_DATABASE.find(itemDef => itemDef.id === i.id)?.icon ?? i.icon }))
+        .concat(droppedEq ? [{ name: droppedEq.name, quantity: 1, icon: EQUIPMENT_DATABASE.find(eqDef => eqDef.id === droppedEq.id)?.icon ?? droppedEq.icon }] : [])
+        .concat(skillRewardLog ? [skillRewardLog] : [])
     };
     setCombatLogs(prev => [...prev, newLog].slice(-6));
+
+    const recoveredMp = Math.floor(nextMaxMp * 0.1); // Recover 10% MP on win
+    const computedFinalMp = Math.min(nextMaxMp, (finalMp ?? player.mp) + recoveredMp);
 
     const nextState = {
       ...player,
@@ -1116,6 +1175,8 @@ const App: React.FC = () => {
       maxExp: nextMaxExp,
       hp: nextLevel > player.level ? nextMaxHp : (finalHp ?? player.hp), // Heal to full only on level up
       maxHp: nextMaxHp,
+      mp: nextLevel > player.level ? nextMaxMp : computedFinalMp,
+      maxMp: nextMaxMp,
       attack: nextAttack,
       defense: nextDefense,
       gold: newGold,
@@ -1138,10 +1199,11 @@ const App: React.FC = () => {
     }
   }, [player, currentEnemy, saveProfile, fetchPois]);
 
-  const handleCombatLose = useCallback(async (finalHp?: number) => {
+  const handleCombatLose = useCallback(async (finalHp?: number, finalMp?: number) => {
     if (!player) return;
     const nextHp = finalHp ?? Math.floor(player.maxHp * 0.15);
-    const nextState = { ...player, hp: nextHp };
+    const nextMp = finalMp ?? player.mp;
+    const nextState = { ...player, hp: nextHp, mp: nextMp };
 
     const newLog: CombatLog = {
       id: Date.now().toString() + Math.random().toString(),
@@ -1348,6 +1410,49 @@ const App: React.FC = () => {
     saveProfile(nextState);
   }, [player, saveProfile]);
 
+  const handleUpgradeSkill = useCallback((skillId: string) => {
+    if (!player) return;
+
+    const skillIdx = player.skills.findIndex(s => s.id === skillId);
+    if (skillIdx < 0) return;
+
+    const pSkill = player.skills[skillIdx];
+    const upgradeInfo = getSkillUpgradeInfo(pSkill.level);
+
+    if (!upgradeInfo) {
+      alert('已達最大等級！');
+      return;
+    }
+
+    if (player.gold < upgradeInfo.gold || pSkill.fragments < upgradeInfo.fragments) {
+      alert('資源不足！');
+      return;
+    }
+
+    // Deduct costs
+    let nextState = { ...player, gold: player.gold - upgradeInfo.gold };
+    const newSkills = [...nextState.skills];
+    newSkills[skillIdx] = { ...newSkills[skillIdx], fragments: newSkills[skillIdx].fragments - upgradeInfo.fragments };
+
+    // Roll success
+    const roll = Math.random() * 100;
+    if (roll <= upgradeInfo.successRate) {
+      // Success
+      newSkills[skillIdx].level += 1;
+      setLootMessage({
+        title: '技能升級成功！',
+        items: [{ name: SKILL_DATABASE.find(s => s.id === skillId)?.name || '未知技能', quantity: newSkills[skillIdx].level, icon: '⬆️' }]
+      });
+    } else {
+      // Fail
+      alert(`升級失敗... (機率: ${upgradeInfo.successRate}%)`);
+    }
+
+    nextState.skills = newSkills;
+    setPlayer(nextState);
+    saveProfile(nextState);
+  }, [player, saveProfile]);
+
   const handleTravel = useCallback(async (destinationTown: Town) => {
     if (!player || !inTown) return;
 
@@ -1398,7 +1503,7 @@ const App: React.FC = () => {
 
   // Interaction Handler for POIs
   const handlePoiInteract = useCallback(async (poi: MapPOI) => {
-    if (!session?.user?.id) return;
+    if (!session?.user?.id || isTraveling) return;
 
     if (poi.type === 'elite') {
       const cd = eliteCooldowns[poi.id];
@@ -1433,7 +1538,10 @@ const App: React.FC = () => {
     if (poi.type === 'merchant') {
       // 5% Chance for Regional Gift
       if (Math.random() < 0.05) {
-        const region = getRegionByCityName(areaName);
+        let region = getRegionByCoordinates(positionRef.current[0], positionRef.current[1]);
+        if (region === 'unknown') {
+          region = getRegionByCityName(areaName);
+        }
         const mats = getRegionalMaterials(region);
         if (mats.length > 0) {
           const targetId = mats[Math.floor(Math.random() * mats.length)];
@@ -1617,6 +1725,14 @@ const App: React.FC = () => {
                 <div className="h-full bar-hp transition-all duration-500 rounded-full" style={{ width: `${(player.hp / effectiveMaxHp) * 100}%` }} />
               </div>
               <span className="text-[10px] text-gray-400 tabular-nums w-16 text-right">{player.hp}/{effectiveMaxHp}</span>
+            </div>
+            {/* MP bar */}
+            <div className="flex items-center gap-2 mt-0.5">
+              <div className="text-blue-400 font-black text-[10px] w-2.5 flex justify-center">M</div>
+              <div className="w-28 h-[4px] bg-gray-800 rounded-full overflow-hidden">
+                <div className="h-full bg-blue-500 transition-all duration-500 rounded-full shadow-[0_0_8px_rgba(59,130,246,0.6)]" style={{ width: `${Math.min(100, Math.max(0, (player.mp / player.maxMp) * 100))}%` }} />
+              </div>
+              <span className="text-[10px] text-gray-400 tabular-nums w-16 text-right">{player.mp}/{player.maxMp}</span>
             </div>
             {/* EXP bar */}
             <div className="flex items-center gap-2 mt-0.5">
@@ -1909,19 +2025,20 @@ const App: React.FC = () => {
                   )}
                   <div className="flex gap-2">
                     {nearestPoi ? (
-                      <button onClick={() => handlePoiInteract(nearestPoi)} className="flex-1 h-10 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-bold rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 px-3 text-sm">
+                      <button onClick={() => handlePoiInteract(nearestPoi)} disabled={isTraveling} className={`flex-1 h-10 bg-gradient-to-r from-emerald-500 to-teal-500 ${isTraveling ? 'opacity-50 grayscale cursor-not-allowed' : 'hover:from-emerald-400 hover:to-teal-400'} text-white font-bold rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 px-3 text-sm`}>
                         <MapPin size={18} /> 互動 ({POI_NAMES[nearestPoi.type] || '未知'})
                       </button>
                     ) : (
-                      <button onClick={() => startHunt(false)} disabled={autoExplore} className={`flex-1 h-10 ${autoExplore ? 'bg-gray-600' : 'bg-gradient-to-r from-game-accent to-indigo-500 hover:from-sky-400 hover:to-indigo-400'} text-white font-bold rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg px-3 text-sm ${autoExplore ? '' : 'shadow-game-accent/20'}`}>
-                        <Sword size={18} /> {autoExplore ? '自動探索' : '自由狩獵'}
+                      <button onClick={() => startHunt(false)} disabled={autoExplore || isTraveling} className={`flex-1 h-10 ${autoExplore || isTraveling ? 'bg-gray-600/50 cursor-not-allowed text-gray-400' : 'bg-gradient-to-r from-game-accent to-indigo-500 hover:from-sky-400 hover:to-indigo-400 text-white shadow-game-accent/20'} font-bold rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg px-3 text-sm`}>
+                        <Sword size={18} /> {autoExplore ? '自動探索' : isTraveling ? '火車旅途中' : '自由狩獵'}
                       </button>
                     )}
                     <button
-                      onClick={() => setAutoExplore(!autoExplore)}
-                      className={`h-10 w-10 flex-shrink-0 rounded-xl flex items-center justify-center transition-all ${autoExplore ? 'bg-green-500/20 text-green-400 border border-green-500/50 shadow-lg shadow-green-500/20' : 'bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10'}`}
+                      onClick={() => { if (!isTraveling) setAutoExplore(!autoExplore); }}
+                      disabled={isTraveling}
+                      className={`h-10 w-10 flex-shrink-0 rounded-xl flex items-center justify-center transition-all ${isTraveling ? 'bg-white/5 opacity-30 cursor-not-allowed' : autoExplore ? 'bg-green-500/20 text-green-400 border border-green-500/50 shadow-lg shadow-green-500/20' : 'bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10'}`}
                     >
-                      <Zap size={18} className={autoExplore ? 'animate-pulse' : ''} />
+                      <Zap size={18} className={autoExplore && !isTraveling ? 'animate-pulse' : ''} />
                     </button>
                   </div>
                 </div>
@@ -2061,18 +2178,78 @@ const App: React.FC = () => {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {player.skills.map(sk => (
-                    <div key={sk.id} className="p-4 rounded-2xl bg-white/5 border border-white/10 flex items-center gap-4 hover:bg-white/10 transition-colors">
-                      <div className="text-3xl filter drop-shadow-md">✨</div>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-bold text-sm text-white">{sk.name}</div>
-                        <div className="text-[11px] text-gray-400 truncate mt-1">{sk.description}</div>
+                  {player.skills.map(playerSkill => {
+                    const skInfo = SKILL_DATABASE.find(s => s.id === playerSkill.id);
+                    if (!skInfo) return null;
+                    const upgrade = getSkillUpgradeInfo(playerSkill.level);
+                    const currentPower = skInfo.basePower + (playerSkill.level - 1) * skInfo.powerGrowth;
+                    const currentMpCost = skInfo.baseMpCost + (playerSkill.level - 1) * skInfo.mpCostGrowth;
+
+                    return (
+                      <div key={playerSkill.id} className="p-4 rounded-2xl bg-white/5 border border-white/10 flex flex-col gap-3 hover:bg-white/10 transition-colors">
+                        <div className="flex items-center gap-4">
+                          <div className="text-3xl filter drop-shadow-md">{skInfo.icon}</div>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-bold text-sm text-white flex gap-2 items-center">
+                              {skInfo.name} <span className="text-game-accent text-xs">Lv.{playerSkill.level}</span>
+                            </div>
+                            <div className="text-[11px] text-gray-400 truncate mt-1">{skInfo.description}</div>
+                            {skInfo.debuff && (
+                              <div className="text-[10px] text-game-accent mt-1 p-1.5 bg-game-accent/5 rounded border border-game-accent/10 whitespace-normal">
+                                {skInfo.debuff.type === 'reflect' ? '🛡️' : skInfo.debuff.type === 'regen' ? '💚' : '💢'}
+                                附有【{
+                                  { burn: '持續燃燒', freeze: '持續凍傷', rend: '持續撕裂', shock: '持續電擊', reflect: '反射傷害', regen: '每回合自動恢復HP' }[skInfo.debuff.type] || '狀態'
+                                }效果】：
+                                {skInfo.debuff.baseChance + (playerSkill.level - 1) * skInfo.debuff.chanceGrowth}% 機率觸發，
+                                {skInfo.debuff.baseDamage + (playerSkill.level - 1) * skInfo.debuff.damageGrowth}{skInfo.debuff.type === 'reflect' ? '%' : '點'}
+                                持續 {Math.floor(skInfo.debuff.baseDuration + (playerSkill.level - 1) * skInfo.debuff.durationGrowth)} 回合
+                              </div>
+                            )}
+                          </div>
+                          <div className="text-right">
+                            <div className="text-[10px] font-black tracking-tighter text-blue-400 bg-blue-400/10 px-2 py-0.5 rounded border border-blue-400/20 mb-1">
+                              消耗 {currentMpCost} MP
+                            </div>
+                            {skInfo.durationTurns && !skInfo.debuff ? (
+                              <div className="text-[10px] font-black tracking-tighter text-emerald-400 bg-emerald-400/10 px-2 py-0.5 rounded border border-emerald-400/20">
+                                持續 {skInfo.durationTurns} 回合
+                              </div>
+                            ) : null}
+                            {skInfo.type !== 'buff' && (
+                              <div className="text-[10px] font-black tracking-tighter text-game-accent bg-game-accent/10 px-2 py-0.5 rounded border border-game-accent/20">
+                                威力 {currentPower}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        {/* Upgrade Section */}
+                        {upgrade ? (
+                          <div className="mt-2 pt-3 border-t border-white/10 flex items-center justify-between">
+                            <div className="flex gap-3 text-[11px]">
+                              <span className={playerSkill.fragments >= upgrade.fragments ? "text-emerald-400" : "text-red-400"}>
+                                碎片: {playerSkill.fragments}/{upgrade.fragments}
+                              </span>
+                              <span className={player.gold >= upgrade.gold ? "text-game-gold" : "text-red-400"}>
+                                💰 {upgrade.gold}
+                              </span>
+                              <span className="text-gray-400">成功率 {upgrade.successRate}%</span>
+                            </div>
+                            <button
+                              onClick={() => handleUpgradeSkill(playerSkill.id)}
+                              disabled={playerSkill.fragments < upgrade.fragments || player.gold < upgrade.gold}
+                              className="bg-game-accent/20 hover:bg-game-accent/40 disabled:opacity-30 disabled:hover:bg-game-accent/20 text-game-accent px-3 py-1 rounded text-xs font-bold transition-colors"
+                            >
+                              升級
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="mt-2 pt-3 border-t border-white/10 text-center text-[11px] text-gray-500 font-bold">
+                            已達最大等級 (Lv.MAX)
+                          </div>
+                        )}
                       </div>
-                      <div className="text-[10px] font-black tracking-tighter text-game-accent bg-game-accent/10 px-2.5 py-1.5 rounded-lg border border-game-accent/20">
-                        威力 {sk.power}
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -2305,13 +2482,13 @@ const App: React.FC = () => {
           { key: 'stats', icon: <Activity size={22} />, label: '勇者' },
         ].map(tab => (
           <button key={tab.key}
-            disabled={isCombatAction && tab.key !== activeTab}
             onClick={() => {
-              if (isCombatAction) return;
               setActiveTab(tab.key);
             }}
-            className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all ${activeTab === tab.key ? 'text-game-accent bg-game-accent/10 scale-105' : 'text-gray-500 hover:text-gray-300'} ${isCombatAction && tab.key !== activeTab ? 'opacity-20 cursor-not-allowed' : ''}`}>
-            {tab.icon}
+            className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all ${activeTab === tab.key ? 'text-game-accent bg-game-accent/10 scale-105' : 'text-gray-500 hover:text-gray-300'}`}>
+            <div className={`transition-transform duration-300 ${activeTab === tab.key ? '-translate-y-1' : ''}`}>
+              {tab.icon}
+            </div>
             <span className="text-[10px] font-medium">{tab.label}</span>
           </button>
         ))}

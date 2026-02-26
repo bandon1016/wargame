@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { CharacterStats, Enemy, Skill, WeatherType } from '../types/game';
+import { SKILL_DATABASE } from '../types/game';
 import { Shield, Sword, Heart, Play, Square, X, Award, PlusCircle } from 'lucide-react';
 
 interface CombatScreenProps {
     player: CharacterStats;
     enemy: Enemy;
-    onWin: (exp: number, gold: number, skill?: Skill, lootTable?: any[], equipmentDrop?: any, finalHp?: number) => void;
-    onLose: (finalHp?: number) => void;
+    onWin: (exp: number, gold: number, skill?: Skill, lootTable?: any[], equipmentDrop?: any, finalHp?: number, finalMp?: number) => void;
+    onLose: (finalHp?: number, finalMp?: number) => void;
     onFlee: () => void;
     autoExplore?: boolean;
     weather?: WeatherType;
@@ -16,106 +17,309 @@ interface CombatScreenProps {
 }
 
 export const CombatScreen: React.FC<CombatScreenProps> = ({ player, enemy, onWin, onLose, onFlee, autoExplore, weather, onAutoHeal, onRevive, onUseItem }) => {
+    const [combatStats] = useState({
+        attack: player.attack,
+        defense: player.defense,
+        maxHp: player.maxHp,
+        maxMp: player.maxMp,
+        heal: player.heal,
+        level: player.level,
+        skills: player.skills,
+        nickname: player.nickname || '勇者',
+    });
+
     const [eHp, setEHp] = useState(enemy.hp);
     const [pHp, setPHp] = useState(player.hp);
+    const [pMp, setPMp] = useState(player.mp);
     const [logs, setLogs] = useState<string[]>([`⚔️ 野外遭遇了 ${enemy.name} (Lv.${enemy.level})！`]);
     const [auto, setAuto] = useState(autoExplore || false);
     const [ended, setEnded] = useState(false);
+    const [isPlayerTurn, setIsPlayerTurn] = useState(true);
     const [pShake, setPShake] = useState(false);
     const [eShake, setEShake] = useState(false);
     const [result, setResult] = useState<'win' | 'lose' | null>(null);
     const logRef = useRef<HTMLDivElement>(null);
     const [awaitingRevive, setAwaitingRevive] = useState(false);
+    const [activeBuffs, setActiveBuffs] = useState<{ id: string; name: string; turns: number; type: string; power: number }[]>([]);
+    const [enemyDebuffs, setEnemyDebuffs] = useState<{ id: string; name: string; type: string; turns: number; damage: number; icon: string }[]>([]);
     const revivePotCount = player.items.find(i => i.id === 'item_revive_pot')?.quantity || 0;
 
     useEffect(() => { logRef.current?.scrollTo({ top: 999999, behavior: 'smooth' }); }, [logs]);
 
     useEffect(() => {
-        if (!auto || ended || awaitingRevive) return;
-        const tickRate = 3000; // 每 3 秒操作一次
-        const t = window.setTimeout(turn, tickRate);
+        if (!auto || ended || awaitingRevive || !isPlayerTurn) return;
+        const tickRate = 1500; // 稍快一點的自動節奏 (1.5秒)
+        const t = window.setTimeout(() => {
+            executePlayerAttack();
+        }, tickRate);
         return () => clearTimeout(t);
-    }, [auto, pHp, eHp, ended, awaitingRevive]);
+    }, [auto, isPlayerTurn, ended, awaitingRevive]);
 
     const log = (m: string) => setLogs(p => [...p, m]);
 
-    const turn = () => {
-        if (ended) return;
+    const executePlayerAttack = () => {
+        setIsPlayerTurn(false);
 
-        // Player attacks
-        const pDmg = Math.max(1, player.attack - enemy.defense + Math.floor(Math.random() * 6));
+        // Auto Heal check
+        if (auto && onAutoHeal && pHp < combatStats.maxHp * 0.4) {
+            const pot = player.items.find(i => i.type === 'potion' && i.id !== 'item_revive_pot');
+            if (pot) {
+                log(`✨ 生命危急！自動使用藥水...`);
+                onAutoHeal();
+                let recover = 50;
+                if (pot.id === 'item_hp_pot_m') recover = 150;
+                const newHp = Math.min(pHp + recover, combatStats.maxHp);
+                setPHp(newHp);
+                setTimeout(() => executeMonsterTurn(eHp, newHp, pMp), 800);
+                return;
+            }
+        }
+
+        // Auto Skill check
+        if (auto && combatStats.skills.length > 0) {
+            // Find a skill that we can afford (prefer attack skills in auto)
+            const availableSkills = combatStats.skills
+                .map(ps => ({ ps, def: SKILL_DATABASE.find(s => s.id === ps.id) }))
+                .filter(res => res.def && (pMp >= (res.def.baseMpCost + (res.ps.level - 1) * res.def.mpCostGrowth)));
+
+            if (availableSkills.length > 0 && Math.random() > 0.5) {
+                const pick = availableSkills[Math.floor(Math.random() * availableSkills.length)];
+                handleUseSkill(pick.ps.id);
+                return;
+            }
+        }
+
+        const atkBuff = activeBuffs.filter(b => b.type === 'atk').reduce((sum, b) => sum + b.power, 0);
+        const pDmg = Math.max(1, (combatStats.attack + atkBuff) - enemy.defense + Math.floor(Math.random() * 6));
         const newEHp = Math.max(0, eHp - pDmg);
         setEHp(newEHp);
         setEShake(true); setTimeout(() => setEShake(false), 300);
         log(`🗡️ 勇者揮出一擊，對 ${enemy.name} 造成 ${pDmg} 傷害`);
 
-        if (newEHp <= 0) { win(); return; }
+        if (newEHp <= 0) { win(newEHp, pHp, pMp); return; }
+
+        // Brief pause before monster turn
+        setTimeout(() => executeMonsterTurn(newEHp, pHp, pMp), 800);
+    };
+
+    const handleUseSkill = (skId: string) => {
+        if (ended || !isPlayerTurn || awaitingRevive) return;
+        const playerSkill = combatStats.skills.find(s => s.id === skId);
+        const skillDef = SKILL_DATABASE.find(s => s.id === skId);
+        if (!playerSkill || !skillDef) return;
+
+        const mpCost = skillDef.baseMpCost + (playerSkill.level - 1) * skillDef.mpCostGrowth;
+        if (pMp < mpCost) {
+            log(`❌ 魔力不足！需要 ${mpCost} MP`);
+            return;
+        }
+
+        setIsPlayerTurn(false);
+        const nextMp = pMp - mpCost;
+        setPMp(nextMp);
+
+        const power = skillDef.basePower + (playerSkill.level - 1) * skillDef.powerGrowth;
+        let currentEHp = eHp;
+        let currentPHp = pHp;
+
+        if (skillDef.type === 'attack') {
+            const atkBuff = activeBuffs.filter(b => b.type === 'atk').reduce((sum, b) => sum + b.power, 0);
+            const dmg = Math.max(1, power + Math.floor((combatStats.attack + atkBuff) * 0.5) - enemy.defense + Math.floor(Math.random() * 10));
+            currentEHp = Math.max(0, eHp - dmg);
+            setEHp(currentEHp);
+            setEShake(true); setTimeout(() => setEShake(false), 300);
+            log(`${skillDef.icon} 使用了 ${skillDef.name}！對 ${enemy.name} 造成 ${dmg} 傷害`);
+
+            // Apply debuff to enemy
+            if (skillDef.debuff && currentEHp > 0) {
+                const db = skillDef.debuff;
+                const chance = db.baseChance + (playerSkill.level - 1) * db.chanceGrowth;
+                if (Math.random() * 100 <= chance && db.type !== 'reflect' && db.type !== 'regen') {
+                    const turns = Math.floor(db.baseDuration + (playerSkill.level - 1) * db.durationGrowth);
+                    const dotDamage = Math.floor(db.baseDamage + (playerSkill.level - 1) * db.damageGrowth);
+
+                    setEnemyDebuffs(prev => {
+                        const existing = prev.find(d => d.type === db.type);
+                        if (existing) {
+                            return prev.map(d => d.type === db.type ? { ...d, turns: Math.max(d.turns, turns), damage: Math.max(d.damage, dotDamage) } : d);
+                        } else {
+                            return [...prev, { id: skillDef.id, name: skillDef.name, type: db.type, turns, damage: dotDamage, icon: skillDef.icon }];
+                        }
+                    });
+
+                    const debuffNames: Record<string, string> = { burn: '持續燃燒', freeze: '持續凍傷', rend: '持續撕裂', shock: '持續電擊' };
+                    log(`${skillDef.icon} ${enemy.name} 陷入了【${debuffNames[db.type]}】狀態！`);
+                }
+            }
+            if (currentEHp <= 0) { win(currentEHp, currentPHp, nextMp); return; }
+        } else if (skillDef.type === 'heal') {
+            const heal = Math.floor(power + combatStats.level * 2);
+            currentPHp = Math.min(combatStats.maxHp, pHp + heal);
+            setPHp(currentPHp);
+            log(`${skillDef.icon} 使用了 ${skillDef.name}！恢復了 ${heal} 點生命值`);
+
+            if (skillDef.debuff && skillDef.debuff.type === 'regen') {
+                const db = skillDef.debuff;
+                const turns = Math.floor(db.baseDuration + (playerSkill.level - 1) * db.durationGrowth);
+                const regenAmt = Math.floor(db.baseDamage + (playerSkill.level - 1) * db.damageGrowth);
+                setActiveBuffs(prev => [...prev.filter(b => b.type !== 'regen'), { id: skillDef.id, name: skillDef.name, turns, type: 'regen', power: regenAmt }]);
+                log(`💚 獲得【持續恢復】狀態，每回合恢復 ${regenAmt} HP，持續 ${turns} 回合！`);
+            }
+        } else if (skillDef.type === 'buff') {
+            if (skillDef.debuff && skillDef.debuff.type === 'reflect') {
+                const db = skillDef.debuff;
+                const turns = Math.floor(db.baseDuration + (playerSkill.level - 1) * db.durationGrowth);
+                const percent = Math.floor(db.baseDamage + (playerSkill.level - 1) * db.damageGrowth);
+                setActiveBuffs(prev => [...prev.filter(b => b.type !== 'reflect'), { id: skillDef.id, name: skillDef.name, turns, type: 'reflect', power: percent }]);
+                log(`${skillDef.icon} 使用了 ${skillDef.name}！獲得【反射傷害】狀態 (${percent}%)，持續 ${turns} 回合`);
+            } else {
+                setActiveBuffs(prev => [...prev.filter(b => b.type !== 'atk'), { id: skillDef.id, name: skillDef.name, turns: skillDef.durationTurns || 3, type: 'atk', power: power }]);
+                log(`${skillDef.icon} 使用了 ${skillDef.name}！攻擊力提升了 ${power}，持續 ${skillDef.durationTurns} 回合`);
+            }
+        }
+
+        setTimeout(() => executeMonsterTurn(currentEHp, currentPHp, nextMp), 800);
+    };
+
+    const executeMonsterTurn = (currentEHp: number, currentPHp: number, currentPMp: number) => {
+        if (ended) return;
+
+        let nextEHp = currentEHp;
+        let nextPHp = currentPHp;
+
+        // Process enemy DoTs
+        if (enemyDebuffs.length > 0) {
+            let totalDot = 0;
+            const msgs: string[] = [];
+            enemyDebuffs.forEach(d => {
+                totalDot += d.damage;
+                msgs.push(`${d.icon}`);
+            });
+            nextEHp = Math.max(0, nextEHp - totalDot);
+            setEHp(nextEHp);
+            setEShake(true); setTimeout(() => setEShake(false), 300);
+
+            const txt = msgs.length > 1 ? msgs.join('') + ' ' : '';
+            log(`${txt}魔物受到狀態影響，損失了 ${totalDot} 點生命值`);
+
+            setEnemyDebuffs(prev => prev.map(d => ({ ...d, turns: d.turns - 1 })).filter(d => d.turns > 0));
+
+            if (nextEHp <= 0) { win(nextEHp, nextPHp, currentPMp); return; }
+        }
 
         // Environmental Damage (Stormy)
         let stormDmgPlayer = 0;
         let stormDmgEnemy = 0;
-        let currentPHp = pHp;
-        let currentEHp = newEHp;
 
         if (weather === 'stormy' && Math.random() > 0.7) {
-            stormDmgPlayer = Math.floor(player.maxHp * 0.05);
+            stormDmgPlayer = Math.floor(combatStats.maxHp * 0.05);
             stormDmgEnemy = Math.floor(enemy.maxHp * 0.05);
-            currentPHp = Math.max(0, currentPHp - stormDmgPlayer);
-            currentEHp = Math.max(0, currentEHp - stormDmgEnemy);
-            setPHp(currentPHp);
-            setEHp(currentEHp);
+            nextPHp = Math.max(0, nextPHp - stormDmgPlayer);
+            nextEHp = Math.max(0, nextEHp - stormDmgEnemy);
+            setPHp(nextPHp);
+            setEHp(nextEHp);
             setPShake(true); setEShake(true);
             setTimeout(() => { setPShake(false); setEShake(false); }, 300);
             log(`⚡ 狂雷劈下！雙方分別受到 ${stormDmgPlayer} / ${stormDmgEnemy} 點環境傷害`);
 
-            if (currentEHp <= 0) { win(); return; }
-            if (currentPHp <= 0) { lose(); return; }
+            if (nextEHp <= 0) { win(nextEHp, nextPHp, currentPMp); return; }
+            if (nextPHp <= 0) { checkRevive(nextPHp, currentPMp); return; }
         }
 
-        // Auto Heal check for auto explore
-        if (autoExplore && onAutoHeal && currentPHp < player.maxHp * 0.4) {
-            log(`✨ 生命危急！自動嘗試使用藥水...`);
-            onAutoHeal();
-            // SYNC FIX: Since we know a potion heals at least 50 (or more), 
-            // and App.tsx handles the actual item deduction, we update local pHp too.
-            // This is a bit simplified but ensures the combat loop doesn't fail due to stale state.
-            const pot = player.items.find(i => i.type === 'potion' && i.id !== 'item_revive_pot');
-            if (pot) {
-                let recover = 50;
-                if (pot.id === 'item_hp_pot_m') recover = 150;
-                const newHp = Math.min(currentPHp + recover, player.maxHp);
-                setPHp(newHp);
-                currentPHp = newHp; // Update local ref for subsequent enemy attack
+        // Check Freeze Status
+        const isFrozen = enemyDebuffs.some(d => d.type === 'freeze' && d.turns > 0);
+
+        if (isFrozen) {
+            log(`❄️ 魔物遭到冰凍，無法動彈！`);
+
+            // Still process end of turn player buffs 
+            let postPHp = nextPHp;
+            if (combatStats.heal && combatStats.heal > 0 && nextPHp < combatStats.maxHp) {
+                const regen = Math.min(combatStats.heal, combatStats.maxHp - nextPHp);
+                postPHp = Math.min(postPHp + regen, combatStats.maxHp);
+                setPHp(postPHp);
+                log(`✨ 夥伴支援！治癒光輝恢復了 ${regen} 點生命`);
             }
+
+            const regenBuff = activeBuffs.find(b => b.type === 'regen');
+            if (regenBuff && postPHp < combatStats.maxHp) {
+                const healAmt = Math.min(regenBuff.power, combatStats.maxHp - postPHp);
+                postPHp = Math.min(postPHp + healAmt, combatStats.maxHp);
+                setPHp(postPHp);
+                log(`💚 持續恢復生傚！恢復了 ${healAmt} 點生命`);
+            }
+
+            processBuffsAndTurnEnd();
+            return;
         }
 
         // Enemy attacks
-        setTimeout(() => {
-            const eDmg = Math.max(1, enemy.attack - player.defense + Math.floor(Math.random() * 4));
-            const finalPHp = Math.max(0, currentPHp - eDmg);
-            setPHp(finalPHp);
-            setPShake(true); setTimeout(() => setPShake(false), 300);
-            log(`${enemy.avatar} ${enemy.name} 反擊，造成 ${eDmg} 傷害`);
+        const eDmg = Math.max(1, enemy.attack - combatStats.defense + Math.floor(Math.random() * 4));
+        const reflectBuff = activeBuffs.find(b => b.type === 'reflect');
+        let reflectDmg = 0;
+        if (reflectBuff) {
+            reflectDmg = Math.floor(eDmg * (reflectBuff.power / 100));
+        }
 
-            if (finalPHp <= 0) {
-                if (revivePotCount > 0 && onRevive) {
-                    setAuto(false);
-                    setAwaitingRevive(true);
-                    log(`💧 檢測到背包中有【復甦精華】，是否使用？`);
-                } else {
-                    lose();
-                }
-            } else if (player.heal && player.heal > 0 && finalPHp < player.maxHp) {
-                // Partner Auto-Regen
-                const regen = Math.min(player.heal, player.maxHp - finalPHp);
-                setPHp(prev => Math.min(prev + regen, player.maxHp));
+        const finalPHp = Math.max(0, nextPHp - eDmg);
+        setPHp(finalPHp);
+        setPShake(true); setTimeout(() => setPShake(false), 300);
+
+        if (reflectBuff && reflectDmg > 0) {
+            nextEHp = Math.max(0, nextEHp - reflectDmg);
+            setEHp(nextEHp);
+            setEShake(true);
+            log(`${enemy.avatar} ${enemy.name} 發動攻擊，造成 ${eDmg} 傷害 (🛡️ 鐵壁反射了 ${reflectDmg} 傷害)`);
+            if (nextEHp <= 0) { win(nextEHp, finalPHp, currentPMp); return; }
+        } else {
+            log(`${enemy.avatar} ${enemy.name} 發動攻擊，造成 ${eDmg} 傷害`);
+        }
+
+        if (finalPHp <= 0) {
+            checkRevive(finalPHp, currentPMp);
+        } else {
+            // End of turn effects
+            let postPHp = finalPHp;
+            if (combatStats.heal && combatStats.heal > 0 && finalPHp < combatStats.maxHp) {
+                const regen = Math.min(combatStats.heal, combatStats.maxHp - finalPHp);
+                postPHp = Math.min(postPHp + regen, combatStats.maxHp);
+                setPHp(postPHp);
                 log(`✨ 夥伴支援！治癒光輝恢復了 ${regen} 點生命`);
             }
-        }, 350);
+
+            const regenBuff = activeBuffs.find(b => b.type === 'regen');
+            if (regenBuff && postPHp < combatStats.maxHp) {
+                const healAmt = Math.min(regenBuff.power, combatStats.maxHp - postPHp);
+                postPHp = Math.min(postPHp + healAmt, combatStats.maxHp);
+                setPHp(postPHp);
+                log(`💚 持續恢復生傚！恢復了 ${healAmt} 點生命`);
+            }
+
+            processBuffsAndTurnEnd();
+        }
+    };
+
+    const processBuffsAndTurnEnd = () => {
+        // Buff durations
+        if (activeBuffs.length > 0) {
+            setActiveBuffs(prev => prev.map(b => ({ ...b, turns: b.turns - 1 })).filter(b => b.turns > 0));
+        }
+
+        setIsPlayerTurn(true);
+    };
+
+    const checkRevive = (hp: number, mp: number) => {
+        if (revivePotCount > 0 && onRevive) {
+            setAuto(false);
+            setAwaitingRevive(true);
+            log(`💧 檢測到背包中有【復甦精華】，是否使用？`);
+        } else {
+            lose(hp, mp);
+        }
     };
 
     const handleUsePotion = (pot: any) => {
-        if (!onUseItem || ended) return;
+        if (!onUseItem || ended || (!isPlayerTurn && !auto)) return;
         onUseItem(pot);
 
         // Calculate recovery
@@ -123,22 +327,28 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({ player, enemy, onWin
         if (pot.id === 'item_hp_pot' || pot.id === 'it_01') recoverAmount = 50;
         else if (pot.id === 'item_hp_pot_m') recoverAmount = 150;
 
-        const newHp = Math.min(pHp + recoverAmount, player.maxHp);
+        const newHp = Math.min(pHp + recoverAmount, combatStats.maxHp);
         setPHp(newHp);
-        log(`🧪 使用了【${pot.name}】，恢復了 ${Math.min(recoverAmount, player.maxHp - pHp)} 點生命值`);
+        log(`🧪 使用了【${pot.name}】，恢復了 ${Math.min(recoverAmount, combatStats.maxHp - pHp)} 點生命值`);
+
+        if (!auto) {
+            setIsPlayerTurn(false);
+            setTimeout(() => executeMonsterTurn(eHp, newHp, pMp), 800);
+        }
     };
 
     const handleRevive = () => {
         if (onRevive) {
             onRevive();
-            setPHp(player.maxHp);
+            setPHp(combatStats.maxHp);
             setAwaitingRevive(false);
             log(`✨ 使用了【復甦精華】，重獲新生！`);
+            setIsPlayerTurn(true);
             if (autoExplore) setAuto(true);
         }
     };
 
-    const win = () => {
+    const win = (_finalEHp: number, finalPHp: number, finalPMp: number) => {
         setEnded(true); setAuto(false); setResult('win');
         log(`🎉 戰鬥勝利！獲得 ${enemy.expReward} EXP、${enemy.goldReward} G`);
         let sk: Skill | undefined;
@@ -146,13 +356,13 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({ player, enemy, onWin
             sk = enemy.skillReward;
             log(`✨ 領悟新技能【${sk.icon} ${sk.name}】！`);
         }
-        setTimeout(() => onWin(enemy.expReward, enemy.goldReward, sk, enemy.lootTable, (enemy as any).equipmentDrop, pHp), autoExplore ? 5000 : 3000);
+        setTimeout(() => onWin(enemy.expReward, enemy.goldReward, sk, enemy.lootTable, (enemy as any).equipmentDrop, finalPHp, finalPMp), autoExplore ? 5000 : 3000);
     };
 
-    const lose = () => {
+    const lose = (finalPHp: number, finalPMp: number) => {
         setEnded(true); setAuto(false); setResult('lose');
         log(`💀 勇者倒下了…`);
-        setTimeout(() => onLose(pHp), autoExplore ? 5000 : 2500);
+        setTimeout(() => onLose(finalPHp, finalPMp), autoExplore ? 5000 : 2500);
     };
 
     const hpPct = (cur: number, max: number) => Math.max(0, (cur / max) * 100);
@@ -174,26 +384,42 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({ player, enemy, onWin
                     <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-slate-700 to-slate-900 border-2 border-game-accent/60 flex items-center justify-center text-4xl mb-2 anim-pulse-glow">
                         🧙‍♂️
                     </div>
-                    <div className="font-bold text-sm">勇者 <span className="text-gray-500 text-xs">Lv.{player.level}</span></div>
+                    <div className="font-bold text-sm">{combatStats.nickname} <span className="text-gray-500 text-xs">Lv.{combatStats.level}</span></div>
                     {/* HP */}
                     <div className="w-full mt-2">
-                        <div className="flex justify-between text-[11px] text-gray-400 mb-0.5"><span className="flex items-center gap-1"><Heart size={10} className="text-red-400" /> HP</span><span>{pHp}/{player.maxHp}</span></div>
+                        <div className="flex justify-between text-[11px] text-gray-400 mb-0.5"><span className="flex items-center gap-1"><Heart size={10} className="text-red-400" /> HP</span><span>{pHp}/{combatStats.maxHp}</span></div>
                         <div className="h-2.5 bg-gray-800 rounded-full overflow-hidden">
-                            <div className="h-full bar-hp transition-all duration-500 rounded-full" style={{ width: `${hpPct(pHp, player.maxHp)}%` }} />
+                            <div className="h-full bar-hp transition-all duration-500 rounded-full" style={{ width: `${hpPct(pHp, combatStats.maxHp)}%` }} />
+                        </div>
+                    </div>
+                    {/* MP */}
+                    <div className="w-full mt-1.5">
+                        <div className="flex justify-between text-[11px] text-gray-400 mb-0.5"><span className="flex items-center gap-1 font-black text-blue-400">M MP</span><span>{pMp}/{combatStats.maxMp}</span></div>
+                        <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                            <div className="h-full bg-blue-500 transition-all duration-500 rounded-full shadow-[0_0_8px_rgba(59,130,246,0.6)]" style={{ width: `${hpPct(pMp, combatStats.maxMp)}%` }} />
                         </div>
                     </div>
                     <div className="flex flex-wrap justify-center gap-2 mt-2 text-[10px] text-gray-400">
-                        <span className="flex items-center gap-1"><Sword size={10} className="text-red-400" /> {player.attack}</span>
-                        <span className="flex items-center gap-1"><Shield size={10} className="text-blue-400" /> {player.defense}</span>
-                        {player.heal && player.heal > 0 && <span className="flex items-center gap-1 text-emerald-400"><PlusCircle size={10} /> {player.heal}</span>}
+                        <span className="flex items-center gap-1"><Sword size={10} className="text-red-400" /> {combatStats.attack}</span>
+                        <span className="flex items-center gap-1"><Shield size={10} className="text-blue-400" /> {combatStats.defense}</span>
+                        {combatStats.heal && combatStats.heal > 0 && <span className="flex items-center gap-1 text-emerald-400"><PlusCircle size={10} /> {combatStats.heal}</span>}
                     </div>
                 </div>
 
                 {/* Enemy */}
                 <div className={`glass-panel rounded-2xl p-4 flex flex-col items-center relative overflow-hidden ${eShake ? 'anim-shake' : ''}`}>
                     <div className="absolute -left-6 -bottom-6 w-24 h-24 bg-game-danger/8 rounded-full blur-2xl" />
-                    <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-red-900/40 to-slate-900 border-2 border-game-danger/60 flex items-center justify-center text-5xl mb-2 anim-float anim-pulse-danger">
+                    <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-red-900/40 to-slate-900 border-2 border-game-danger/60 flex items-center justify-center text-5xl mb-2 anim-float anim-pulse-danger relative">
                         {enemy.avatar}
+                        {enemyDebuffs.length > 0 && (
+                            <div className="absolute -bottom-2 flex gap-0.5 justify-center w-full">
+                                {enemyDebuffs.map((d, i) => (
+                                    <div key={i} className="text-[10px] bg-black/80 border border-white/20 rounded px-1 flex items-center gap-0.5" title={`${d.name} (${d.turns}回合)`}>
+                                        {d.icon}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                     <div className="font-bold text-sm text-game-danger">{enemy.name} <span className="text-gray-500 text-xs">Lv.{enemy.level}</span></div>
                     <div className="w-full mt-2">
@@ -234,21 +460,47 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({ player, enemy, onWin
                         <button onClick={handleRevive} className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg shadow-emerald-500/20">
                             💧 使用復活道具 (剩餘: {revivePotCount})
                         </button>
-                        <button onClick={lose} className="flex-1 glass-panel border border-game-danger/40 text-game-danger font-bold py-3 rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-all hover:bg-white/5">
+                        <button onClick={() => lose(pHp, pMp)} className="flex-1 glass-panel border border-game-danger/40 text-game-danger font-bold py-3 rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-all hover:bg-white/5">
                             <X size={16} /> 放棄戰鬥
                         </button>
                     </>
                 ) : (
                     <>
                         {!auto && !ended && (
-                            <>
-                                <button onClick={turn} className="flex-1 bg-gradient-to-r from-game-accent to-indigo-500 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg shadow-game-accent/20">
-                                    <Sword size={18} /> 攻擊
-                                </button>
-                                <button onClick={() => setAuto(true)} className="flex-1 glass-panel border border-game-accent/30 font-bold py-3 rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-all hover:bg-white/5">
-                                    <Play size={18} /> 自動
-                                </button>
-                            </>
+                            <div className="flex flex-col w-full gap-3">
+                                <div className="flex gap-3">
+                                    <button
+                                        onClick={executePlayerAttack}
+                                        disabled={!isPlayerTurn}
+                                        className="flex-1 bg-gradient-to-r from-game-accent to-indigo-500 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg shadow-game-accent/20 disabled:opacity-50 disabled:active:scale-100"
+                                    >
+                                        <Sword size={18} /> 攻擊
+                                    </button>
+                                    <button onClick={() => setAuto(true)} className="flex-1 glass-panel border border-game-accent/30 font-bold py-3 rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-all hover:bg-white/5">
+                                        <Play size={18} /> 自動
+                                    </button>
+                                </div>
+                                {isPlayerTurn && combatStats.skills.length > 0 && (
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {combatStats.skills.map(ps => {
+                                            const sk = SKILL_DATABASE.find(s => s.id === ps.id);
+                                            if (!sk) return null;
+                                            const cost = sk.baseMpCost + (ps.level - 1) * sk.mpCostGrowth;
+                                            return (
+                                                <button
+                                                    key={ps.id}
+                                                    onClick={() => handleUseSkill(ps.id)}
+                                                    disabled={pMp < cost}
+                                                    className="glass-panel border border-blue-400/30 text-blue-400 font-bold py-2 rounded-lg text-xs flex flex-col items-center justify-center gap-1 hover:bg-white/5 active:scale-95 transition-all disabled:opacity-30"
+                                                >
+                                                    <div className="flex items-center gap-1">{sk.icon} {sk.name}</div>
+                                                    <div className="text-[10px] opacity-70">MP {cost}</div>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
                         )}
                         {auto && !ended && (
                             <button onClick={() => setAuto(false)} className="flex-1 glass-panel border border-game-danger/40 text-game-danger font-bold py-3 rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-all">
