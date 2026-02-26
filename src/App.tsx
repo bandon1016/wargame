@@ -121,12 +121,48 @@ interface CombatLog {
   message?: string;
 }
 
-const TAIWAN_BOUNDS = { minLat: 21.8, maxLat: 26.4, minLng: 119.0, maxLng: 122.5 };
 const DEFAULT_POSITION: [number, number] = [25.0340, 121.5645]; // 台北101
 
-const isInTaiwan = (lat: number, lng: number) =>
-  lat >= TAIWAN_BOUNDS.minLat && lat <= TAIWAN_BOUNDS.maxLat &&
-  lng >= TAIWAN_BOUNDS.minLng && lng <= TAIWAN_BOUNDS.maxLng;
+// 多邊形定點 (Lat, Lng)：貼齊台灣本島海岸線並預留少許海灘緩衝區
+const TAIWAN_MAIN_ISLAND_POLYGON = [
+  [25.50, 121.40], // 北海岸 (加大多一點避免北海岸被切到)
+  [25.20, 122.10], // 東北角
+  [24.50, 122.00], // 宜花交界
+  [22.70, 121.40], // 台東
+  [21.80, 121.00], // 鵝鑾鼻
+  [21.80, 120.50], // 貓鼻頭
+  [22.50, 120.10], // 高雄
+  [23.10, 119.90], // 台南
+  [23.80, 119.90], // 雲林
+  [24.40, 120.20], // 台中
+  [24.90, 120.70], // 新竹
+  [25.20, 120.90]  // 桃園
+];
+
+// 澎湖群島粗略方塊
+const isInPenghu = (lat: number, lng: number) => lat >= 23.1 && lat <= 23.9 && lng >= 119.3 && lng <= 119.8;
+
+// 小琉球與綠島蘭嶼補償方塊 (簡單涵蓋)
+const isExternalIslands = (lat: number, lng: number) =>
+  (lat >= 22.3 && lat <= 22.4 && lng >= 120.3 && lng <= 120.4) || // 小琉球
+  (lat >= 21.9 && lat <= 22.7 && lng >= 121.4 && lng <= 121.6); // 綠島蘭嶼
+
+// 射線交叉法 (Ray-casting algorithm) 判斷點是否在多邊形內
+const isPointInPolygon = (lat: number, lng: number, polygon: number[][]) => {
+  let isInside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const xi = polygon[i][0], yi = polygon[i][1];
+    const xj = polygon[j][0], yj = polygon[j][1];
+    const intersect = ((yi > lng) !== (yj > lng))
+      && (lat < (xj - xi) * (lng - yi) / (yj - yi) + xi);
+    if (intersect) isInside = !isInside;
+  }
+  return isInside;
+};
+
+const isInTaiwan = (lat: number, lng: number) => {
+  return isPointInPolygon(lat, lng, TAIWAN_MAIN_ISLAND_POLYGON) || isInPenghu(lat, lng) || isExternalIslands(lat, lng);
+};
 
 const App: React.FC = () => {
   const [position, setPosition] = useState<[number, number]>([25.0330, 121.5654]);
