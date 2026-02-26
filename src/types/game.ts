@@ -430,7 +430,7 @@ export const TOWN_DATABASE: Town[] = [
     { id: 'town_txg', name: '台中城', lat: 24.1477, lng: 120.6736, radius: 2000, color: '#f59e0b', facilities: ['market', 'blacksmith', 'alchemy', 'station', 'quest_board', 'dock'] },
     { id: 'town_tnn', name: '台南城', lat: 22.9997, lng: 120.2270, radius: 2000, color: '#ef4444', facilities: ['market', 'alchemy', 'station', 'quest_board'] },
     { id: 'town_khh', name: '高雄城', lat: 22.6272, lng: 120.3014, radius: 2000, color: '#eab308', facilities: ['market', 'blacksmith', 'alchemy', 'station', 'quest_board', 'shipyard', 'dock'] },
-    { id: 'town_pif', name: '屏東城', lat: 22.6685, lng: 120.4862, radius: 2000, color: '#f97316', facilities: ['market', 'blacksmith', 'station', 'quest_board'] },
+    { id: 'town_pif', name: '屏東城', lat: 22.004, lng: 120.745, radius: 2000, color: '#f97316', facilities: ['market', 'blacksmith', 'station', 'quest_board'] },
     { id: 'town_ttu', name: '台東城', lat: 22.7931, lng: 121.1248, radius: 2000, color: '#8b5cf6', facilities: ['market', 'blacksmith', 'station', 'quest_board'] },
     { id: 'town_hun', name: '花蓮城', lat: 23.9936, lng: 121.5972, radius: 2000, color: '#ec4899', facilities: ['market', 'blacksmith', 'station', 'quest_board', 'dock'] }
 ];
@@ -441,8 +441,8 @@ export const RAILWAY_NETWORK: Record<string, [number, number][]> = {
     'town_tyn-town_txg': [[24.9931, 121.3010], [24.8138, 120.9675], [24.5601, 120.8209], [24.1477, 120.6736]],
     'town_txg-town_tnn': [[24.1477, 120.6736], [23.4791, 120.4497], [22.9997, 120.2270]],
     'town_tnn-town_khh': [[22.9997, 120.2270], [22.6272, 120.3014]],
-    'town_khh-town_pif': [[22.6272, 120.3014], [22.6685, 120.4862]],
-    'town_pif-town_ttu': [[22.6685, 120.4862], [22.3688, 120.6276], [22.1812, 120.8752], [22.7931, 121.1248]],
+    'town_khh-town_pif': [[22.6272, 120.3014], [22.25, 120.55], [22.004, 120.745]],
+    'town_pif-town_ttu': [[22.004, 120.745], [22.1812, 120.8752], [22.7931, 121.1248]],
     'town_ttu-town_hun': [[22.7931, 121.1248], [23.1092, 121.3789], [23.4795, 121.4673], [23.9936, 121.5972]],
     'town_hun-town_tpe': [[23.9936, 121.5972], [24.4025, 121.7825], [24.7561, 121.7513], [25.0330, 121.5654]]
 };

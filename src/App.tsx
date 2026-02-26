@@ -1814,7 +1814,7 @@ const App: React.FC = () => {
                         <div className="flex items-start gap-1.5"><span className="w-8 text-right shrink-0">中部:</span> 高山鐵礦 ⛰️, 神木枝枒 🍃</div>
                         <div className="flex items-start gap-1.5"><span className="w-8 text-right shrink-0">南部:</span> 炎漠紅砂 🏜️, 海淵珍珠 🦪</div>
                         <div className="flex items-start gap-1.5"><span className="w-8 text-right shrink-0">東部:</span> 花東水晶 💠, 玄武岩礦石 🌑</div>
-                        <div className="text-[10px] text-game-accent mt-1.5 italic font-black">* 狩獵魔物時有極高機率掉落當地特產。</div>
+                        <div className="text-[10px] text-game-accent mt-1.5 italic font-black">* 狩獵魔物時有隨機機率掉落當地特產。</div>
                       </div>
                     </div>
                   </div>
