@@ -1,14 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap, Circle, Polyline, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Compass, Sword, Home, Users, Package, Settings as SettingsIcon, Book, Heart, Shield, Zap, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, MapPin, Loader2, X, PlusCircle, Activity, Info, ShieldAlert, TrainFront } from 'lucide-react';
+import { Compass, Sword, Home, Users, Package, Settings as SettingsIcon, Book, Heart, Shield, Zap, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, MapPin, Loader2, X, PlusCircle, ShieldAlert, TrainFront } from 'lucide-react';
 import type { CharacterStats, Equipment, GameItem, Skill, MapPOI, Town, WeatherType, Enemy, AlchemyRecipe, BlacksmithRecipe } from './types/game';
-import { MONSTER_DATABASE, SKILL_DATABASE, ITEM_DATABASE, EQUIPMENT_DATABASE, RARITY_COLORS, WEATHER_TYPES, getRegionByCityName, getRegionalMaterials, getRegionByCoordinates, TOWN_DATABASE, getPartnerAvatar, getRailwayPath } from './types/game';
+import { MONSTER_DATABASE, SKILL_DATABASE, ITEM_DATABASE, EQUIPMENT_DATABASE, RARITY_COLORS, WEATHER_TYPES, getRegionByCityName, getRegionalMaterials, getRegionByCoordinates, TOWN_DATABASE, getPartnerAvatar, getRailwayPath, POI_NAMES } from './types/game';
 import { CombatScreen } from './components/CombatScreen';
 import { PartnersTab } from './components/PartnersTab';
 import { HomeTab } from './components/HomeTab';
 import { AuthScreen } from './components/AuthScreen';
 import { TownScreen } from './components/TownScreen';
+import { GuideModal } from './components/GuideModal';
 import { supabase } from './lib/supabase';
 
 // Fix leaflet default icon paths in React
@@ -76,40 +77,6 @@ const totalPartnerAtk = (p: CharacterStats) => p.partners.filter(pt => pt.isDepl
 const totalPartnerDef = (p: CharacterStats) => p.partners.filter(pt => pt.isDeployed).reduce((s, pt) => s + (pt.role === 'tank' ? Math.floor(pt.power * 0.5) : Math.floor(pt.power * 0.1)), 0);
 const totalPartnerHp = (p: CharacterStats) => p.partners.filter(pt => pt.isDeployed).reduce((s, pt) => s + (pt.role === 'tank' || pt.role === 'healer' ? pt.power * 3 : pt.power), 0);
 const totalPartnerHeal = (p: CharacterStats) => p.partners.filter(pt => pt.isDeployed).reduce((s, pt) => s + (pt.role === 'healer' ? pt.power : 0), 0);
-
-const POI_NAMES: Record<string, string> = {
-  chest: '遺落的物資',
-  elite: '危險的魔物棲息地',
-  altar: '神秘祭壇',
-  merchant: '流浪商人'
-};
-
-const POI_DETAILS = {
-  merchant: {
-    name: '流浪商人',
-    icon: '👳‍♂️',
-    frequency: '每整點、30分出現，持續 15 分鐘',
-    effect: '可販售物品獲取金幣，並有 5% 機率贈送地區特產材料。'
-  },
-  chest: {
-    name: '遺落的物資',
-    icon: '📦',
-    frequency: '地圖隨機生成',
-    effect: '獲得隨等級提升的金幣，10% 機率得藥草×3，1% 機率得復甦精華。'
-  },
-  elite: {
-    name: '魔物棲息地',
-    icon: '👹',
-    frequency: '地圖隨機生成',
-    effect: '挑戰菁英魔物，勝利可獲得大量經驗值、金幣及稀有掉落物。'
-  },
-  altar: {
-    name: '神秘祭壇',
-    icon: '⛩️',
-    frequency: '地圖隨機生成',
-    effect: '立刻恢復勇者的生命值至 100% 狀態。'
-  }
-};
 
 export const getSkillUpgradeInfo = (currentLevel: number) => {
   if (currentLevel >= 10) return null;
@@ -214,11 +181,10 @@ const App: React.FC = () => {
 
   const [activePoiCombat, setActivePoiCombat] = useState<string | null>(null);
   const [isMerchantOpen, setIsMerchantOpen] = useState(false);
-  const [isLegendOpen, setIsLegendOpen] = useState(false);
-  const [selectedLegendPoi, setSelectedLegendPoi] = useState<keyof typeof POI_DETAILS | null>(null);
   const [isDoubleTabbed, setIsDoubleTabbed] = useState(false);
   const isDoubleTabbedRef = React.useRef(isDoubleTabbed);
   useEffect(() => { isDoubleTabbedRef.current = isDoubleTabbed; }, [isDoubleTabbed]);
+  const [showGuide, setShowGuide] = useState(false);
   const [mySessionId] = useState(() => crypto.randomUUID());
   const activePoiRef = React.useRef<string | null>(null);
   const activeMerchantPoiRef = React.useRef<string | null>(null);
@@ -756,8 +722,15 @@ const App: React.FC = () => {
           }
         });
 
-        if (dg === 0 && dm === 0) return p; // 避免無意義的狀態變更觸發重繪與存檔計時器
-        return { ...p, gold: p.gold + dg, baseMaterials: p.baseMaterials + dm };
+        if (dg === 0 && dm === 0) {
+          // still process natural MP recovery
+          if (p.mp < p.maxMp) {
+            return { ...p, mp: Math.min(p.maxMp, p.mp + 0.5) }; // 每秒恢復 0.5 點 MP
+          }
+          return p;
+        }
+        const nextMp = Math.min(p.maxMp, p.mp + 0.5);
+        return { ...p, gold: p.gold + dg, baseMaterials: p.baseMaterials + dm, mp: nextMp };
       });
     }, 1000);
     return () => window.clearInterval(t);
@@ -1286,19 +1259,31 @@ const App: React.FC = () => {
     let nextState = { ...player, items: newItems };
 
     if (item.type === 'potion') {
-      let recoverAmount = 0;
-      if (item.id === 'item_hp_pot' || item.id === 'it_01') recoverAmount = 50;
-      else if (item.id === 'item_hp_pot_m') recoverAmount = 150;
-      else if (item.id === 'item_revive_pot') recoverAmount = 9999;
+      let recoverHp = 0;
+      let recoverMp = 0;
+      if (item.id === 'item_hp_pot' || item.id === 'it_01') recoverHp = 50;
+      else if (item.id === 'item_hp_pot_m') recoverHp = 150;
+      else if (item.id === 'item_mp_pot') recoverMp = 50;
+      else if (item.id === 'item_revive_pot') recoverHp = 9999;
 
       const currentMaxHp = nextState.maxHp + totalEquipHp(nextState) + totalPartnerHp(nextState);
-      const actualHeal = Math.min(recoverAmount, currentMaxHp - nextState.hp);
-      nextState = { ...nextState, hp: Math.min(nextState.hp + recoverAmount, currentMaxHp) };
+      nextState = {
+        ...nextState,
+        hp: Math.min(nextState.hp + recoverHp, currentMaxHp),
+        mp: Math.min(nextState.mp + recoverMp, nextState.maxMp)
+      };
 
       if (!silent) {
+        const recoverItems = [];
+        if (recoverHp > 0) recoverItems.push({ name: '恢復生命', quantity: Math.min(recoverHp, currentMaxHp - player.hp), icon: '💖' });
+        if (recoverMp > 0) recoverItems.push({ name: '恢復魔力', quantity: Math.min(recoverMp, player.maxMp - player.mp), icon: '💧' });
+
         setLootMessage({
           title: '藥水使用確認',
-          items: [{ name: item.name, quantity: 1, icon: ITEM_DATABASE.find(itemDef => itemDef.id === item.id)?.icon ?? item.icon }, { name: '恢復生命', quantity: actualHeal, icon: '💚' }]
+          items: [
+            { name: item.name, quantity: 1, icon: ITEM_DATABASE.find(itemDef => itemDef.id === item.id)?.icon ?? item.icon },
+            ...recoverItems
+          ]
         });
       }
     } else if (item.type === 'consumable') {
@@ -1609,9 +1594,9 @@ const App: React.FC = () => {
       setPlayer(nextState);
       saveProfile(nextState);
     } else if (poi.type === 'altar') {
-      // Heal to full
-      const currentMax = player.maxHp + totalEquipHp(player) + totalPartnerHp(player);
-      const nextState = { ...player, hp: currentMax };
+      // Heal both HP and MP to full
+      const currentMaxHp = player.maxHp + totalEquipHp(player) + totalPartnerHp(player);
+      const nextState = { ...player, hp: currentMaxHp, mp: player.maxMp };
       setPlayer(nextState);
       saveProfile(nextState);
     }
@@ -1699,7 +1684,11 @@ const App: React.FC = () => {
       {/* ═══════════ TOP BAR ═══════════ */}
       <div className="glass-panel px-4 py-3 flex justify-between items-center z-[1100] gap-4">
         {/* Left: Avatar + Level */}
-        <div className="flex items-center gap-3 min-w-0">
+        <div
+          className="flex items-center gap-3 min-w-0 cursor-pointer hover:bg-white/5 p-1 -m-1 rounded-xl transition-colors"
+          onClick={() => setActiveTab('stats')}
+          title="勇者能力與裝備"
+        >
           <div className="relative flex-shrink-0">
             <div className="w-12 h-12 rounded-full border-2 border-game-gold bg-gradient-to-br from-game-medium to-game-dark flex items-center justify-center text-2xl anim-pulse-glow">
               🧙‍♂️
@@ -1726,7 +1715,7 @@ const App: React.FC = () => {
             {/* HP bar */}
             <div className="flex items-center gap-2 mt-1">
               <Heart size={10} className="text-red-400 flex-shrink-0" />
-              <div className="w-28 h-[6px] bg-gray-800 rounded-full overflow-hidden">
+              <div className="w-40 h-[6px] bg-gray-800 rounded-full overflow-hidden">
                 <div className="h-full bar-hp transition-all duration-500 rounded-full" style={{ width: `${(player.hp / effectiveMaxHp) * 100}%` }} />
               </div>
               <span className="text-[10px] text-gray-400 tabular-nums w-16 text-right">{player.hp}/{effectiveMaxHp}</span>
@@ -1734,39 +1723,31 @@ const App: React.FC = () => {
             {/* MP bar */}
             <div className="flex items-center gap-2 mt-0.5">
               <div className="text-blue-400 font-black text-[10px] w-2.5 flex justify-center">M</div>
-              <div className="w-28 h-[4px] bg-gray-800 rounded-full overflow-hidden">
+              <div className="w-40 h-[4px] bg-gray-800 rounded-full overflow-hidden">
                 <div className="h-full bg-blue-500 transition-all duration-500 rounded-full shadow-[0_0_8px_rgba(59,130,246,0.6)]" style={{ width: `${Math.min(100, Math.max(0, (player.mp / player.maxMp) * 100))}%` }} />
               </div>
               <span className="text-[10px] text-gray-400 tabular-nums w-16 text-right">{player.mp}/{player.maxMp}</span>
-            </div>
-            {/* EXP bar */}
-            <div className="flex items-center gap-2 mt-0.5">
-              <Zap size={10} className="text-sky-400 flex-shrink-0" />
-              <div className="w-28 h-[4px] bg-gray-800 rounded-full overflow-hidden">
-                <div className="h-full bar-exp transition-all duration-500 rounded-full" style={{ width: `${(player.exp / player.maxExp) * 100}%` }} />
-              </div>
-              <span className="text-[10px] text-gray-500 tabular-nums w-16 text-right">{player.exp}/{player.maxExp}</span>
             </div>
           </div>
         </div>
 
         {/* Right: Weather & Config */}
         <div className="flex items-center gap-3">
-          <div className="hidden sm:flex items-center gap-2 bg-black/40 px-3 py-1.5 rounded-full border border-white/10 tooltip-wrap cursor-help">
-            <span className="text-xl">{WEATHER_TYPES[weather].icon}</span>
-            <span className="text-xs font-bold text-gray-200">{WEATHER_TYPES[weather].label}</span>
-            <div className="tooltip-text">
-              <div className="font-bold text-white mb-1">{WEATHER_TYPES[weather].label}</div>
-              <div className="text-gray-400 text-[10px]">{WEATHER_TYPES[weather].description}</div>
-            </div>
-          </div>
-          <div className="stat-badge"><span className="text-amber-500">🧱</span> {Math.floor(player.baseMaterials)}</div>
-          <div className="stat-badge"><span className="text-game-gold">💰</span> {Math.floor(player.gold)}</div>
+          <button
+            onClick={() => setShowGuide(true)}
+            className="flex items-center gap-1.5 bg-game-accent/20 hover:bg-game-accent/40 text-game-accent px-3 py-1.5 rounded-full border border-game-accent/30 transition shadow-[0_0_10px_rgba(99,102,241,0.2)]"
+            title="指南手冊"
+          >
+            <Book size={14} />
+            <span className="text-xs font-bold hidden sm:inline">指南</span>
+          </button>
           <button onClick={() => supabase.auth.signOut()} className="p-2 hover:bg-white/10 rounded-xl transition-colors text-gray-400 hover:text-white" title="登出">
             <SettingsIcon size={20} />
           </button>
         </div>
       </div>
+
+      {showGuide && <GuideModal onClose={() => setShowGuide(false)} />}
 
       {/* ═══════════ MAIN CONTENT ═══════════ */}
       <div className="flex-1 relative overflow-hidden">
@@ -1903,71 +1884,14 @@ const App: React.FC = () => {
               </div>
             </div>
 
-            {/* Map Legend (Cartoonish Style) */}
-            <div className={`absolute top-4 right-4 z-[1000] transition-all duration-300 ease-out flex ${isLegendOpen ? 'w-64' : 'w-14'}`}>
-              {!isLegendOpen && (
-                <button
-                  onClick={() => setIsLegendOpen(true)}
-                  className="w-14 h-14 bg-white border-4 border-black rounded-2xl flex items-center justify-center shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-y-0.5 hover:translate-x-0.5 hover:shadow-none transition-all"
-                >
-                  <Info size={24} className="text-black" strokeWidth={3} />
-                </button>
-              )}
-
-              {isLegendOpen && (
-                <div className="w-full bg-white border-4 border-black rounded-3xl p-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex flex-col anim-fade-in text-black font-bold">
-                  <div className="flex justify-between items-center mb-4 pb-2 border-b-4 border-black">
-                    <div className="flex items-center gap-2">
-                      <MapPin size={18} className="text-black" strokeWidth={3} />
-                      <span className="font-black text-base uppercase tracking-tight">點位圖例</span>
-                    </div>
-                    <button onClick={() => setIsLegendOpen(false)} className="p-1 hover:bg-black/5 rounded-lg transition-colors">
-                      <ChevronRight size={22} className="text-black" strokeWidth={3} />
-                    </button>
-                  </div>
-
-                  <div className="space-y-3">
-                    {(Object.entries(POI_DETAILS) as [keyof typeof POI_DETAILS, any][]).map(([key, info]) => (
-                      <div key={key} className="flex flex-col">
-                        <button
-                          onClick={() => setSelectedLegendPoi(selectedLegendPoi === key ? null : key)}
-                          className={`flex items-center gap-3 p-2 rounded-xl transition-all border-2 ${selectedLegendPoi === key ? 'bg-yellow-300 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]' : 'bg-gray-100 border-transparent hover:bg-white hover:border-black hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'}`}
-                        >
-                          <div className="text-2xl w-10 h-10 flex items-center justify-center bg-white border-2 border-black rounded-lg">{info.icon}</div>
-                          <span className="text-sm font-black text-black">{info.name}</span>
-                        </button>
-
-                        {selectedLegendPoi === key && (
-                          <div className="mt-2 ml-2 px-3 py-2 border-l-4 border-black bg-blue-50 rounded-r-xl space-y-2 anim-scale-in shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] border-2 border-black">
-                            <div>
-                              <div className="text-[10px] text-black font-black uppercase tracking-wider mb-0.5 bg-yellow-300 inline-block px-1 border border-black">出現頻率</div>
-                              <div className="text-[11px] text-gray-800 leading-tight font-bold">{info.frequency}</div>
-                            </div>
-                            <div>
-                              <div className="text-[10px] text-black font-black uppercase tracking-wider mb-0.5 bg-green-300 inline-block px-1 border border-black">互動效果</div>
-                              <div className="text-[11px] text-gray-800 leading-tight font-bold">{info.effect}</div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-
-                    <div className="pt-2 mt-2 border-t-2 border-black/20">
-                      <div className="flex items-center gap-2 mb-2">
-                        <MapPin size={14} className="text-game-accent" strokeWidth={3} />
-                        <span className="font-black text-[12px] uppercase">特產材料情報</span>
-                      </div>
-                      <div className="text-[11px] text-gray-800 font-bold space-y-1">
-                        <div className="flex items-start gap-1.5"><span className="w-8 text-right shrink-0">北部:</span> 科技廢料 ⚙️, 魔法玻璃 🪷</div>
-                        <div className="flex items-start gap-1.5"><span className="w-8 text-right shrink-0">中部:</span> 高山鐵礦 ⛰️, 神木枝枒 🍃</div>
-                        <div className="flex items-start gap-1.5"><span className="w-8 text-right shrink-0">南部:</span> 炎漠紅砂 🏜️, 海淵珍珠 🦪</div>
-                        <div className="flex items-start gap-1.5"><span className="w-8 text-right shrink-0">東部:</span> 花東水晶 💠, 玄武岩礦石 🌑</div>
-                        <div className="text-[10px] text-game-accent mt-1.5 italic font-black">* 狩獵魔物時有隨機機率掉落當地特產。</div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
+            {/* Weather Overlay - Moved to Map */}
+            <div className="absolute top-4 right-4 z-[1000] flex items-center gap-2 bg-black/60 backdrop-blur-md px-4 py-2 rounded-full border border-white/20 shadow-lg tooltip-wrap cursor-help pointer-events-auto transition-all hover:bg-black/80">
+              <span className="text-2xl drop-shadow-md">{WEATHER_TYPES[weather].icon}</span>
+              <span className="text-sm font-bold text-white drop-shadow-md">{WEATHER_TYPES[weather].label}</span>
+              <div className="tooltip-text tooltip-bottom">
+                <div className="font-bold text-white mb-1">{WEATHER_TYPES[weather].label}</div>
+                <div className="text-gray-400 text-[10px] whitespace-nowrap">{WEATHER_TYPES[weather].description}</div>
+              </div>
             </div>
 
             {/* Bottom Left Area - Logs & Area Card */}
@@ -2483,8 +2407,7 @@ const App: React.FC = () => {
           { key: 'explore', icon: <Compass size={22} />, label: '探索' },
           { key: 'partners', icon: <Users size={22} />, label: '夥伴' },
           { key: 'home', icon: <Home size={22} />, label: '家園' },
-          { key: 'bag', icon: <Package size={22} />, label: '行囊' },
-          { key: 'stats', icon: <Activity size={22} />, label: '勇者' },
+          { key: 'bag', icon: <Package size={22} />, label: '行囊' }
         ].map(tab => (
           <button key={tab.key}
             onClick={() => {

@@ -219,6 +219,7 @@ export const ITEM_DATABASE: Omit<GameItem, 'quantity'>[] = [
     { id: 'item_magic_gem', name: '魔力寶石', type: 'gem', icon: '🔮', description: '散發著幽藍微光的奇異寶石，蘊藏大量精純魔力。' },
     { id: 'item_herb', name: '藥草', type: 'material', icon: '🌿', description: '生長在野外的普通草本植物，是煉製各類藥水的基本材料。' },
     { id: 'item_dragon_scale', name: '龍鱗碎片', type: 'material', icon: '🐲', description: '強大黑龍掉落的珍貴鱗片，堅硬無比，散發著危險的氣息。' },
+    { id: 'item_mp_pot', name: '魔力藥水', type: 'potion', icon: '💧', description: '閃爍著幽藍光芒的藥水，能恢復 50 點魔力值。' },
     { id: 'item_revive_pot', name: '復甦精華', type: 'potion', icon: '💧', description: '閃耀著奇蹟般光芒的泉水，不僅能恢復生命，還能在戰敗時將角色滿血復活。' },
     // Regional Materials
     { id: 'mat_north_tech', name: '科技廢料', type: 'material', icon: '⚙️', description: '北部特產：沾染微弱魔力的報廢電路板。' },
@@ -361,6 +362,15 @@ export const ALCHEMY_RECIPES: AlchemyRecipe[] = [
             { id: 'item_herb', name: '藥草', quantity: 2 }
         ],
         goldCost: 20
+    },
+    {
+        id: 'rec_mp_pot',
+        targetItemId: 'item_mp_pot',
+        materials: [
+            { id: 'item_herb', name: '藥草', quantity: 2 },
+            { id: 'item_magic_gem', name: '魔力寶石', quantity: 1 }
+        ],
+        goldCost: 50
     },
     {
         id: 'rec_hp_pot_m',
@@ -568,6 +578,40 @@ export interface MapPOI {
     lockedBy?: string | null;
     lockedAt?: number | null;
 }
+
+export const POI_NAMES: Record<string, string> = {
+    chest: '遺落的物資',
+    elite: '危險的魔物棲息地',
+    altar: '神秘祭壇',
+    merchant: '流浪商人'
+};
+
+export const POI_DETAILS = {
+    merchant: {
+        name: '流浪商人',
+        icon: '👳‍♂️',
+        frequency: '每整點、30分出現，持續 15 分鐘',
+        effect: '可販售物品獲取金幣，並有 5% 機率贈送地區特產材料。'
+    },
+    chest: {
+        name: '遺落的物資',
+        icon: '📦',
+        frequency: '地圖隨機生成',
+        effect: '獲得隨等級提升的金幣，10% 機率得藥草×3，1% 機率得復甦精華。'
+    },
+    elite: {
+        name: '魔物棲息地',
+        icon: '👹',
+        frequency: '地圖隨機生成',
+        effect: '挑戰菁英魔物，勝利可獲得大量經驗值、金幣及稀有掉落物。'
+    },
+    altar: {
+        name: '神秘祭壇',
+        icon: '⛩️',
+        frequency: '地圖隨機生成',
+        effect: '立刻恢復勇者的生命值至 100% 狀態。'
+    }
+};
 
 // Partners Data
 export const PARTNER_POOL = [

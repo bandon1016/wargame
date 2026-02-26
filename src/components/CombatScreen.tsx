@@ -323,13 +323,19 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({ player, enemy, onWin
         onUseItem(pot);
 
         // Calculate recovery
-        let recoverAmount = 0;
-        if (pot.id === 'item_hp_pot' || pot.id === 'it_01') recoverAmount = 50;
-        else if (pot.id === 'item_hp_pot_m') recoverAmount = 150;
+        let recoverHp = 0;
+        let recoverMp = 0;
+        if (pot.id === 'item_hp_pot' || pot.id === 'it_01') recoverHp = 50;
+        else if (pot.id === 'item_hp_pot_m') recoverHp = 150;
+        else if (pot.id === 'item_mp_pot') recoverMp = 50;
 
-        const newHp = Math.min(pHp + recoverAmount, combatStats.maxHp);
+        const newHp = Math.min(pHp + recoverHp, combatStats.maxHp);
+        const newMp = Math.min(pMp + recoverMp, combatStats.maxMp);
         setPHp(newHp);
-        log(`🧪 使用了【${pot.name}】，恢復了 ${Math.min(recoverAmount, combatStats.maxHp - pHp)} 點生命值`);
+        setPMp(newMp);
+
+        if (recoverHp > 0) log(`🧪 使用了【${pot.name}】，恢復了 ${Math.min(recoverHp, combatStats.maxHp - pHp)} 點生命值`);
+        if (recoverMp > 0) log(`🧪 使用了【${pot.name}】，恢復了 ${Math.min(recoverMp, combatStats.maxMp - pMp)} 點魔力值`);
 
         if (!auto) {
             setIsPlayerTurn(false);
