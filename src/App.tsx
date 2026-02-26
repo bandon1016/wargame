@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMap, Circle, Polyline, useMapEvents } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap, Circle, Polyline, Polygon, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Compass, Sword, Home, Users, Package, Settings as SettingsIcon, Book, Heart, Shield, Zap, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, MapPin, Loader2, X, PlusCircle, Activity, Info, ShieldAlert, TrainFront } from 'lucide-react';
 import type { CharacterStats, Equipment, GameItem, Skill, MapPOI, Town, WeatherType, Enemy, AlchemyRecipe, BlacksmithRecipe } from './types/game';
@@ -1645,6 +1645,30 @@ const App: React.FC = () => {
                   }}
                 />
               )}
+
+              {/* Debug: Draw Boundary Polygons */}
+              <Polygon
+                positions={TAIWAN_MAIN_ISLAND_POLYGON as [number, number][]}
+                pathOptions={{ color: 'red', fillColor: 'red', fillOpacity: 0.2, weight: 2, dashArray: '5, 5' }}
+              />
+              <Polygon
+                positions={[
+                  [23.1, 119.3], [23.1, 119.8], [23.9, 119.8], [23.9, 119.3] // Penghu
+                ]}
+                pathOptions={{ color: 'yellow', fillColor: 'yellow', fillOpacity: 0.2, weight: 2, dashArray: '5, 5' }}
+              />
+              <Polygon
+                positions={[
+                  [22.3, 120.3], [22.3, 120.4], [22.4, 120.4], [22.4, 120.3] // Xiao Liuqiu
+                ]}
+                pathOptions={{ color: 'green', fillColor: 'green', fillOpacity: 0.2, weight: 2, dashArray: '5, 5' }}
+              />
+              <Polygon
+                positions={[
+                  [21.9, 121.4], [21.9, 121.6], [22.7, 121.6], [22.7, 121.4] // Green Island / Lanyu
+                ]}
+                pathOptions={{ color: 'cyan', fillColor: 'cyan', fillOpacity: 0.2, weight: 2, dashArray: '5, 5' }}
+              />
             </MapContainer>
 
             {/* Deployed Partners */}
