@@ -3,7 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup, useMap, Circle, Polyline, useMa
 import 'leaflet/dist/leaflet.css';
 import { Compass, Sword, Home, Users, Package, Settings as SettingsIcon, Book, Heart, Shield, Zap, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, MapPin, Loader2, X, PlusCircle, Activity, Info, ShieldAlert, TrainFront } from 'lucide-react';
 import type { CharacterStats, Equipment, GameItem, Skill, MapPOI, Town, WeatherType, Enemy, AlchemyRecipe, BlacksmithRecipe } from './types/game';
-import { MONSTER_DATABASE, SKILL_DATABASE, ITEM_DATABASE, EQUIPMENT_DATABASE, RARITY_COLORS, WEATHER_TYPES, getRegionByCoordinates, getRegionalMaterials, TOWN_DATABASE, getPartnerAvatar, getRailwayPath } from './types/game';
+import { MONSTER_DATABASE, SKILL_DATABASE, ITEM_DATABASE, EQUIPMENT_DATABASE, RARITY_COLORS, WEATHER_TYPES, getRegionByCityName, getRegionalMaterials, TOWN_DATABASE, getPartnerAvatar, getRailwayPath } from './types/game';
 import { CombatScreen } from './components/CombatScreen';
 import { PartnersTab } from './components/PartnersTab';
 import { HomeTab } from './components/HomeTab';
@@ -858,7 +858,7 @@ const App: React.FC = () => {
 
     // Regional drops (50% chance to drop regional material)
     if (Math.random() > 0.5) {
-      const region = getRegionByCoordinates(positionRef.current[0], positionRef.current[1]);
+      const region = getRegionByCityName(areaName);
       const matIds = getRegionalMaterials(region);
       if (matIds.length > 0) {
         const matId = matIds[Math.floor(Math.random() * matIds.length)];
@@ -1330,7 +1330,7 @@ const App: React.FC = () => {
     if (poi.type === 'merchant') {
       // 5% Chance for Regional Gift
       if (Math.random() < 0.05) {
-        const region = getRegionByCoordinates(position[0], position[1]);
+        const region = getRegionByCityName(areaName);
         const mats = getRegionalMaterials(region);
         if (mats.length > 0) {
           const targetId = mats[Math.floor(Math.random() * mats.length)];

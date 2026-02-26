@@ -354,6 +354,14 @@ export const getRegionByCoordinates = (lat: number, lng: number): RegionType => 
     return 'unknown';
 };
 
+export const getRegionByCityName = (cityName: string): RegionType => {
+    if (['臺北市', '台北市', '新北市', '基隆市', '桃園市', '新竹縣', '新竹市', '宜蘭縣'].includes(cityName)) return 'north';
+    if (['臺中市', '台中市', '苗栗縣', '彰化縣', '南投縣', '雲林縣'].includes(cityName)) return 'central';
+    if (['高雄市', '臺南市', '台南市', '嘉義縣', '嘉義市', '屏東縣', '澎湖縣'].includes(cityName)) return 'south';
+    if (['花蓮縣', '臺東縣', '台東縣'].includes(cityName)) return 'east';
+    return 'unknown';
+};
+
 export const getRegionalMaterials = (region: RegionType): string[] => {
     switch (region) {
         case 'north': return ['mat_north_tech', 'mat_north_glass'];
