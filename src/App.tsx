@@ -944,8 +944,6 @@ const App: React.FC = () => {
     }
 
     // Equipment Drop Logic (Normal 1%, Elite 5%, Boss 10%)
-    const isBoss = isElite && template.name.includes('黑龍'); // Using Black Dragon as Boss definition for now
-
     let eqDropChance = 0.01;
     if (isBoss) eqDropChance = 0.10;
     else if (isElite) eqDropChance = 0.05;
