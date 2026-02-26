@@ -246,7 +246,7 @@ const App: React.FC = () => {
   }, [player]);
 
   // Ref to saveProfile - avoids forward-reference issues since saveProfile is declared later via useCallback
-  const saveProfileRef = React.useRef<((newState?: CharacterStats) => Promise<void>) | null>(null);
+  const saveProfileRef = React.useRef<((newState?: CharacterStats, forceLocation?: [number, number]) => Promise<void>) | null>(null);
 
   // Railway Animation Loop (Time-Based - cross-device safe)
   useEffect(() => {
@@ -605,7 +605,7 @@ const App: React.FC = () => {
   };
 
   // Sync to database
-  const saveProfile = useCallback(async (newState?: CharacterStats) => {
+  const saveProfile = useCallback(async (newState?: CharacterStats, forceLocation?: [number, number]) => {
     const p = newState || playerRef.current;
     if (!p || !session?.user?.id) return;
 
@@ -656,8 +656,8 @@ const App: React.FC = () => {
       skills: p.skills,
       partners: p.partners,
       session_id: mySessionId,
-      current_location_lat: positionRef.current[0],
-      current_location_lng: positionRef.current[1],
+      current_location_lat: forceLocation ? forceLocation[0] : positionRef.current[0],
+      current_location_lng: forceLocation ? forceLocation[1] : positionRef.current[1],
       ...travelSaveData,
       ...walkSaveData,
       updated_at: new Date().toISOString()
@@ -852,7 +852,7 @@ const App: React.FC = () => {
         walkTargetRef.current = null;
         walkStartRef.current = null;
         walkStartedAtRef.current = null;
-        saveProfileRef.current?.(); // Save arrival
+        saveProfileRef.current?.(undefined, [targetLat, targetLng]); // Save arrival with exact final coordinates
         return;
       }
 
@@ -868,7 +868,7 @@ const App: React.FC = () => {
         walkTargetRef.current = null;
         walkStartRef.current = null;
         walkStartedAtRef.current = null;
-        saveProfileRef.current?.();
+        saveProfileRef.current?.(undefined, [currentLat, currentLng]);
         return;
       }
 
