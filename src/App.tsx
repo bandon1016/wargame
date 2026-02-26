@@ -728,7 +728,13 @@ const App: React.FC = () => {
         const d = moveDirRef.current;
         setPosition(p => {
           const s = CONTINUOUS_SPEED;
-          return d === 'n' ? [p[0] + s, p[1]] : d === 's' ? [p[0] - s, p[1]] : d === 'e' ? [p[0], p[1] + s] : [p[0], p[1] - s];
+          const nextPos: [number, number] = d === 'n' ? [p[0] + s, p[1]] : d === 's' ? [p[0] - s, p[1]] : d === 'e' ? [p[0], p[1] + s] : [p[0], p[1] - s];
+
+          if (!isInTaiwan(nextPos[0], nextPos[1]) || areaName === '未知海域') {
+            stopMove(); // hit the wall
+            return p;
+          }
+          return nextPos;
         });
         setIsWalking(true);
       } else if (!targetPosition) {
@@ -800,6 +806,18 @@ const App: React.FC = () => {
       const currentProgress = elapsedSec / durationSec;
       const currentLat = startLat + dLat * currentProgress;
       const currentLng = startLng + dLng * currentProgress;
+
+      if (!isInTaiwan(currentLat, currentLng) || areaName === '未知海域') {
+        // Stop walking if we hit the boundary mid-walk
+        setTargetPosition(null);
+        setIsWalking(false);
+        walkTargetRef.current = null;
+        walkStartRef.current = null;
+        walkStartedAtRef.current = null;
+        saveProfileRef.current?.();
+        return;
+      }
+
       setPosition([currentLat, currentLng]);
 
       frameId = requestAnimationFrame(animate);
@@ -1426,6 +1444,15 @@ const App: React.FC = () => {
     useMapEvents({
       click: (e) => {
         if (!isTraveling && !inTown && !activePoiCombat) {
+          if (!isInTaiwan(e.latlng.lat, e.latlng.lng)) {
+            alert('系統偵測前方為汪洋大海或境外區域，勇者無法前往該地！');
+            setTargetPosition(null);
+            setIsWalking(false);
+            walkTargetRef.current = null;
+            walkStartRef.current = null;
+            walkStartedAtRef.current = null;
+            return;
+          }
           setTargetPosition([e.latlng.lat, e.latlng.lng]);
         }
       },
