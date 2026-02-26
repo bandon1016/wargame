@@ -217,6 +217,8 @@ const App: React.FC = () => {
   const [isLegendOpen, setIsLegendOpen] = useState(false);
   const [selectedLegendPoi, setSelectedLegendPoi] = useState<keyof typeof POI_DETAILS | null>(null);
   const [isDoubleTabbed, setIsDoubleTabbed] = useState(false);
+  const isDoubleTabbedRef = React.useRef(isDoubleTabbed);
+  useEffect(() => { isDoubleTabbedRef.current = isDoubleTabbed; }, [isDoubleTabbed]);
   const [mySessionId] = useState(() => crypto.randomUUID());
   const activePoiRef = React.useRef<string | null>(null);
   const activeMerchantPoiRef = React.useRef<string | null>(null);
@@ -375,7 +377,7 @@ const App: React.FC = () => {
 
   // Generates POIs around the player via Database
   const fetchPois = useCallback(async () => {
-    if (!session?.user?.id) return;
+    if (!session?.user?.id || isDoubleTabbedRef.current) return;
     const { data, error } = await supabase.rpc('sync_pois', {
       center_lat: positionRef.current[0],
       center_lng: positionRef.current[1]
@@ -636,6 +638,7 @@ const App: React.FC = () => {
 
   // Sync to database
   const saveProfile = useCallback(async (newState?: CharacterStats, forceLocation?: [number, number]) => {
+    if (isDoubleTabbedRef.current) return;
     const p = newState || playerRef.current;
     if (!p || !session?.user?.id) return;
 
@@ -728,6 +731,7 @@ const App: React.FC = () => {
   // Resource tick
   useEffect(() => {
     const t = window.setInterval(() => {
+      if (isDoubleTabbedRef.current) return;
       setPlayer(p => {
         if (!p) return null;
         let dg = 0, dm = 0;
@@ -1048,6 +1052,7 @@ const App: React.FC = () => {
 
     // Movement & Encounter cycle
     const encounterMover = setInterval(() => {
+      if (isDoubleTabbedRef.current) return;
       // Pick random direction
       const dirs: ('n' | 's' | 'e' | 'w')[] = ['n', 's', 'e', 'w'];
       const d = dirs[Math.floor(Math.random() * dirs.length)];
