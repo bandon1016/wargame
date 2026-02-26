@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Map as MapIcon, ChevronRight, TrainFront } from 'lucide-react';
+import { Map as MapIcon, ChevronRight, TrainFront, ClipboardList, Anchor, Ship } from 'lucide-react';
 import type { Town, CharacterStats, AlchemyRecipe, BlacksmithRecipe } from '../types/game';
 import { ALCHEMY_RECIPES, BLACKSMITH_RECIPES, ITEM_DATABASE, EQUIPMENT_DATABASE, RARITY_COLORS, TOWN_DATABASE, getRailwayPath } from '../types/game';
 
@@ -87,6 +87,48 @@ export const TownScreen: React.FC<TownScreenProps> = ({ town, player, onLeave, o
                                     <ChevronRight className="text-gray-500 group-hover:text-sky-400 transition-colors" />
                                 </button>
                             )}
+
+                            {town.facilities.includes('quest_board') && (
+                                <button onClick={() => setActiveFacility('quest_board')} className="glass-panel p-6 rounded-2xl flex items-center gap-4 text-left transition-all hover:bg-white/5 group relative overflow-hidden">
+                                    <div className="absolute top-0 right-0 w-32 h-32 bg-yellow-500/10 rounded-full blur-3xl -mr-16 -mt-16 transition-all group-hover:bg-yellow-500/20" />
+                                    <div className="w-16 h-16 rounded-xl bg-yellow-900/30 border border-yellow-500/30 flex items-center justify-center text-3xl shadow-[0_0_15px_rgba(234,179,8,0.2)]">
+                                        <ClipboardList className="text-yellow-400" size={32} />
+                                    </div>
+                                    <div className="flex-1">
+                                        <div className="font-bold text-lg text-yellow-100">任務佈告欄</div>
+                                        <div className="text-xs text-yellow-500/70 mt-1">承接市民委託，獲取豐厚報酬。</div>
+                                    </div>
+                                    <ChevronRight className="text-gray-500 group-hover:text-yellow-400 transition-colors" />
+                                </button>
+                            )}
+
+                            {town.facilities.includes('shipyard') && (
+                                <button onClick={() => setActiveFacility('shipyard')} className="glass-panel p-6 rounded-2xl flex items-center gap-4 text-left transition-all hover:bg-white/5 group relative overflow-hidden">
+                                    <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-3xl -mr-16 -mt-16 transition-all group-hover:bg-blue-500/20" />
+                                    <div className="w-16 h-16 rounded-xl bg-blue-900/30 border border-blue-500/30 flex items-center justify-center text-3xl shadow-[0_0_15px_rgba(59,130,246,0.2)]">
+                                        <Ship className="text-blue-400" size={32} />
+                                    </div>
+                                    <div className="flex-1">
+                                        <div className="font-bold text-lg text-blue-100">港口造船廠</div>
+                                        <div className="text-xs text-blue-500/70 mt-1">打造與升級船隻，準備出航。</div>
+                                    </div>
+                                    <ChevronRight className="text-gray-500 group-hover:text-blue-400 transition-colors" />
+                                </button>
+                            )}
+
+                            {town.facilities.includes('dock') && (
+                                <button onClick={() => setActiveFacility('dock')} className="glass-panel p-6 rounded-2xl flex items-center gap-4 text-left transition-all hover:bg-white/5 group relative overflow-hidden">
+                                    <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-500/10 rounded-full blur-3xl -mr-16 -mt-16 transition-all group-hover:bg-cyan-500/20" />
+                                    <div className="w-16 h-16 rounded-xl bg-cyan-900/30 border border-cyan-500/30 flex items-center justify-center text-3xl shadow-[0_0_15px_rgba(6,182,212,0.2)]">
+                                        <Anchor className="text-cyan-400" size={32} />
+                                    </div>
+                                    <div className="flex-1">
+                                        <div className="font-bold text-lg text-cyan-100">客運碼頭</div>
+                                        <div className="text-xs text-cyan-500/70 mt-1">搭乘船隻出發，探索未知海域與離島。</div>
+                                    </div>
+                                    <ChevronRight className="text-gray-500 group-hover:text-cyan-400 transition-colors" />
+                                </button>
+                            )}
                         </div>
                     </div>
                 ) : (
@@ -99,7 +141,10 @@ export const TownScreen: React.FC<TownScreenProps> = ({ town, player, onLeave, o
                                 {activeFacility === 'market' ? '🛒 黑市交易所' :
                                     activeFacility === 'blacksmith' ? '🔨 鐵匠鍛造坊' :
                                         activeFacility === 'station' ? '🚆 城市火車站' :
-                                            '⚗️ 鍊金試驗所'}
+                                            activeFacility === 'quest_board' ? '📋 任務佈告欄' :
+                                                activeFacility === 'shipyard' ? '⛴️ 港口造船廠' :
+                                                    activeFacility === 'dock' ? '⚓ 客運碼頭' :
+                                                        '⚗️ 鍊金試驗所'}
                             </h2>
                         </div>
 
@@ -323,6 +368,24 @@ export const TownScreen: React.FC<TownScreenProps> = ({ town, player, onLeave, o
                                 <div className="text-center text-gray-500 text-xs italic">
                                     ※ 票價依照城市間的物理距離計算 (100公尺 / 1金幣)
                                 </div>
+                            </div>
+                        ) : activeFacility === 'quest_board' ? (
+                            <div className="flex-1 w-full flex flex-col items-center justify-center text-center">
+                                <ClipboardList size={64} className="text-yellow-500/50 mb-4" />
+                                <h3 className="text-xl font-bold text-gray-300 mb-2">🚧 任務系統建置中 🚧</h3>
+                                <p className="text-gray-500 max-w-md">公會目前正在整理各地的委託任務，預計很快就會開放勇者接取，敬請期待未來更新！</p>
+                            </div>
+                        ) : activeFacility === 'shipyard' ? (
+                            <div className="flex-1 w-full flex flex-col items-center justify-center text-center">
+                                <Ship size={64} className="text-blue-500/50 mb-4" />
+                                <h3 className="text-xl font-bold text-gray-300 mb-2">🚧 造船廠修建中 🚧</h3>
+                                <p className="text-gray-500 max-w-md">工匠們正在研發能夠在狂風巨浪中航行的新型船隻，未來您將能在此消耗木材打造專屬戰船！</p>
+                            </div>
+                        ) : activeFacility === 'dock' ? (
+                            <div className="flex-1 w-full flex flex-col items-center justify-center text-center">
+                                <Anchor size={64} className="text-cyan-500/50 mb-4" />
+                                <h3 className="text-xl font-bold text-gray-300 mb-2">🚧 碼頭航運籌備中 🚧</h3>
+                                <p className="text-gray-500 max-w-md">通往未知海域與美麗離島的航線正在探勘中，當您擁有船隻後，便能從此處揚帆啟航！</p>
                             </div>
                         ) : (
                             <div className="flex-1 glass-panel rounded-3xl border border-white/10 p-8 flex flex-col items-center justify-center text-center">

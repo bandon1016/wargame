@@ -53,6 +53,19 @@ export interface Building {
     assignedPartners?: string[];
 }
 
+export interface Quest {
+    id: string;
+    title: string;
+    description: string;
+    targetType: 'collect' | 'kill';
+    targetId: string; // item id or monster name
+    requiredAmount: number;
+    currentAmount: number;
+    rewardGold: number;
+    rewardExp: number;
+    rewardItems?: { id: string, quantity: number }[];
+}
+
 export interface CharacterStats {
     nickname?: string;
     level: number;
@@ -75,6 +88,8 @@ export interface CharacterStats {
     equippedBoots?: Equipment | null;
     equippedAccessory?: Equipment | null;
     items: GameItem[];
+    activeQuests?: Quest[];
+    completedQuests?: string[];
 }
 
 export interface Enemy {
@@ -405,19 +420,19 @@ export interface Town {
     lng: number;
     radius: number; // trigger radius in meters
     color: string;
-    facilities: ('market' | 'blacksmith' | 'alchemy' | 'station')[];
+    facilities: ('market' | 'blacksmith' | 'alchemy' | 'station' | 'quest_board' | 'shipyard' | 'dock')[];
 }
 
 export const TOWN_DATABASE: Town[] = [
-    { id: 'town_tpe', name: '台北城', lat: 25.0330, lng: 121.5654, radius: 2000, color: '#3b82f6', facilities: ['market', 'blacksmith', 'alchemy', 'station'] },
-    { id: 'town_ntpc', name: '新北城', lat: 25.0169, lng: 121.4627, radius: 2000, color: '#6366f1', facilities: ['market', 'blacksmith', 'station'] },
-    { id: 'town_tyn', name: '桃園城', lat: 24.9931, lng: 121.3010, radius: 2000, color: '#14b8a6', facilities: ['market', 'station'] },
-    { id: 'town_txg', name: '台中城', lat: 24.1477, lng: 120.6736, radius: 2000, color: '#f59e0b', facilities: ['market', 'blacksmith', 'alchemy', 'station'] },
-    { id: 'town_tnn', name: '台南城', lat: 22.9997, lng: 120.2270, radius: 2000, color: '#ef4444', facilities: ['market', 'alchemy', 'station'] },
-    { id: 'town_khh', name: '高雄城', lat: 22.6272, lng: 120.3014, radius: 2000, color: '#eab308', facilities: ['market', 'blacksmith', 'alchemy', 'station'] },
-    { id: 'town_pif', name: '屏東城', lat: 22.6685, lng: 120.4862, radius: 2000, color: '#f97316', facilities: ['market', 'blacksmith', 'station'] },
-    { id: 'town_ttu', name: '台東城', lat: 22.7931, lng: 121.1248, radius: 2000, color: '#8b5cf6', facilities: ['market', 'blacksmith', 'station'] },
-    { id: 'town_hun', name: '花蓮城', lat: 23.9936, lng: 121.5972, radius: 2000, color: '#ec4899', facilities: ['market', 'blacksmith', 'station'] }
+    { id: 'town_tpe', name: '台北城', lat: 25.0330, lng: 121.5654, radius: 2000, color: '#3b82f6', facilities: ['market', 'blacksmith', 'alchemy', 'station', 'quest_board'] },
+    { id: 'town_ntpc', name: '新北城', lat: 25.0169, lng: 121.4627, radius: 2000, color: '#6366f1', facilities: ['market', 'blacksmith', 'station', 'quest_board'] },
+    { id: 'town_tyn', name: '桃園城', lat: 24.9931, lng: 121.3010, radius: 2000, color: '#14b8a6', facilities: ['market', 'station', 'quest_board'] },
+    { id: 'town_txg', name: '台中城', lat: 24.1477, lng: 120.6736, radius: 2000, color: '#f59e0b', facilities: ['market', 'blacksmith', 'alchemy', 'station', 'quest_board', 'dock'] },
+    { id: 'town_tnn', name: '台南城', lat: 22.9997, lng: 120.2270, radius: 2000, color: '#ef4444', facilities: ['market', 'alchemy', 'station', 'quest_board'] },
+    { id: 'town_khh', name: '高雄城', lat: 22.6272, lng: 120.3014, radius: 2000, color: '#eab308', facilities: ['market', 'blacksmith', 'alchemy', 'station', 'quest_board', 'shipyard', 'dock'] },
+    { id: 'town_pif', name: '屏東城', lat: 22.6685, lng: 120.4862, radius: 2000, color: '#f97316', facilities: ['market', 'blacksmith', 'station', 'quest_board'] },
+    { id: 'town_ttu', name: '台東城', lat: 22.7931, lng: 121.1248, radius: 2000, color: '#8b5cf6', facilities: ['market', 'blacksmith', 'station', 'quest_board'] },
+    { id: 'town_hun', name: '花蓮城', lat: 23.9936, lng: 121.5972, radius: 2000, color: '#ec4899', facilities: ['market', 'blacksmith', 'station', 'quest_board', 'dock'] }
 ];
 
 export const RAILWAY_NETWORK: Record<string, [number, number][]> = {
