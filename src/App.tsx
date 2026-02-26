@@ -1885,12 +1885,14 @@ const App: React.FC = () => {
             </div>
 
             {/* Weather Overlay - Moved to Map */}
-            <div className="absolute top-4 right-4 z-[1000] flex items-center gap-2 bg-black/60 backdrop-blur-md px-4 py-2 rounded-full border border-white/20 shadow-lg tooltip-wrap cursor-help pointer-events-auto transition-all hover:bg-black/80">
-              <span className="text-2xl drop-shadow-md">{WEATHER_TYPES[weather].icon}</span>
-              <span className="text-sm font-bold text-white drop-shadow-md">{WEATHER_TYPES[weather].label}</span>
-              <div className="tooltip-text tooltip-bottom">
-                <div className="font-bold text-white mb-1">{WEATHER_TYPES[weather].label}</div>
-                <div className="text-gray-400 text-[10px] whitespace-nowrap">{WEATHER_TYPES[weather].description}</div>
+            <div className="absolute top-4 right-4 z-[1000]">
+              <div className="flex items-center gap-2 bg-black/60 backdrop-blur-md px-4 py-2 rounded-full border border-white/20 shadow-lg tooltip-wrap cursor-help pointer-events-auto transition-all hover:bg-black/80">
+                <span className="text-2xl drop-shadow-md">{WEATHER_TYPES[weather].icon}</span>
+                <span className="text-sm font-bold text-white drop-shadow-md">{WEATHER_TYPES[weather].label}</span>
+                <div className="tooltip-text tooltip-bottom">
+                  <div className="font-bold text-white mb-1">{WEATHER_TYPES[weather].label}</div>
+                  <div className="text-gray-400 text-[10px] whitespace-nowrap">{WEATHER_TYPES[weather].description}</div>
+                </div>
               </div>
             </div>
 

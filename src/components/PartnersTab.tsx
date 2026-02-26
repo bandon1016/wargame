@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Star, Sparkles, UserPlus, Users, ShieldAlert, CheckCircle2, MinusCircle, PlusCircle, Loader2, X, Zap, AlertTriangle, ArrowRight, ArrowUpCircle, Home } from 'lucide-react';
+import { Star, Sparkles, UserPlus, Users, ShieldAlert, CheckCircle2, MinusCircle, PlusCircle, Loader2, X, Zap, AlertTriangle, ArrowRight, Home } from 'lucide-react';
 import type { Partner, CharacterStats } from '../types/game';
 import { RARITY_COLORS, PARTNER_POOL, getPartnerAvatar } from '../types/game';
 
@@ -28,7 +28,7 @@ const Stars = ({ n }: { n: number }) => (
 
 export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfile, isCombatAction }) => {
     const [anim, setAnim] = useState(false);
-    const [drawn, setDrawn] = useState<Partner | null>(null);
+    const [drawn, setDrawn] = useState<Partner[] | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
 
     // Synthesis states
@@ -36,15 +36,15 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
     const [synthRarity, setSynthRarity] = useState<3 | 4>(3);
     const [selectedMaterials, setSelectedMaterials] = useState<string[]>([]);
     const [synthAnim, setSynthAnim] = useState(false);
-    const [synthResult, setSynthResult] = useState<Partner | null>(null);
-    const [synthSuccess, setSynthSuccess] = useState<boolean | null>(null);
+    const [synthResults, setSynthResults] = useState<Partner[] | null>(null);
+    const [synthSuccessCount, setSynthSuccessCount] = useState<number>(0);
 
     const openSynthesisModal = () => {
         setIsSynthesisModalOpen(true);
         setSynthRarity(3);
         setSelectedMaterials([]);
-        setSynthResult(null);
-        setSynthSuccess(null);
+        setSynthResults(null);
+        setSynthSuccessCount(0);
         setSynthAnim(false);
     };
 
@@ -52,34 +52,56 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
         if (selectedMaterials.includes(partnerId)) {
             setSelectedMaterials(prev => prev.filter(id => id !== partnerId));
         } else {
-            if (selectedMaterials.length < 4) {
-                setSelectedMaterials(prev => [...prev, partnerId]);
-            }
+            setSelectedMaterials(prev => [...prev, partnerId]);
         }
     };
 
+    const handleQuickSelect = () => {
+        const available = player.partners.filter(p => p.rarity === synthRarity && !p.isDeployed && !player.buildings.some(b => b.assignedPartners?.includes(p.id)));
+
+        if (available.length < 4) {
+            alert('符合條件的素材數量不足 4 張');
+            return;
+        }
+
+        const countToSelect = Math.floor(available.length / 4) * 4;
+        const toSelect = available.slice(0, countToSelect).map(p => p.id);
+        setSelectedMaterials(toSelect);
+    };
+
     const handleSynthesis = () => {
-        if (selectedMaterials.length !== 4) return;
+        if (selectedMaterials.length < 4) return;
+        const synthCount = Math.floor(selectedMaterials.length / 4);
+
         setSynthAnim(true);
-        setSynthResult(null);
-        setSynthSuccess(null);
+        setSynthResults(null);
+        setSynthSuccessCount(0);
+        setSynthResults(null);
+        setSynthSuccessCount(0);
 
         setTimeout(() => {
+            const results: Partner[] = [];
+            let successHits = 0;
             const successRate = synthRarity === 3 ? 0.10 : 0.05;
-            const isSuccess = Math.random() < successRate;
-            const nextRarity = isSuccess ? (synthRarity + 1 as 3 | 4 | 5) : synthRarity;
 
-            const cands = PARTNER_POOL.filter(p => p.rarity === nextRarity);
-            const s = cands[Math.floor(Math.random() * cands.length)];
-            const np: Partner = { id: Math.random().toString(), ...s, level: 1, exp: 0, maxExp: 100, isDeployed: false };
+            for (let i = 0; i < synthCount; i++) {
+                const isSuccess = Math.random() < successRate;
+                if (isSuccess) successHits++;
+                const nextRarity = isSuccess ? (synthRarity + 1 as 3 | 4 | 5) : synthRarity;
 
-            setSynthResult(np);
-            setSynthSuccess(isSuccess);
+                const cands = PARTNER_POOL.filter(p => p.rarity === nextRarity);
+                const s = cands[Math.floor(Math.random() * cands.length)];
+                results.push({ id: Math.random().toString() + i, ...s, level: 1, exp: 0, maxExp: 100, isDeployed: false });
+            }
+
+            setSynthResults(results);
+            setSynthSuccessCount(successHits);
             setSynthAnim(false);
 
             onUpdatePlayer(prev => {
-                const nextPartners = prev.partners.filter(p => !selectedMaterials.includes(p.id));
-                nextPartners.push(np);
+                const materialsToConsume = selectedMaterials.slice(0, synthCount * 4);
+                const nextPartners = prev.partners.filter(p => !materialsToConsume.includes(p.id));
+                nextPartners.push(...results);
                 const nextState = {
                     ...prev,
                     partners: nextPartners
@@ -103,7 +125,7 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
             const s = cands[Math.floor(Math.random() * cands.length)];
             const np: Partner = { id: Math.random().toString(), ...s, level: 1, exp: 0, maxExp: 100, isDeployed: false };
 
-            setDrawn(np);
+            setDrawn([np]);
             setAnim(false);
 
             onUpdatePlayer(prev => {
@@ -118,37 +140,36 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
         }, 1500);
     };
 
-    const handleUpgrade = (partnerId: string) => {
-        if (player.baseMaterials < 10) { alert('建材不足！需要 10 建材'); return; }
+    const gachaTen = () => {
+        if (player.gold < 1000) { alert('金幣不足！需要 1000 金幣'); return; }
+        setAnim(true); setDrawn(null);
 
-        onUpdatePlayer(prev => {
-            const nextPartners = prev.partners.map(p => {
-                if (p.id !== partnerId) return p;
-                let nextExp = p.exp + 50;
-                let nextLevel = p.level;
-                let nextMaxExp = p.maxExp;
-                let nextPower = p.power;
+        setTimeout(() => {
+            const newPartners: Partner[] = [];
+            for (let i = 0; i < 10; i++) {
+                const r = Math.random();
+                let rarity: 3 | 4 | 5 = 3;
+                if (r > 0.99) rarity = 5; else if (r > 0.89) rarity = 4;
+                const cands = PARTNER_POOL.filter(p => p.rarity === rarity);
+                const s = cands[Math.floor(Math.random() * cands.length)];
+                newPartners.push({ id: Math.random().toString() + i, ...s, level: 1, exp: 0, maxExp: 100, isDeployed: false });
+            }
 
-                while (nextExp >= nextMaxExp) {
-                    nextExp -= nextMaxExp;
-                    nextLevel++;
-                    nextMaxExp = Math.floor(nextMaxExp * 1.5);
-                    if (p.rarity === 5) nextPower += 5;
-                    else if (p.rarity === 4) nextPower += 3;
-                    else nextPower += 2;
-                }
-                return { ...p, exp: nextExp, level: nextLevel, maxExp: nextMaxExp, power: nextPower };
+            setDrawn(newPartners);
+            setAnim(false);
+
+            onUpdatePlayer(prev => {
+                const nextState = {
+                    ...prev,
+                    gold: prev.gold - 1000,
+                    partners: [...prev.partners, ...newPartners]
+                };
+                saveProfile(nextState); // SYNC FIX: Persist latest state
+                return nextState;
             });
-
-            const nextState = {
-                ...prev,
-                baseMaterials: prev.baseMaterials - 10,
-                partners: nextPartners
-            };
-            saveProfile(nextState);
-            return nextState;
-        });
+        }, 2000);
     };
+
 
     const toggleDeploy = (partnerId: string) => {
         if (isCombatAction) {
@@ -350,14 +371,6 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
                                             </div>
                                         </div>
                                         <div className="flex flex-col gap-1.5 min-w-[70px]">
-                                            <button
-                                                onClick={() => handleUpgrade(group.base.id)}
-                                                disabled={player.baseMaterials < 10}
-                                                className="w-full py-1.5 bg-game-gold/10 hover:bg-game-gold/20 text-game-gold rounded-xl text-[10px] font-black transition-all border border-game-gold/30 disabled:opacity-30 disabled:grayscale flex items-center justify-center gap-1"
-                                                title="消耗 10 建材升級"
-                                            >
-                                                <ArrowUpCircle size={12} /> 升級
-                                            </button>
 
                                             {group.idleIds.length > 0 && (
                                                 <button
@@ -388,7 +401,7 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
                 {/* GACHA MODAL */}
                 {isModalOpen && (
                     <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md anim-fade-in">
-                        <div className="glass-panel w-full max-w-sm md:max-w-3xl max-h-[80vh] overflow-hidden rounded-[40px] p-8 border-2 border-amber-500/30 shadow-2xl relative flex flex-col md:flex-row text-center md:text-left bg-gradient-to-b md:bg-gradient-to-r from-amber-500/10 to-transparent">
+                        <div className={`glass-panel w-full ${drawn && drawn.length > 1 ? 'max-w-5xl' : 'max-w-sm md:max-w-3xl'} max-h-[90vh] md:max-h-[80vh] overflow-hidden rounded-[40px] p-6 md:p-8 border-2 border-amber-500/30 shadow-2xl relative flex flex-col md:flex-row text-center md:text-left bg-gradient-to-b md:bg-gradient-to-r from-amber-500/10 to-transparent transition-all duration-500`}>
                             <div className="absolute inset-0 anim-shimmer pointer-events-none opacity-30" />
 
                             <button
@@ -407,23 +420,43 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
                                 <h3 className="text-3xl font-black text-white mb-2 italic text-center">命運契約</h3>
                                 <p className="text-sm text-gray-400 mb-8 leading-relaxed text-center">呼喚隱眠於異界的靈魂<br />以金幣之力訂立命運之盟</p>
 
-                                <button
-                                    onClick={gacha}
-                                    disabled={anim}
-                                    className="group w-full max-w-[280px] mx-auto md:mx-0 bg-gradient-to-r from-amber-600 to-yellow-500 hover:from-amber-500 hover:to-yellow-400 text-black font-black py-4 px-6 rounded-3xl transition-all active:scale-95 disabled:opacity-50 shadow-[0_8px_30px_rgba(251,191,36,0.5)] flex flex-col items-center gap-0.5 mb-8"
-                                >
-                                    {anim ? (
-                                        <><Loader2 className="animate-spin mb-1" /> <span className="text-base">共鳴中...</span></>
-                                    ) : (
-                                        <>
-                                            <div className="flex items-center gap-2">
-                                                <UserPlus size={22} />
-                                                <span className="text-lg">起始召喚</span>
-                                            </div>
-                                            <div className="text-xs opacity-70 mt-1">每次消耗 100 金幣</div>
-                                        </>
-                                    )}
-                                </button>
+                                <div className="flex flex-col sm:flex-row gap-3 w-full max-w-[280px] sm:max-w-none justify-center mx-auto md:mx-0 mb-8">
+                                    <button
+                                        onClick={gacha}
+                                        disabled={anim}
+                                        className="group flex-1 bg-gradient-to-r from-amber-600 to-yellow-500 hover:from-amber-500 hover:to-yellow-400 text-black font-black py-4 px-4 rounded-3xl transition-all active:scale-95 disabled:opacity-50 shadow-[0_8px_30px_rgba(251,191,36,0.3)] flex flex-col items-center gap-0.5"
+                                    >
+                                        {anim ? (
+                                            <><Loader2 className="animate-spin mb-1" /> <span className="text-sm">共鳴中</span></>
+                                        ) : (
+                                            <>
+                                                <div className="flex items-center gap-1.5">
+                                                    <UserPlus size={18} />
+                                                    <span className="text-base">單次招募</span>
+                                                </div>
+                                                <div className="text-[10px] opacity-70 mt-1">100 金幣</div>
+                                            </>
+                                        )}
+                                    </button>
+                                    <button
+                                        onClick={gachaTen}
+                                        disabled={anim}
+                                        className="group flex-1 bg-gradient-to-r from-orange-600 to-amber-500 hover:from-orange-500 hover:to-amber-400 text-white font-black py-4 px-4 rounded-3xl transition-all active:scale-95 disabled:opacity-50 shadow-[0_8px_30px_rgba(234,88,12,0.4)] flex flex-col items-center gap-0.5 relative overflow-hidden"
+                                    >
+                                        <div className="absolute inset-0 bg-white/20 transform -skew-x-12 -translate-x-full group-hover:animate-[shimmer_1.5s_infinite]" />
+                                        {anim ? (
+                                            <><Loader2 className="animate-spin mb-1" /> <span className="text-sm">大量共鳴中</span></>
+                                        ) : (
+                                            <>
+                                                <div className="flex items-center gap-1.5">
+                                                    <Users size={18} />
+                                                    <span className="text-base">十連招募</span>
+                                                </div>
+                                                <div className="text-[10px] opacity-90 mt-1 text-orange-200">1000 金幣</div>
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
 
                                 <div className="mt-auto pt-6 border-t border-white/5 w-full hidden md:block">
                                     <h4 className="text-xs font-black text-gray-400 uppercase tracking-[0.2em] mb-4 flex items-center justify-center gap-2">
@@ -447,18 +480,44 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
                             </div>
 
                             {/* Right Side: Result */}
-                            <div className="flex-1 flex flex-col items-center justify-center md:pl-8 mt-8 md:mt-0 min-h-[300px]">
+                            <div className="flex-1 flex flex-col items-center justify-center md:pl-8 mt-8 md:mt-0 min-h-[300px] w-full">
                                 {drawn && !anim ? (
-                                    <div className={`p-6 rounded-[32px] border-2 w-full max-w-[280px] animate-in zoom-in-95 duration-300 relative bg-black/40 ${RARITY_COLORS[drawn.rarity!].border} ${RARITY_COLORS[drawn.rarity!].glow}`}>
-                                        <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-black px-4 py-1.5 rounded-full border border-white/20 text-[10px] font-black text-game-gold whitespace-nowrap tracking-widest">NEW PARTNER</div>
-                                        <div className="text-6xl mb-4 transform hover:scale-110 transition-transform flex justify-center">{getLatestAvatar(drawn.name, drawn.avatar)}</div>
-                                        <div className="flex justify-center mb-3"><Stars n={drawn.rarity!} /></div>
-                                        <div className="font-black text-xl text-white mb-2 text-center">{drawn.name}</div>
-                                        <div className="flex flex-col items-center gap-3">
-                                            <RoleTag role={drawn.role} />
-                                            <div className="text-xs font-mono text-gray-300 bg-black/40 px-3 py-1 rounded-xl border border-white/5">戰鬥力: {drawn.power}</div>
+                                    drawn.length === 1 ? (
+                                        <div className={`p-6 rounded-[32px] border-2 w-full max-w-[280px] animate-in zoom-in-95 duration-300 relative bg-black/40 shadow-2xl ${RARITY_COLORS[drawn[0].rarity!].border} ${RARITY_COLORS[drawn[0].rarity!].glow}`}>
+                                            <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-black px-4 py-1.5 rounded-full border border-white/20 text-[10px] font-black text-game-gold whitespace-nowrap tracking-widest shadow-md">NEW PARTNER</div>
+                                            <div className="text-6xl mb-4 transform hover:scale-110 transition-transform flex justify-center drop-shadow-[0_0_15px_rgba(255,255,255,0.3)]">{getLatestAvatar(drawn[0].name, drawn[0].avatar)}</div>
+                                            <div className="flex justify-center mb-3"><Stars n={drawn[0].rarity!} /></div>
+                                            <div className="font-black text-xl text-white mb-2 text-center tracking-wide">{drawn[0].name}</div>
+                                            <div className="flex flex-col items-center gap-3">
+                                                <RoleTag role={drawn[0].role} />
+                                                <div className="text-xs font-mono text-gray-300 bg-black/40 px-3 py-1 rounded-xl border border-white/5">戰鬥力: {drawn[0].power}</div>
+                                            </div>
                                         </div>
-                                    </div>
+                                    ) : (
+                                        <div className="w-full">
+                                            <div className="absolute top-4 right-4 bg-black/60 px-4 py-1.5 rounded-full border border-amber-500/30 text-xs font-black text-amber-500 whitespace-nowrap tracking-widest shadow-lg animate-pulse z-10 hidden md:block">10 PULLS</div>
+                                            <div className={`grid ${drawn.length > 5 ? 'grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4' : 'grid-cols-2 lg:grid-cols-3'} gap-4 md:gap-5 max-h-[65vh] md:max-h-[60vh] overflow-y-auto custom-scrollbar p-2 md:p-4`}>
+                                                {drawn.map((p, i) => (
+                                                    <div
+                                                        key={p.id}
+                                                        className={`p-4 md:p-5 rounded-[24px] border-2 flex flex-col items-center justify-center relative bg-black/40 hover:bg-black/60 transition-all ${RARITY_COLORS[p.rarity!].border} ${RARITY_COLORS[p.rarity!].glow} animate-in zoom-in fill-mode-both shadow-lg`}
+                                                        style={{ animationDelay: `${i * 100}ms` }}
+                                                    >
+                                                        {p.rarity! >= 4 && (
+                                                            <div className="absolute inset-0 bg-white/5 rounded-[24px] pointer-events-none animate-pulse" />
+                                                        )}
+                                                        {p.rarity! === 5 && (
+                                                            <div className="absolute -top-2 -right-2 bg-yellow-400 text-black text-[10px] font-black px-2 py-1 rounded shadow-lg transform rotate-12 animate-bounce z-10">SSR</div>
+                                                        )}
+                                                        <div className={`text-4xl md:text-5xl mb-3 transform hover:scale-110 transition-transform drop-shadow-[0_0_10px_rgba(255,255,255,0.2)] ${p.rarity! >= 4 ? 'animate-bounce' : ''}`}>{getLatestAvatar(p.name, p.avatar)}</div>
+                                                        <div className="flex justify-center mb-2 h-3.5"><Stars n={p.rarity!} /></div>
+                                                        <div className="font-black text-xs md:text-sm text-white text-center w-full leading-tight drop-shadow-sm">{p.name}</div>
+                                                        <div className="mt-2 text-[9px] font-bold text-gray-400 bg-black/30 px-2 py-0.5 rounded-full border border-white/5 uppercase opacity-80">ATK {p.power}</div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )
                                 ) : anim ? (
                                     <div className="text-amber-500/50 flex flex-col items-center justify-center animate-pulse">
                                         <Sparkles size={64} className="mb-4" />
@@ -515,7 +574,7 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
                                     <h3 className="text-xl font-black text-white">夥伴合成</h3>
                                 </div>
 
-                                {!synthResult && !synthAnim && (
+                                {!synthResults && !synthAnim && (
                                     <div className="flex md:flex-col justify-center gap-4 mb-6 shrink-0">
                                         <button
                                             onClick={() => { setSynthRarity(3); setSelectedMaterials([]); }}
@@ -532,7 +591,7 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
                                     </div>
                                 )}
 
-                                {!synthResult && !synthAnim && (
+                                {!synthResults && !synthAnim && (
                                     <div className="mt-auto shrink-0 hidden md:flex flex-col gap-4">
                                         <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4">
                                             <h5 className="text-red-400 font-black text-sm flex items-center gap-1.5 mb-1.5"><AlertTriangle size={15} /> 警告</h5>
@@ -548,10 +607,10 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
 
                                         <button
                                             onClick={handleSynthesis}
-                                            disabled={selectedMaterials.length !== 4}
+                                            disabled={selectedMaterials.length < 4}
                                             className="w-full bg-purple-600 hover:bg-purple-500 disabled:bg-white/5 disabled:text-gray-500 text-white font-black py-4 px-8 rounded-xl transition-all shadow-[0_4px_15px_rgba(168,85,247,0.3)] disabled:shadow-none"
                                         >
-                                            確認合成
+                                            確認合成 ({Math.floor(selectedMaterials.length / 4)} 次)
                                         </button>
                                     </div>
                                 )}
@@ -564,76 +623,115 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
                                         <Loader2 size={48} className="animate-spin text-purple-500 mb-4" />
                                         <p className="text-lg font-black text-purple-400 animate-pulse">靈魂融合中...</p>
                                     </div>
-                                ) : synthResult ? (
-                                    <div className="h-full flex flex-col items-center justify-center animate-in zoom-in-95 duration-500">
-                                        <h4 className={`text-2xl font-black mb-6 flex items-center gap-2 ${synthSuccess ? 'text-game-gold' : 'text-gray-400'}`}>
-                                            {synthSuccess ? <><Sparkles /> 合成成功！</> : '合成失敗，轉化為同星級夥伴'}
-                                        </h4>
-                                        <div className={`p-6 rounded-[32px] border-2 flex flex-col items-center relative min-w-[200px] ${RARITY_COLORS[synthResult!.rarity].border} ${RARITY_COLORS[synthResult!.rarity].bg} ${RARITY_COLORS[synthResult!.rarity].glow}`}>
-                                            <div className="text-6xl mb-4 transform hover:scale-110 transition-transform">{synthResult!.avatar}</div>
-                                            <div className="flex justify-center mb-3"><Stars n={synthResult!.rarity} /></div>
-                                            <div className="font-black text-xl text-white mb-2">{synthResult!.name}</div>
-                                            <div className="flex flex-col items-center gap-3">
-                                                <RoleTag role={synthResult!.role} />
-                                                <div className="text-xs font-mono text-gray-300 bg-black/40 px-3 py-1 rounded-xl border border-white/5">戰鬥力: {synthResult!.power}</div>
-                                            </div>
-                                        </div>
-                                        <button
-                                            onClick={() => { setSynthResult(null); setSynthSuccess(null); }}
-                                            className="mt-8 px-8 py-3 bg-white/10 hover:bg-white/20 text-white font-black rounded-xl transition-all"
-                                        >
-                                            繼續合成
-                                        </button>
-                                    </div>
-                                ) : (
-                                    <div className="flex flex-col h-full">
-                                        <div className="flex items-center justify-between mb-4 sticky top-0 bg-black/40 p-2 z-10 backdrop-blur-md rounded-lg">
-                                            <p className="text-sm font-bold text-gray-400 hidden sm:block">請選擇 4 張同星級卡片做為材料</p>
-                                            <p className="text-sm font-bold text-gray-400 sm:hidden">選 4 張素材</p>
-                                            <span className="text-xs px-3 py-1 rounded-full bg-purple-500/20 text-purple-300 font-mono border border-purple-500/30">已選: {selectedMaterials.length}/4</span>
+                                ) : synthResults ? (
+                                    <div className="h-full flex flex-col items-center animate-in zoom-in-95 duration-500 w-full overflow-y-auto custom-scrollbar p-2">
+                                        <div className="text-center mb-6">
+                                            <h4 className={`text-2xl font-black flex items-center justify-center gap-2 ${synthSuccessCount > 0 ? 'text-game-gold' : 'text-gray-400'}`}>
+                                                {synthSuccessCount > 0 ? <><Sparkles /> 合成完畢！成功 {synthSuccessCount} 次</> : '合成完畢，全數失敗...'}
+                                            </h4>
+                                            <p className="text-xs text-gray-500 mt-1">失敗之次數已自動退還同星級隨機夥伴</p>
                                         </div>
 
-                                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-                                            {player.partners
-                                                .filter(p => p.rarity === synthRarity && !p.isDeployed && !player.buildings.some(b => b.assignedPartners?.includes(p.id)))
-                                                .map(p => {
-                                                    const isSelected = selectedMaterials.includes(p.id);
-                                                    return (
-                                                        <div
-                                                            key={p.id}
-                                                            onClick={() => toggleMaterialSelection(p.id)}
-                                                            className={`rounded-2xl border flex flex-col items-center justify-center p-2 cursor-pointer transition-all relative
-                                                            ${isSelected ? 'border-purple-500 bg-purple-500/20 scale-95 shadow-[0_0_15px_rgba(168,85,247,0.4)]' : `border-white/5 bg-white/5 hover:bg-white/10 opacity-70 hover:opacity-100 hover:border-purple-500/30`}
-                                                        `}
-                                                        >
-                                                            {isSelected && (
-                                                                <div className="absolute top-1 right-1 bg-purple-500 text-white rounded-full p-0.5 z-10 shadow-lg scale-75">
-                                                                    <CheckCircle2 size={16} />
-                                                                </div>
-                                                            )}
-                                                            <div className="text-3xl mb-1 mt-1 group-hover:scale-110 transition-transform">{getLatestAvatar(p.name, p.avatar)}</div>
-                                                            <div className="font-black text-[10px] text-center truncate w-full px-1 text-white/90">{p.name}</div>
-                                                            <div className="mt-1 flex items-center gap-0.5 bg-black/30 px-1.5 py-0.5 rounded-full border border-white/5">
-                                                                <Star size={8} className="text-game-gold" fill="currentColor" />
-                                                                <span className="text-[9px] font-black text-game-gold">{p.rarity}</span>
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                })
-                                            }
-                                            {player.partners.filter(p => p.rarity === synthRarity && !p.isDeployed && !player.buildings.some(b => b.assignedPartners?.includes(p.id))).length === 0 && (
-                                                <div className="col-span-full py-12 flex flex-col items-center justify-center opacity-50">
-                                                    <Users size={32} className="mb-2" />
-                                                    <p className="font-bold text-sm">沒有符合條件的未上陣夥伴</p>
+                                        <div className={`grid ${synthResults.length > 1 ? 'grid-cols-2 lg:grid-cols-3 xl:grid-cols-4' : 'grid-cols-1'} gap-4 w-full`}>
+                                            {synthResults.map((p, i) => (
+                                                <div
+                                                    key={p.id}
+                                                    className={`p-4 rounded-[24px] border-2 flex flex-col items-center relative transition-all animate-in zoom-in fill-mode-both ${RARITY_COLORS[p.rarity].border} ${RARITY_COLORS[p.rarity].bg} ${RARITY_COLORS[p.rarity].glow}`}
+                                                    style={{ animationDelay: `${i * 100}ms` }}
+                                                >
+                                                    {p.rarity > synthRarity && (
+                                                        <div className="absolute -top-2 -left-2 bg-game-gold text-black text-[10px] font-black px-2 py-0.5 rounded shadow-lg transform -rotate-12 z-10 animate-bounce">SUCCESS</div>
+                                                    )}
+                                                    <div className="text-4xl mb-2 transform hover:scale-110 transition-transform">{p.avatar}</div>
+                                                    <div className="flex justify-center mb-2 scale-75 origin-top h-2"><Stars n={p.rarity} /></div>
+                                                    <div className="font-black text-xs text-white mb-1 truncate w-full text-center">{p.name}</div>
+                                                    <RoleTag role={p.role} />
                                                 </div>
-                                            )}
+                                            ))}
                                         </div>
+
+                                        <button
+                                            onClick={() => { setSynthResults(null); setSynthSuccessCount(0); }}
+                                            className="mt-8 px-8 py-3 bg-white/10 hover:bg-white/20 text-white font-black rounded-xl transition-all shrink-0"
+                                        >
+                                            返回介面
+                                        </button>
                                     </div>
-                                )}
+                                ) : (() => {
+                                    const theme = synthRarity === 3 ? {
+                                        btn: "bg-sky-500/20 hover:bg-sky-500/40 text-sky-300 border-sky-500/40",
+                                        badge: "bg-sky-500/20 text-sky-300 border-sky-500/30",
+                                        cardSelected: "border-sky-500 bg-sky-500/20 scale-95 shadow-[0_0_15px_rgba(14,165,233,0.4)]",
+                                        cardHover: "hover:border-sky-500/30",
+                                        checkBg: "bg-sky-500",
+                                        confirmBtn: "bg-sky-600 hover:bg-sky-500 shadow-[0_4px_15px_rgba(14,165,233,0.3)]"
+                                    } : {
+                                        btn: "bg-purple-500/20 hover:bg-purple-500/40 text-purple-300 border-purple-500/40",
+                                        badge: "bg-purple-500/20 text-purple-300 border-purple-500/30",
+                                        cardSelected: "border-purple-500 bg-purple-500/20 scale-95 shadow-[0_0_15px_rgba(168,85,247,0.4)]",
+                                        cardHover: "hover:border-purple-500/30",
+                                        checkBg: "bg-purple-500",
+                                        confirmBtn: "bg-purple-600 hover:bg-purple-500 shadow-[0_4px_15px_rgba(168,85,247,0.3)]"
+                                    };
+                                    return (
+                                        <div className="flex flex-col h-full">
+                                            <div className="flex items-center justify-between mb-4 sticky top-0 bg-black/40 p-2 z-10 backdrop-blur-md rounded-lg">
+                                                <div className="flex items-center gap-2">
+                                                    <p className="text-sm font-bold text-gray-400 hidden sm:block">請選擇 4 張同星級卡片做為材料</p>
+                                                    <p className="text-sm font-bold text-gray-400 sm:hidden">選 4 張素材</p>
+                                                    <button
+                                                        onClick={handleQuickSelect}
+                                                        className={`ml-2 font-black text-xs px-3 py-1.5 rounded-full border transition-all flex items-center gap-1.5 active:scale-95 ${theme.btn}`}
+                                                        title="一次選取 4 的倍數張閒置夥伴"
+                                                    >
+                                                        <Zap size={14} className="text-amber-400" /> 一鍵全選
+                                                    </button>
+                                                </div>
+                                                <span className={`text-xs px-3 py-1 rounded-full font-mono border shrink-0 ${theme.badge}`}>已選: {selectedMaterials.length} ({Math.floor(selectedMaterials.length / 4)} 次)</span>
+                                            </div>
+
+                                            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                                                {player.partners
+                                                    .filter(p => p.rarity === synthRarity && !p.isDeployed && !player.buildings.some(b => b.assignedPartners?.includes(p.id)))
+                                                    .map(p => {
+                                                        const isSelected = selectedMaterials.includes(p.id);
+                                                        return (
+                                                            <div
+                                                                key={p.id}
+                                                                onClick={() => toggleMaterialSelection(p.id)}
+                                                                className={`rounded-2xl border flex flex-col items-center justify-center p-2 cursor-pointer transition-all relative
+                                                            ${isSelected ? theme.cardSelected : `border-white/5 bg-white/5 hover:bg-white/10 opacity-70 hover:opacity-100 ${theme.cardHover}`}
+                                                        `}
+                                                            >
+                                                                {isSelected && (
+                                                                    <div className={`absolute top-1 right-1 text-white rounded-full p-0.5 z-10 shadow-lg scale-75 ${theme.checkBg}`}>
+                                                                        <CheckCircle2 size={16} />
+                                                                    </div>
+                                                                )}
+                                                                <div className="text-3xl mb-1 mt-1 group-hover:scale-110 transition-transform">{getLatestAvatar(p.name, p.avatar)}</div>
+                                                                <div className="font-black text-[10px] text-center truncate w-full px-1 text-white/90">{p.name}</div>
+                                                                <div className="mt-1 flex items-center gap-0.5 bg-black/30 px-1.5 py-0.5 rounded-full border border-white/5">
+                                                                    <Star size={8} className="text-game-gold" fill="currentColor" />
+                                                                    <span className="text-[9px] font-black text-game-gold">{p.rarity}</span>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })
+                                                }
+                                                {player.partners.filter(p => p.rarity === synthRarity && !p.isDeployed && !player.buildings.some(b => b.assignedPartners?.includes(p.id))).length === 0 && (
+                                                    <div className="col-span-full py-12 flex flex-col items-center justify-center opacity-50">
+                                                        <Users size={32} className="mb-2" />
+                                                        <p className="font-bold text-sm">沒有符合條件的未上陣夥伴</p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
                             </div>
 
                             {/* Mobile actions at bottom */}
-                            {!synthResult && !synthAnim && (
+                            {!synthResults && !synthAnim && (
                                 <div className="mt-6 shrink-0 md:hidden flex flex-col gap-4">
                                     <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
                                         <div className="text-xs text-gray-400 font-bold text-center sm:text-left">
@@ -641,10 +739,10 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
                                         </div>
                                         <button
                                             onClick={handleSynthesis}
-                                            disabled={selectedMaterials.length !== 4}
-                                            className="w-full sm:w-auto bg-purple-600 hover:bg-purple-500 disabled:bg-white/5 disabled:text-gray-500 text-white font-black py-4 px-8 rounded-xl transition-all shadow-[0_4px_15px_rgba(168,85,247,0.3)] disabled:shadow-none"
+                                            disabled={selectedMaterials.length < 4}
+                                            className={`w-full sm:w-auto disabled:bg-white/5 disabled:text-gray-500 text-white font-black py-4 px-8 rounded-xl transition-all disabled:shadow-none ${synthRarity === 3 ? 'bg-sky-600 hover:bg-sky-500 shadow-[0_4px_15px_rgba(14,165,233,0.3)]' : 'bg-purple-600 hover:bg-purple-500 shadow-[0_4px_15px_rgba(168,85,247,0.3)]'}`}
                                         >
-                                            確認合成
+                                            確認合成 ({Math.floor(selectedMaterials.length / 4)} 次)
                                         </button>
                                     </div>
                                 </div>
