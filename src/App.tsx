@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMap, Circle, Polyline, Polygon, useMapEvents } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap, Circle, Polyline, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Compass, Sword, Home, Users, Package, Settings as SettingsIcon, Book, Heart, Shield, Zap, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, MapPin, Loader2, X, PlusCircle, Activity, Info, ShieldAlert, TrainFront } from 'lucide-react';
 import type { CharacterStats, Equipment, GameItem, Skill, MapPOI, Town, WeatherType, Enemy, AlchemyRecipe, BlacksmithRecipe } from './types/game';
@@ -181,6 +181,7 @@ const App: React.FC = () => {
   const [inTown, setInTown] = useState<Town | null>(null);
   const [pois, setPois] = useState<MapPOI[]>([]);
   const [targetPosition, setTargetPosition] = useState<[number, number] | null>(null);
+  const [selectedMarkId, setSelectedMarkId] = useState<string | null>(null);
   const [isWalking, setIsWalking] = useState(false);
   const moveDirRef = React.useRef<'n' | 's' | 'e' | 'w' | null>(null);
 
@@ -1492,11 +1493,33 @@ const App: React.FC = () => {
     })} />;
   }
 
+  // Handle clicking on POIs or Towns (require 2 clicks to move)
+  const handleMarkClick = (id: string, lat: number, lng: number) => {
+    if (isTraveling || inTown || activePoiCombat) return;
+
+    if (selectedMarkId === id) {
+      if (!isInTaiwan(lat, lng)) {
+        alert('系統偵測前方為汪洋大海或境外區域，勇者無法前往該地！');
+        setTargetPosition(null);
+        setIsWalking(false);
+        walkTargetRef.current = null;
+        walkStartRef.current = null;
+        walkStartedAtRef.current = null;
+        return;
+      }
+      setTargetPosition([lat, lng]);
+      setSelectedMarkId(null);
+    } else {
+      setSelectedMarkId(id);
+    }
+  };
+
   // Map Component to handle clicks
   const MapClickHandler = () => {
     useMapEvents({
       click: (e) => {
         if (!isTraveling && !inTown && !activePoiCombat) {
+          setSelectedMarkId(null); // Clear selection on map click
           if (!isInTaiwan(e.latlng.lat, e.latlng.lng)) {
             alert('系統偵測前方為汪洋大海或境外區域，勇者無法前往該地！');
             setTargetPosition(null);
@@ -1605,7 +1628,13 @@ const App: React.FC = () => {
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
               />
               {TOWN_DATABASE.map(t => (
-                <Circle key={t.id} center={[t.lat, t.lng]} radius={t.radius} pathOptions={{ color: t.color, fillColor: t.color, fillOpacity: 0.1, weight: 2 }}>
+                <Circle
+                  key={t.id}
+                  center={[t.lat, t.lng]}
+                  radius={t.radius}
+                  pathOptions={{ color: t.color, fillColor: t.color, fillOpacity: 0.1, weight: 2 }}
+                  eventHandlers={{ click: () => handleMarkClick(t.id, t.lat, t.lng) }}
+                >
                   <Popup>{t.name}</Popup>
                 </Circle>
               ))}
@@ -1616,7 +1645,12 @@ const App: React.FC = () => {
                   statusLabel = p.lockedBy === session?.user?.id ? ' (⚔️你的戰鬥)' : ' (⚔️戰鬥中)';
                 }
                 return (
-                  <Marker key={p.id} position={[p.lat, p.lng]} icon={createPoiIcon(p.type)}>
+                  <Marker
+                    key={p.id}
+                    position={[p.lat, p.lng]}
+                    icon={createPoiIcon(p.type)}
+                    eventHandlers={{ click: () => handleMarkClick(p.id, p.lat, p.lng) }}
+                  >
                     <Popup>{POI_NAMES[p.type]}{statusLabel}</Popup>
                   </Marker>
                 );
@@ -1645,30 +1679,6 @@ const App: React.FC = () => {
                   }}
                 />
               )}
-
-              {/* Debug: Draw Boundary Polygons */}
-              <Polygon
-                positions={TAIWAN_MAIN_ISLAND_POLYGON as [number, number][]}
-                pathOptions={{ color: 'red', fillColor: 'red', fillOpacity: 0.2, weight: 2, dashArray: '5, 5' }}
-              />
-              <Polygon
-                positions={[
-                  [23.1, 119.3], [23.1, 119.8], [23.9, 119.8], [23.9, 119.3] // Penghu
-                ]}
-                pathOptions={{ color: 'yellow', fillColor: 'yellow', fillOpacity: 0.2, weight: 2, dashArray: '5, 5' }}
-              />
-              <Polygon
-                positions={[
-                  [22.3, 120.3], [22.3, 120.4], [22.4, 120.4], [22.4, 120.3] // Xiao Liuqiu
-                ]}
-                pathOptions={{ color: 'green', fillColor: 'green', fillOpacity: 0.2, weight: 2, dashArray: '5, 5' }}
-              />
-              <Polygon
-                positions={[
-                  [21.9, 121.4], [21.9, 121.6], [22.7, 121.6], [22.7, 121.4] // Green Island / Lanyu
-                ]}
-                pathOptions={{ color: 'cyan', fillColor: 'cyan', fillOpacity: 0.2, weight: 2, dashArray: '5, 5' }}
-              />
             </MapContainer>
 
             {/* Deployed Partners */}
