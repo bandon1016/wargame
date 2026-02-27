@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { Home, Pickaxe, ArrowUpCircle, Hammer, TrendingUp, Users, Plus, X, Star } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Home, Pickaxe, ArrowUpCircle, Hammer, TrendingUp, Users, Plus, X, Star, Clock } from 'lucide-react';
 import type { CharacterStats, Building, Partner } from '../types/game';
+import { getBuildingUpgradeTime } from '../types/game';
 
 interface Props { player: CharacterStats; onUpdatePlayer: (a: React.SetStateAction<CharacterStats>) => void; saveProfile: (newState?: CharacterStats) => void; }
 
@@ -28,17 +29,29 @@ const getBuildingBonus = (b: Building, allPartners: Partner[]) => {
 
 export const HomeTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfile }) => {
     const [selectedBuildingId, setSelectedBuildingId] = useState<string | null>(null);
+    const [now, setNow] = useState<number>(Date.now());
 
-    const upgrade = (b: Building) => {
+    // 每秒更新當前時間，用於計算倒數計時
+    useEffect(() => {
+        const timer = setInterval(() => {
+            setNow(Date.now());
+        }, 1000);
+        return () => clearInterval(timer);
+    }, []);
+
+    const startUpgrade = (b: Building) => {
         const bonus = getBuildingBonus(b, player.partners);
         const finalCost = Math.floor(b.upgradeCost * (1 - bonus.costReduction));
 
         if (player.baseMaterials < finalCost) { alert('建材不足！'); return; }
 
+        const upgradeDurationMs = getBuildingUpgradeTime(b.level);
+        const endsAt = Date.now() + upgradeDurationMs;
+
         const nextBuildings = player.buildings.map(x => x.id === b.id ? {
-            ...x, level: x.level + 1,
-            baseProduction: Math.floor(x.baseProduction * 1.5),
-            upgradeCost: Math.floor(x.upgradeCost * 2),
+            ...x,
+            isUpgrading: true,
+            upgradeEndsAt: endsAt
         } : x);
 
         const nextState = {
@@ -49,6 +62,37 @@ export const HomeTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfile }
 
         onUpdatePlayer(nextState);
         saveProfile(nextState);
+    };
+
+    const finishUpgrade = (b: Building) => {
+        const nextBuildings = player.buildings.map(x => x.id === b.id ? {
+            ...x,
+            level: x.level + 1,
+            baseProduction: Math.floor(x.baseProduction * 1.5),
+            upgradeCost: Math.floor(x.upgradeCost * 2),
+            isUpgrading: false,
+            upgradeEndsAt: null
+        } : x);
+
+        const nextState = {
+            ...player,
+            buildings: nextBuildings,
+        };
+
+        onUpdatePlayer(nextState);
+        saveProfile(nextState);
+    };
+
+    const formatTimeLeft = (ms: number) => {
+        if (ms <= 0) return '0秒';
+        const totalSeconds = Math.floor(ms / 1000);
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const seconds = totalSeconds % 60;
+
+        if (hours > 0) return `${hours}小時 ${minutes}分 ${seconds}秒`;
+        if (minutes > 0) return `${minutes}分 ${seconds}秒`;
+        return `${seconds}秒`;
     };
 
     const handleAssignPartner = (buildingId: string, partnerId: string) => {
@@ -171,10 +215,25 @@ export const HomeTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfile }
                                             {bonus.costReduction > 0 && <span className="text-rose-400 text-[9px] line-through ml-1">{b.upgradeCost}</span>}
                                         </div>
                                     </div>
-                                    <button onClick={() => upgrade(b)} disabled={player.baseMaterials < finalCost}
-                                        className="w-full bg-gradient-to-r from-game-accent to-indigo-500 disabled:from-gray-600 disabled:to-gray-700 disabled:opacity-50 text-white font-bold py-2 px-5 rounded-xl transition-all active:scale-95 flex items-center justify-center gap-1.5 text-sm shadow-lg shadow-game-accent/15">
-                                        <Pickaxe size={15} /> 升級
-                                    </button>
+
+                                    {b.isUpgrading && b.upgradeEndsAt ? (
+                                        now >= b.upgradeEndsAt ? (
+                                            <button onClick={() => finishUpgrade(b)}
+                                                className="w-full bg-gradient-to-r from-emerald-500 to-green-600 text-white font-bold py-2 px-5 rounded-xl transition-all active:scale-95 flex items-center justify-center gap-1.5 text-sm shadow-lg shadow-emerald-500/20">
+                                                <ArrowUpCircle size={15} /> 完成升級
+                                            </button>
+                                        ) : (
+                                            <div className="w-full bg-black/40 border border-game-accent/30 text-game-accent font-bold py-2 px-5 rounded-xl flex items-center justify-center gap-1.5 text-sm">
+                                                <Clock size={15} className="animate-pulse" />
+                                                <span className="font-mono">{formatTimeLeft(b.upgradeEndsAt - now)}</span>
+                                            </div>
+                                        )
+                                    ) : (
+                                        <button onClick={() => startUpgrade(b)} disabled={player.baseMaterials < finalCost}
+                                            className="w-full bg-gradient-to-r from-game-accent to-indigo-500 disabled:from-gray-600 disabled:to-gray-700 disabled:opacity-50 text-white font-bold py-2 px-5 rounded-xl transition-all active:scale-95 flex items-center justify-center gap-1.5 text-sm shadow-lg shadow-game-accent/15">
+                                            <Pickaxe size={15} /> 升級 ({formatTimeLeft(getBuildingUpgradeTime(b.level))})
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                         );
