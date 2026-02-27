@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Home, Pickaxe, ArrowUpCircle, Hammer, TrendingUp, Users, Plus, X, Star, Clock } from 'lucide-react';
 import type { CharacterStats, Building, Partner } from '../types/game';
-import { getBuildingUpgradeTime } from '../types/game';
+import { getBuildingUpgradeTime, getBuildingUpgradeGold } from '../types/game';
 
 interface Props { player: CharacterStats; onUpdatePlayer: (a: React.SetStateAction<CharacterStats>) => void; saveProfile: (newState?: CharacterStats) => void; }
 
@@ -42,8 +42,10 @@ export const HomeTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfile }
     const startUpgrade = (b: Building) => {
         const bonus = getBuildingBonus(b, player.partners);
         const finalCost = Math.floor(b.upgradeCost * (1 - bonus.costReduction));
+        const finalGoldCost = getBuildingUpgradeGold(b.level);
 
         if (player.baseMaterials < finalCost) { alert('建材不足！'); return; }
+        if (player.gold < finalGoldCost) { alert('金幣不足！'); return; }
 
         const upgradeDurationMs = getBuildingUpgradeTime(b.level);
         const endsAt = Date.now() + upgradeDurationMs;
@@ -57,6 +59,7 @@ export const HomeTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfile }
         const nextState = {
             ...player,
             baseMaterials: player.baseMaterials - finalCost,
+            gold: player.gold - finalGoldCost,
             buildings: nextBuildings,
         };
 
@@ -160,6 +163,7 @@ export const HomeTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfile }
                         const bonus = getBuildingBonus(b, player.partners);
                         const finalProduction = Math.floor(b.baseProduction * (1 + (b.type === 'gold_mine' ? bonus.goldBonus : bonus.matBonus)));
                         const finalCost = Math.floor(b.upgradeCost * (1 - bonus.costReduction));
+                        const finalGoldCost = getBuildingUpgradeGold(b.level);
                         const assignedIds = b.assignedPartners || [];
                         const assignedPartnersData = assignedIds.map(id => player.partners.find(p => p.id === id)).filter(Boolean) as Partner[];
 
@@ -210,9 +214,16 @@ export const HomeTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfile }
                                         <div className="flex items-center gap-1">
                                             <Hammer size={11} /> 升級花費
                                         </div>
-                                        <div className="flex items-center gap-1">
-                                            <span className={player.baseMaterials >= finalCost ? 'text-white font-bold' : 'text-game-danger font-bold'}>{finalCost}</span> 建材
-                                            {bonus.costReduction > 0 && <span className="text-rose-400 text-[9px] line-through ml-1">{b.upgradeCost}</span>}
+                                        <div className="flex flex-col items-center md:items-end gap-0.5">
+                                            <div className="flex items-center gap-1">
+                                                <span className={player.baseMaterials >= finalCost ? 'text-white font-bold' : 'text-game-danger font-bold'}>{finalCost.toLocaleString()}</span>
+                                                <span className="text-[9px]">建材</span>
+                                                {bonus.costReduction > 0 && <span className="text-rose-400 text-[9px] line-through ml-1">{b.upgradeCost.toLocaleString()}</span>}
+                                            </div>
+                                            <div className="flex items-center gap-1">
+                                                <span className={player.gold >= finalGoldCost ? 'text-game-gold font-bold' : 'text-game-danger font-bold'}>{finalGoldCost.toLocaleString()}</span>
+                                                <span className="text-[9px] text-game-gold">金幣</span>
+                                            </div>
                                         </div>
                                     </div>
 
@@ -229,7 +240,7 @@ export const HomeTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfile }
                                             </div>
                                         )
                                     ) : (
-                                        <button onClick={() => startUpgrade(b)} disabled={player.baseMaterials < finalCost}
+                                        <button onClick={() => startUpgrade(b)} disabled={player.baseMaterials < finalCost || player.gold < finalGoldCost}
                                             className="w-full bg-gradient-to-r from-game-accent to-indigo-500 disabled:from-gray-600 disabled:to-gray-700 disabled:opacity-50 text-white font-bold py-2 px-5 rounded-xl transition-all active:scale-95 flex items-center justify-center gap-1.5 text-sm shadow-lg shadow-game-accent/15">
                                             <Pickaxe size={15} /> 升級 ({formatTimeLeft(getBuildingUpgradeTime(b.level))})
                                         </button>

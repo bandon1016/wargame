@@ -74,6 +74,7 @@ export interface Building {
     level: number;
     baseProduction: number;
     upgradeCost: number;
+    upgradeGoldCost?: number; // 新增：金幣花費
     description: string;
     icon: string;
     assignedPartners?: string[];
@@ -88,6 +89,13 @@ export const getBuildingUpgradeTime = (currentLevel: number): number => {
     const growthFactor = 1.8;
     const requiredSeconds = Math.floor(baseSeconds * Math.pow(currentLevel, growthFactor));
     return requiredSeconds * 1000;
+};
+
+// 根據等級計算升級所需金幣 (5000基礎，2.5次方成長)
+export const getBuildingUpgradeGold = (currentLevel: number): number => {
+    const baseGold = 5000;
+    const growthFactor = 2.5;
+    return Math.floor(baseGold * Math.pow(currentLevel, growthFactor));
 };
 
 export interface Quest {
