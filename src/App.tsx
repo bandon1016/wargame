@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap, Circle, Polyline, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Compass, Sword, Home, Users, Package, Settings as SettingsIcon, Book, Heart, Shield, Zap, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, MapPin, Loader2, X, PlusCircle, ShieldAlert, TrainFront } from 'lucide-react';
+import { Compass, Sword, Home, Users, Package, Settings as SettingsIcon, Book, Heart, Shield, Zap, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, MapPin, Loader2, X, PlusCircle, ShieldAlert, TrainFront, Coins, Sparkles, Cpu, Flame, Waves, Diamond } from 'lucide-react';
 import type { CharacterStats, Equipment, GameItem, Skill, MapPOI, Town, WeatherType, Enemy, AlchemyRecipe, BlacksmithRecipe } from './types/game';
 import { MONSTER_DATABASE, SKILL_DATABASE, ITEM_DATABASE, EQUIPMENT_DATABASE, RARITY_COLORS, WEATHER_TYPES, getRegionByCityName, getRegionalMaterials, getRegionByCoordinates, TOWN_DATABASE, getPartnerAvatar, getRailwayPath, POI_NAMES } from './types/game';
 import { CombatScreen } from './components/CombatScreen';
@@ -19,11 +19,16 @@ import iconShadow from 'leaflet/dist/images/marker-shadow.png';
 L.Marker.prototype.options.icon = L.icon({ iconUrl: iconImg, shadowUrl: iconShadow, iconSize: [25, 41], iconAnchor: [12, 41] });
 
 // Custom Player Icon (Avatar Emoji)
-const createPlayerIcon = (emoji: string) => L.divIcon({
-  html: `<div style="font-size: 32px; filter: drop-shadow(0 0 8px rgba(0,0,0,0.5)); transform: translate(-10%, -10%);">${emoji}</div>`,
-  className: 'custom-player-marker',
+const createPlayerIcon = (emoji: string, isGodActive: boolean = false) => L.divIcon({
+  html: `
+    <div class="relative flex items-center justify-center">
+      ${isGodActive ? '<div class="absolute inset-0 w-12 h-12 -m-2 bg-amber-400/30 rounded-full anim-god-aura blur-sm border border-amber-500/50"></div>' : ''}
+      <div class="relative text-3xl drop-shadow-lg ${isGodActive ? 'anim-god-glow' : ''}">${emoji}</div>
+    </div>
+  `,
+  className: 'player-div-icon',
   iconSize: [40, 40],
-  iconAnchor: [20, 20],
+  iconAnchor: [20, 20]
 });
 
 const POI_ICONS = {
@@ -195,6 +200,7 @@ const App: React.FC = () => {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [isEditingNickname, setIsEditingNickname] = useState(false);
   const [tempNickname, setTempNickname] = useState('');
+  const [showTreasury, setShowTreasury] = useState(false);
 
   // Check for onboarding
   useEffect(() => {
@@ -457,6 +463,11 @@ const App: React.FC = () => {
             level: data.level, exp: data.exp, maxExp: data.max_exp,
             hp: data.hp, maxHp: data.max_hp, mp: data.mp ?? 50, maxMp: data.max_mp ?? (40 + (data.level * 10)), attack: data.attack, defense: data.defense,
             gold: data.gold, baseMaterials: data.base_materials,
+            lingQi: data.ling_qi ?? 0,
+            techFragments: data.tech_fragments ?? 0,
+            incense: data.incense ?? 0,
+            saltCrystals: data.salt_crystals ?? 0,
+            premiumGems: data.premium_gems ?? 0,
             buildings: data.buildings || [],
             equipment: data.equipment || [],
             equippedWeapon: data.equipped_weapon,
@@ -471,6 +482,8 @@ const App: React.FC = () => {
               fragments: s.fragments ?? 0
             })),
             partners: data.partners || [],
+            gods: data.gods || [],
+            activeGodId: data.active_god_id,
           });
         }
       )
@@ -491,6 +504,11 @@ const App: React.FC = () => {
         level: data.level, exp: data.exp, maxExp: data.max_exp,
         hp: data.hp, maxHp: data.max_hp, mp: data.mp ?? 50, maxMp: data.max_mp ?? (40 + (data.level * 10)), attack: data.attack, defense: data.defense,
         gold: data.gold, baseMaterials: data.base_materials,
+        lingQi: data.ling_qi ?? 0,
+        techFragments: data.tech_fragments ?? 0,
+        incense: data.incense ?? 0,
+        saltCrystals: data.salt_crystals ?? 0,
+        premiumGems: data.premium_gems ?? 0,
         buildings: data.buildings || [],
         equipment: data.equipment || [],
         equippedWeapon: data.equipped_weapon,
@@ -505,6 +523,8 @@ const App: React.FC = () => {
           fragments: s.fragments ?? 0
         })),
         partners: data.partners || [],
+        gods: data.gods || [],
+        activeGodId: data.active_god_id,
       });
 
       // NEW TAB WINS: Claim the session for ourself unconditionally
@@ -644,6 +664,11 @@ const App: React.FC = () => {
       level: p.level, exp: p.exp, max_exp: p.maxExp,
       hp: p.hp, max_hp: p.maxHp, mp: p.mp, max_mp: p.maxMp, attack: p.attack, defense: p.defense,
       gold: p.gold, base_materials: p.baseMaterials,
+      ling_qi: p.lingQi,
+      tech_fragments: p.techFragments,
+      incense: p.incense,
+      salt_crystals: p.saltCrystals,
+      premium_gems: p.premiumGems,
       buildings: p.buildings,
       equipment: p.equipment,
       equipped_weapon: p.equippedWeapon,
@@ -654,6 +679,8 @@ const App: React.FC = () => {
       items: p.items,
       skills: p.skills,
       partners: p.partners,
+      gods: p.gods,
+      active_god_id: p.activeGodId,
       session_id: mySessionId,
       current_location_lat: forceLocation ? forceLocation[0] : positionRef.current[0],
       current_location_lng: forceLocation ? forceLocation[1] : positionRef.current[1],
@@ -1170,6 +1197,26 @@ const App: React.FC = () => {
     setIsCombatAction(false);
 
     if (activePoiRef.current) {
+      const techGain = Math.floor(Math.random() * 3) + 3; // 3-5 tech
+      const lingQiGain = Math.floor(Math.random() * 3) + 2; // 2-4 lingqi
+
+      const finalState = {
+        ...nextState,
+        techFragments: (nextState.techFragments ?? 0) + techGain,
+        lingQi: (nextState.lingQi ?? 0) + lingQiGain
+      };
+
+      setPlayer(finalState);
+      saveProfile(finalState);
+
+      setLootMessage({
+        title: '戰勝菁英！',
+        items: [
+          { name: '科技碎片', quantity: techGain, icon: '⚙️' },
+          { name: '靈氣', quantity: lingQiGain, icon: '🌿' }
+        ]
+      });
+
       await supabase.rpc('resolve_poi_combat', { p_poi_id: activePoiRef.current, p_win: true });
       setPois(prev => prev.filter(p => p.id !== activePoiRef.current));
       setActivePoiCombat(null);
@@ -1486,6 +1533,16 @@ const App: React.FC = () => {
     }).eq('id', session!.user.id);
   }, [player, inTown, position, session]);
 
+  const activeGod = useMemo(() => {
+    if (!player || !player.activeGodId) return null;
+    return player.gods.find(g => g.id === player.activeGodId) || null;
+  }, [player?.activeGodId, player?.gods]);
+
+  const hasWeatherResistance = (type: WeatherType) => {
+    if (!activeGod) return false;
+    return activeGod.resistanceType === type || activeGod.resistanceType === 'all';
+  };
+
   const effectiveAtk = player ? player.attack + totalEquipAtk(player) + totalPartnerAtk(player) : 0;
   const effectiveDef = player ? player.defense + totalEquipDef(player) + totalPartnerDef(player) : 0;
   const effectiveMaxHp = player ? player.maxHp + totalEquipHp(player) + totalPartnerHp(player) : 0;
@@ -1585,18 +1642,40 @@ const App: React.FC = () => {
         }
       }
 
+      // 1% 機率獲得靈石 (Premium Gems)
+      let gemBounty = 0;
+      if (Math.random() < 0.01) {
+        gemBounty = Math.floor(Math.random() * 2) + 1; // 1-2 顆
+        itemsGot.push({ name: '靈石', quantity: gemBounty, icon: '💎' });
+      }
+
       setLootMessage({
         title: '發現了物資箱！',
         items: itemsGot
       });
 
-      const nextState = { ...player, gold: player.gold + goldBounty, items: newItems };
+      const nextState = {
+        ...player,
+        gold: player.gold + goldBounty,
+        premiumGems: (player.premiumGems ?? 0) + gemBounty,
+        items: newItems
+      };
       setPlayer(nextState);
       saveProfile(nextState);
     } else if (poi.type === 'altar') {
-      // Heal both HP and MP to full
+      // Heal both HP and MP to full, and gain Incense
       const currentMaxHp = player.maxHp + totalEquipHp(player) + totalPartnerHp(player);
-      const nextState = { ...player, hp: currentMaxHp, mp: player.maxMp };
+      const incenseGain = Math.floor(Math.random() * 6) + 5; // 5-10 incense
+      const nextState = {
+        ...player,
+        hp: currentMaxHp,
+        mp: player.maxMp,
+        incense: (player.incense ?? 0) + incenseGain
+      };
+      setLootMessage({
+        title: '虔誠供奉',
+        items: [{ name: '香火', quantity: incenseGain, icon: '🏮' }]
+      });
       setPlayer(nextState);
       saveProfile(nextState);
     }
@@ -1690,11 +1769,11 @@ const App: React.FC = () => {
           title="勇者能力與裝備"
         >
           <div className="relative flex-shrink-0">
-            <div className="w-12 h-12 rounded-full border-2 border-game-gold bg-gradient-to-br from-game-medium to-game-dark flex items-center justify-center text-2xl anim-pulse-glow">
-              🧙‍♂️
+            <div className={`w-12 h-12 rounded-full border-2 bg-gradient-to-br from-game-medium to-game-dark flex items-center justify-center text-2xl ${activeGod ? 'border-amber-400 anim-god-glow' : 'border-game-gold anim-pulse-glow'}`}>
+              {activeGod ? activeGod.avatar : '🧙‍♂️'}
             </div>
-            <div className="absolute -bottom-1 -right-1 bg-game-gold text-game-dark text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center shadow-lg">
-              {player.level}
+            <div className={`absolute -bottom-1 -right-1 text-game-dark text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center shadow-lg ${activeGod ? 'bg-amber-400' : 'bg-game-gold'}`}>
+              {activeGod ? activeGod.level : player.level}
             </div>
           </div>
           <div className="min-w-0">
@@ -1741,11 +1820,81 @@ const App: React.FC = () => {
             <Book size={14} />
             <span className="text-xs font-bold hidden sm:inline">指南</span>
           </button>
+
+          {/* 財庫按鈕 (新) */}
+          <button
+            onClick={() => setShowTreasury(true)}
+            className="flex items-center gap-1.5 bg-amber-500/20 hover:bg-amber-500/40 text-amber-500 px-3 py-1.5 rounded-full border border-amber-500/30 transition shadow-[0_0_10px_rgba(245,158,11,0.2)]"
+            title="查看所有財產"
+          >
+            <Coins size={14} />
+            <span className="text-xs font-bold hidden sm:inline">財庫</span>
+          </button>
+
           <button onClick={() => supabase.auth.signOut()} className="p-2 hover:bg-white/10 rounded-xl transition-colors text-gray-400 hover:text-white" title="登出">
             <SettingsIcon size={20} />
           </button>
         </div>
       </div>
+
+      {showGuide && <GuideModal onClose={() => setShowGuide(false)} />}
+
+      {/* 財庫 Modal (新) */}
+      {showTreasury && (
+        <div className="fixed inset-0 z-[5000] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md anim-fade-in">
+          <div className="glass-panel w-full max-w-md rounded-[2.5rem] p-8 border border-white/20 shadow-2xl relative overflow-hidden anim-scale-in">
+            <div className="absolute -right-20 -top-20 w-64 h-64 bg-amber-500/10 rounded-full blur-3xl opacity-50" />
+
+            <div className="relative flex justify-between items-center mb-8">
+              <div>
+                <h2 className="text-3xl font-black text-white italic flex items-center gap-3">
+                  <Coins className="text-amber-400" size={32} /> 我的財庫
+                </h2>
+                <p className="text-gray-500 text-xs font-bold uppercase tracking-widest mt-1">Taiwanese Regional Assets</p>
+              </div>
+              <button
+                onClick={() => setShowTreasury(false)}
+                className="p-3 rounded-2xl bg-white/5 hover:bg-white/10 transition-colors border border-white/10"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
+              {/* 基礎貨幣 */}
+              {[
+                { id: 'gold', label: '金幣 / TWD', val: Math.floor(player.gold), icon: <div className="text-2xl">💰</div>, desc: '在大台北地區通用的商業貨幣。', color: 'text-amber-400' },
+                { id: 'mats', label: '建材', val: Math.floor(player.baseMaterials), icon: <div className="text-2xl">🧱</div>, desc: '用於家園建築升級的基礎工業資源。', color: 'text-orange-400' },
+                { id: 'incense', label: '香火', val: player.incense, icon: <Flame className="text-red-400" size={24} />, desc: '來自全台各地廟宇的信仰力量，可用於祭祀。', color: 'text-red-400' },
+                { id: 'lingQi', label: '仙草靈氣', val: player.lingQi, icon: <Sparkles className="text-emerald-400" size={24} />, desc: '山林間採集而來的純淨靈氣，對技能極為重要。', color: 'text-emerald-400' },
+                { id: 'tech', label: '科技碎片', val: player.techFragments, icon: <Cpu className="text-sky-400" size={24} />, desc: '矽島科技重鎮的半導體零件，用於裝備開發。', color: 'text-sky-400' },
+                { id: 'salt', label: '海鹽結晶', val: player.saltCrystals, icon: <Waves className="text-blue-300" size={24} />, desc: '西南沿海精煉的鹽晶，生活物資的關鍵。', color: 'text-blue-300' },
+                { id: 'gems', label: '台灣藍寶靈石', val: player.premiumGems, icon: <Diamond className="text-indigo-400" size={24} />, desc: '花蓮礦區挖掘出的極稀有寶石。', color: 'text-indigo-400' },
+              ].map(res => (
+                <div key={res.id} className="flex items-center gap-4 bg-white/5 p-4 rounded-[1.5rem] border border-white/5 hover:border-white/10 transition-all group">
+                  <div className="w-14 h-14 bg-white/5 rounded-2xl flex items-center justify-center border border-white/10 group-hover:scale-110 transition-transform">
+                    {res.icon}
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex justify-between items-baseline mb-0.5">
+                      <span className="text-sm font-bold text-white/90">{res.label}</span>
+                      <span className={`text-xl font-mono font-black ${res.color}`}>{res.val.toLocaleString()}</span>
+                    </div>
+                    <p className="text-[10px] text-gray-500 line-clamp-1">{res.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <button
+              onClick={() => setShowTreasury(false)}
+              className="w-full mt-8 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-white font-black py-4 rounded-2xl transition-all shadow-xl shadow-amber-500/10 active:scale-[0.98]"
+            >
+              關閉視窗
+            </button>
+          </div>
+        </div>
+      )}
 
       {showGuide && <GuideModal onClose={() => setShowGuide(false)} />}
 
@@ -2284,8 +2433,8 @@ const App: React.FC = () => {
             player={{
               ...player,
               attack: effectiveAtk,
-              // Rainy slightly lowers player defense
-              defense: weather === 'rainy' ? Math.max(0, effectiveDef - 2) : effectiveDef,
+              // Rainy slightly lowers player defense, unless resistant
+              defense: (weather === 'rainy' && !hasWeatherResistance('rainy')) ? Math.max(0, effectiveDef - 2) : effectiveDef,
               maxHp: effectiveMaxHp,
               heal: effectiveHeal
             }}

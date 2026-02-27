@@ -123,6 +123,12 @@ export interface CharacterStats {
     heal?: number;
     gold: number;
     baseMaterials: number;
+    // 新增多元幣值 (符合台灣故事背景)
+    lingQi: number;         // 🌿 靈氣 (山林)
+    techFragments: number;  // ⚙️ 科技碎片 (科技城)
+    incense: number;        // 🏮 香火 (廟宇)
+    saltCrystals: number;   // 🌊 鹽晶 (沿海)
+    premiumGems: number;    // 💎 靈石 (花蓮玉/付費)
     mp: number;
     maxMp: number;
     skills: PlayerSkill[];
@@ -137,6 +143,21 @@ export interface CharacterStats {
     items: GameItem[];
     activeQuests?: Quest[];
     completedQuests?: string[];
+    // 神明系統 (新)
+    gods: God[];
+    activeGodId: string | null;
+}
+
+export interface God {
+    id: string;
+    name: string;
+    avatar: string;
+    level: number;
+    exp: number;
+    maxExp: number;
+    rarity: number;
+    resistanceType: WeatherType | 'all' | null;
+    description: string;
 }
 
 export interface Enemy {
@@ -592,3 +613,34 @@ export const PARTNER_POOL = [
 export const getPartnerAvatar = (name: string, fallback: string) => {
     return PARTNER_POOL.find(p => p.name === name)?.avatar || fallback;
 };
+
+export const GOD_DATABASE: Omit<God, 'id' | 'level' | 'exp' | 'maxExp'>[] = [
+    {
+        name: '天上聖母-媽祖',
+        avatar: '🏮',
+        rarity: 5,
+        resistanceType: 'rainy',
+        description: '航行儀式之守護神，能引導勇者在雨天中如同晴天般疾行。'
+    },
+    {
+        name: '福德正神-土地公',
+        avatar: '🎋',
+        rarity: 5,
+        resistanceType: 'foggy',
+        description: '鄉里社稷之守護神，能看穿一切虛妄濃霧，保持視野清晰。'
+    },
+    {
+        name: '中壇元帥-三太子',
+        avatar: '🛞',
+        rarity: 5,
+        resistanceType: 'sunny',
+        description: '乾坤火德之化身，免疫酷暑熱浪帶來的體力煎熬。'
+    },
+    {
+        name: '玄天上帝',
+        avatar: '🐢',
+        rarity: 5,
+        resistanceType: 'stormy',
+        description: '北極鎮天真武大帝，能鎮壓狂雷電閃，抵禦環境傷害。'
+    }
+];

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BookOpen, Map, Sword, TrendingUp, Hammer, Users, X, ChevronDown, Info, MapPin } from 'lucide-react';
+import { BookOpen, Map, Sword, TrendingUp, Hammer, Users, X, ChevronDown, Info, MapPin, Coins, Flame, Sparkles, Cpu, Waves, Diamond } from 'lucide-react';
 import { POI_DETAILS } from '../types/game';
 
 interface GuideModalProps {
@@ -37,10 +37,10 @@ export const GuideModal: React.FC<GuideModalProps> = ({ onClose }) => {
                     </ul>
                     <div className="bg-black/30 p-3 rounded-lg border border-white/5 space-y-2">
                         <strong className="text-white block mb-2 border-b border-white/10 pb-1">野外奇遇 (POI)</strong>
-                        <div className="flex gap-2"><span className="text-lg">📦</span> <div><strong className="text-game-gold">遺失的物資：</strong>開啟偶遇的物資箱，除了能獲取金幣，且有機率獲得稀有道具或實用的補給品。</div></div>
-                        <div className="flex gap-2"><span className="text-lg">⛩️</span> <div><strong className="text-game-accent">神秘祭壇：</strong>蘊藏古老魔力的寧靜聖地，能瞬間為勇者恢復健康狀態。</div></div>
-                        <div className="flex gap-2"><span className="text-lg">👹</span> <div><strong className="text-game-danger">菁英棲息地：</strong>盤踞著致命威脅的險境。若能成功討伐菁英魔物，將獲得豐厚的經驗值，並有極高機率奪得頂級裝備或目標專屬技能。</div></div>
-                        <div className="flex gap-2"><span className="text-lg">👳‍♂️</span> <div><strong className="text-emerald-400">流浪商人：</strong>行蹤飄忽的神秘行商。您可向其兜售戰利品換取金幣；若運氣絕佳，甚至能獲贈當地的私藏特產。</div></div>
+                        <div className="flex gap-2"><span className="text-lg">📦</span> <div><strong className="text-game-gold">遺失的物資：</strong>開啟偶遇的物資箱，除了獲取金幣，有機率獲得道具或極稀有的<span className="text-indigo-400 font-bold">靈石</span>。</div></div>
+                        <div className="flex gap-2"><span className="text-lg">⛩️</span> <div><strong className="text-game-accent">神秘祭壇：</strong>除恢復狀態，更能獲得<span className="text-red-400 font-bold">香火</span>，是與夥伴簽訂契約的關鍵。</div></div>
+                        <div className="flex gap-2"><span className="text-lg">👹</span> <div><strong className="text-game-danger">菁英棲息地：</strong>戰勝菁英將獲得豐厚經驗，並必定掉落<span className="text-sky-400 font-bold">科技碎片</span>與<span className="text-emerald-400 font-bold">靈氣</span>。</div></div>
+                        <div className="flex gap-2"><span className="text-lg">👳‍♂️</span> <div><strong className="text-emerald-400">流浪商人：</strong>行蹤飄忽的神秘行商。您可在此交易物資，或兌換稀有的科技零件。</div></div>
                     </div>
                 </div>
             )
@@ -85,6 +85,35 @@ export const GuideModal: React.FC<GuideModalProps> = ({ onClose }) => {
                     <li><strong className="text-white">指派打工：</strong>拔擢閒置夥伴前往工坊或礦場任職。憑藉各自的職業專長（例如擅長防禦的騎士極度適任礦場戍衛），將大幅催化領地的生產效率。</li>
                     <li><strong className="text-white">溫暖助戰：</strong>將精銳夥伴編入戰鬥小隊，他們不僅會隨之吸取經驗、共同成長，更能在身側為主角提供巨額的戰力加成，甚至於激戰中定時施放「治癒光輝」逆轉乾坤。</li>
                 </ul>
+            )
+        },
+        {
+            id: 'currency',
+            title: '財庫與在地資源',
+            icon: <Coins className="w-5 h-5 text-amber-400" />,
+            emoji: '💰',
+            content: (
+                <div className="space-y-4 text-sm text-gray-300 leading-relaxed">
+                    <p>在島嶼各處冒險，您將收集到具備在地特色的稀有資源，這些資源是強化戰力與家園的核心：</p>
+                    <div className="grid grid-cols-1 gap-2">
+                        {[
+                            { name: '金幣 / TWD', icon: '💰', desc: '商業重鎮的基礎貨幣。', color: 'text-amber-400' },
+                            { name: '香火 (Incense)', icon: <Flame size={14} className="text-red-400" />, desc: '祭壇產出，用於夥伴召喚與契約。', color: 'text-red-400' },
+                            { name: '仙草靈氣 (LingQi)', icon: <Sparkles size={14} className="text-emerald-400" />, desc: '菁英掉落，提昇秘術技能級別。', color: 'text-emerald-400' },
+                            { name: '科技碎片 (Tech)', icon: <Cpu size={14} className="text-sky-400" />, desc: '尖端產業精華，用於神兵打造。', color: 'text-sky-400' },
+                            { name: '藍寶靈石 (Gems)', icon: <Diamond size={14} className="text-indigo-400" />, desc: '極其稀有，可瞬間加速設施建設。', color: 'text-indigo-400' },
+                            { name: '海鹽結晶 (Salt)', icon: <Waves size={14} className="text-blue-300" />, desc: '沿海物資，用於未來進階建設。', color: 'text-blue-300' },
+                        ].map((res, i) => (
+                            <div key={i} className="flex items-center gap-3 bg-white/5 p-2 rounded-lg border border-white/5">
+                                <div className="w-8 h-8 flex items-center justify-center bg-black/40 rounded-md border border-white/10">{res.icon}</div>
+                                <div>
+                                    <div className={`font-bold text-xs ${res.color}`}>{res.name}</div>
+                                    <div className="text-[10px] text-gray-500">{res.desc}</div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
             )
         },
         {

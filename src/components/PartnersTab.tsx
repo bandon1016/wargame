@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
-import { Star, Sparkles, UserPlus, Users, ShieldAlert, CheckCircle2, MinusCircle, PlusCircle, Loader2, X, Zap, AlertTriangle, ArrowRight, Home } from 'lucide-react';
-import type { Partner, CharacterStats } from '../types/game';
-import { RARITY_COLORS, PARTNER_POOL, getPartnerAvatar } from '../types/game';
+import { Star, Sparkles, UserPlus, Users, ShieldAlert, CheckCircle2, MinusCircle, PlusCircle, Loader2, X, Zap, AlertTriangle, ArrowRight, Home, Flame, Diamond, Search, Info } from 'lucide-react';
+import type { Partner, CharacterStats, God } from '../types/game';
+import { RARITY_COLORS, PARTNER_POOL, getPartnerAvatar, GOD_DATABASE } from '../types/game';
 
 interface Props {
     player: CharacterStats;
@@ -30,6 +30,11 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
     const [anim, setAnim] = useState(false);
     const [drawn, setDrawn] = useState<Partner[] | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
+
+    // Godly Sanctuary states
+    const [isSanctuaryOpen, setIsSanctuaryOpen] = useState(false);
+    const [drawGodResult, setDrawGodResult] = useState<God | null>(null);
+    const [godDrawLoading, setGodDrawLoading] = useState(false);
 
     // Synthesis states
     const [isSynthesisModalOpen, setIsSynthesisModalOpen] = useState(false);
@@ -112,6 +117,83 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
             setSelectedMaterials([]);
         }, 2000);
     };
+
+    const drawGod = () => {
+        if (player.incense < 1000) { alert('香火不足！招募神明需要 1000 香火'); return; }
+        setGodDrawLoading(true); setDrawGodResult(null);
+
+        setTimeout(() => {
+            const r = Math.random();
+            const success = r < 0.02; // 2% Success rate
+            let newGod: God | null = null;
+
+            if (success) {
+                const ownedNames = new Set(player.gods.map(g => g.name));
+                const available = GOD_DATABASE.filter(g => !ownedNames.has(g.name));
+                const source = available.length > 0 ? available : GOD_DATABASE;
+                const template = source[Math.floor(Math.random() * source.length)];
+
+                newGod = {
+                    id: Math.random().toString(),
+                    ...template,
+                    level: 1,
+                    exp: 0,
+                    maxExp: 100,
+                };
+            }
+
+            setDrawGodResult(newGod);
+            setGodDrawLoading(false);
+
+            onUpdatePlayer(prev => {
+                const nextState = {
+                    ...prev,
+                    incense: prev.incense - 1000,
+                    gods: newGod ? [...prev.gods, newGod] : prev.gods
+                };
+                saveProfile(nextState);
+                return nextState;
+            });
+        }, 3000);
+    };
+
+    const upgradeGod = (godId: string) => {
+        const god = player.gods.find(g => g.id === godId);
+        if (!god) return;
+
+        const cost = Math.floor(Math.pow(god.level, 1.8) * 1000);
+        if (player.incense < cost) {
+            alert(`香火不足！升級需要 ${cost} 香火`);
+            return;
+        }
+
+        onUpdatePlayer(prev => {
+            const nextGods = prev.gods.map(g =>
+                g.id === godId ? { ...g, level: g.level + 1 } : g
+            );
+            const nextState = {
+                ...prev,
+                incense: prev.incense - cost,
+                gods: nextGods
+            };
+            saveProfile(nextState);
+            return nextState;
+        });
+    };
+
+    const toggleGod = (godId: string) => {
+        if (isCombatAction) {
+            alert('戰鬥中無法變更神明降臨！');
+            return;
+        }
+        onUpdatePlayer(prev => {
+            const nextId = prev.activeGodId === godId ? null : godId;
+            const nextState = { ...prev, activeGodId: nextId };
+            saveProfile(nextState);
+            return nextState;
+        });
+    };
+
 
     const gacha = () => {
         if (player.gold < 100) { alert('金幣不足！需要 100 金幣'); return; }
@@ -242,6 +324,13 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
                     >
                         <Sparkles size={18} className="group-hover:rotate-12 transition-transform" />
                         <span>招募夥伴</span>
+                    </button>
+                    <button
+                        onClick={() => setIsSanctuaryOpen(true)}
+                        className="bg-gradient-to-r from-red-600 to-rose-500 hover:from-red-500 hover:to-rose-400 text-white font-black py-2.5 px-6 rounded-2xl transition-all active:scale-95 shadow-[0_4px_15px_rgba(225,29,72,0.3)] flex items-center justify-center gap-2 group"
+                    >
+                        <Flame size={18} className="group-hover:scale-110 transition-transform" />
+                        <span>神明聖所</span>
                     </button>
                 </div>
             </div>
@@ -748,6 +837,147 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
                                 </div>
                             )}
 
+                        </div>
+                    </div>
+                )}
+
+                {/* GOD SANCTUARY MODAL */}
+                {isSanctuaryOpen && (
+                    <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-black/90 backdrop-blur-xl anim-fade-in">
+                        <div className="relative w-full max-w-5xl h-[90vh] md:h-[80vh] flex flex-col glass-panel rounded-[40px] border-2 border-red-500/20 shadow-2xl overflow-hidden anim-scale-in bg-gradient-to-br from-red-950/30 to-black">
+                            {/* Header */}
+                            <div className="flex items-center justify-between p-6 border-b border-white/5 bg-red-950/20">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-12 h-12 rounded-2xl bg-red-500/20 flex items-center justify-center text-red-400 border border-red-500/30 shadow-lg">
+                                        <Flame size={28} className="anim-float" />
+                                    </div>
+                                    <div>
+                                        <h2 className="text-2xl font-black text-white italic tracking-widest">神明聖所 <span className="text-xs font-bold text-red-500 not-italic ml-2 tracking-normal uppercase border border-red-500/30 px-2 py-0.5 rounded-full">Divine Sanctuary</span></h2>
+                                        <p className="text-xs text-gray-400 font-black mt-1 uppercase tracking-widest flex items-center gap-2">
+                                            <Diamond size={12} className="text-red-400" /> 呼喚守護之靈，祈求全境庇佑
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-6">
+                                    <div className="flex items-center gap-2 bg-black/40 px-4 py-2 rounded-xl border border-white/5">
+                                        <Flame size={16} className="text-red-400" />
+                                        <span className="text-lg font-black text-white tabular-nums">{player.incense}</span>
+                                        <span className="text-[10px] text-gray-500 font-bold ml-1 uppercase">香火</span>
+                                    </div>
+                                    <button onClick={() => setIsSanctuaryOpen(false)} className="p-2 rounded-full hover:bg-white/5 transition-colors text-gray-500 hover:text-white"><X size={24} /></button>
+                                </div>
+                            </div>
+
+                            <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
+                                {/* Left: Divine Invocation */}
+                                <div className="w-full md:w-80 p-8 border-b md:border-b-0 md:border-r border-white/5 flex flex-col items-center bg-red-950/10">
+                                    <div className="relative mb-8 group">
+                                        <div className="absolute inset-0 bg-red-500/20 rounded-full blur-2xl group-hover:bg-red-500/40 transition-all duration-500 anim-god-aura" />
+                                        <div className={`w-32 h-32 rounded-full bg-gradient-to-br from-red-600/20 to-rose-600/20 flex items-center justify-center border-4 border-red-500/40 shadow-[0_0_30px_rgba(239,68,68,0.2)] relative z-10 transition-transform ${godDrawLoading ? 'scale-90 rotate-180' : 'group-hover:scale-110'}`}>
+                                            {godDrawLoading ? <Loader2 size={48} className="animate-spin text-red-400" /> : <Flame size={64} className="text-red-400" />}
+                                        </div>
+                                    </div>
+
+                                    <h3 className="text-xl font-black text-white mb-2 italic">焚香請願</h3>
+                                    <p className="text-xs text-gray-500 text-center mb-8 leading-relaxed font-bold">
+                                        消耗 1000 香火進行請願<br />
+                                        <span className="text-red-400">極低機率</span>獲得隨機本島神明
+                                    </p>
+
+                                    <button
+                                        onClick={drawGod}
+                                        disabled={godDrawLoading || player.incense < 1000}
+                                        className="w-full py-4 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-black rounded-2xl transition-all shadow-lg active:scale-95 disabled:opacity-30 disabled:grayscale mb-4 flex items-center justify-center gap-2 group relative overflow-hidden"
+                                    >
+                                        <div className="absolute inset-0 bg-white/10 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
+                                        {godDrawLoading ? '儀式進行中...' : <><Sparkles size={18} /> 開始招募</>}
+                                    </button>
+
+                                    {drawGodResult && (
+                                        <div className="mt-4 p-4 rounded-2xl bg-amber-500/10 border-2 border-amber-500/30 text-center animate-in zoom-in-95 fill-mode-both">
+                                            <div className="text-4xl mb-2 anim-god-glow">{drawGodResult.avatar}</div>
+                                            <div className="font-bold text-amber-500 text-sm">恭請！{drawGodResult.name}</div>
+                                        </div>
+                                    )}
+                                    {!drawGodResult && !godDrawLoading && (
+                                        <div className="mt-4 text-[11px] text-gray-600 font-bold border border-white/5 p-3 rounded-xl bg-black/20 italic">
+                                            "信仰本無蹤，唯心誠則靈"
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Right: Owned Gods Grid */}
+                                <div className="flex-1 p-8 overflow-y-auto custom-scrollbar">
+                                    <div className="mb-6 flex items-center justify-between">
+                                        <h3 className="text-lg font-black text-white flex items-center gap-2">
+                                            <Users size={20} className="text-red-400" />
+                                            目前降臨的神明 <span className="text-xs font-mono text-gray-500">({player.gods.length})</span>
+                                        </h3>
+                                        <div className="text-[10px] font-bold text-red-400/70 border border-red-400/20 px-3 py-1 rounded-full uppercase tracking-widest">
+                                            只能選擇一位神明守護
+                                        </div>
+                                    </div>
+
+                                    {player.gods.length === 0 ? (
+                                        <div className="h-64 flex flex-col items-center justify-center opacity-30 border-2 border-dashed border-white/5 rounded-3xl">
+                                            <Search size={48} className="mb-4" />
+                                            <p className="font-bold">聖所目下尚無神明降臨</p>
+                                        </div>
+                                    ) : (
+                                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                            {player.gods.map(god => {
+                                                const isActive = player.activeGodId === god.id;
+                                                const upgradeCost = Math.floor(Math.pow(god.level, 1.8) * 1000);
+                                                return (
+                                                    <div key={god.id} className={`p-5 rounded-[32px] border-2 transition-all relative group overflow-hidden ${isActive ? 'bg-amber-500/10 border-amber-400 shadow-[0_0_30px_rgba(251,191,36,0.25)]' : 'bg-black/30 border-white/5 hover:border-white/20'}`}>
+                                                        {isActive && <div className="absolute top-0 right-0 bg-amber-400 text-game-dark text-[10px] font-black px-4 py-1 rounded-bl-xl shadow-lg anim-pulse-glow z-10">守護中</div>}
+
+                                                        <div className="flex gap-6 items-start relative z-10">
+                                                            <div className="flex flex-col items-center gap-3">
+                                                                <div className={`w-20 h-20 rounded-[24px] bg-gradient-to-br from-slate-900 to-black flex items-center justify-center text-4xl border-2 transition-transform duration-500 ${isActive ? 'border-amber-400/50 scale-105 anim-god-glow' : 'border-white/10 group-hover:scale-105'}`}>
+                                                                    {god.avatar}
+                                                                </div>
+                                                                <div className="bg-black/60 px-3 py-1 rounded-full border border-white/10 text-xs font-black text-white tracking-widest">Lv.{god.level}</div>
+                                                            </div>
+
+                                                            <div className="flex-1 min-w-0">
+                                                                <div className="font-black text-xl text-white mb-1 truncate">{god.name}</div>
+                                                                <div className="flex items-center gap-2 mb-3">
+                                                                    <span className="text-[10px] font-black uppercase text-red-400 bg-red-400/10 px-2 py-0.5 rounded border border-red-400/20">天氣抗性</span>
+                                                                    <span className="text-[11px] font-bold text-gray-300 italic">{god.description}</span>
+                                                                </div>
+
+                                                                <div className="flex flex-wrap gap-2 mt-auto">
+                                                                    <button
+                                                                        onClick={() => toggleGod(god.id)}
+                                                                        className={`flex-1 py-2 rounded-xl text-xs font-black transition-all border ${isActive ? 'bg-amber-400 text-game-dark border-amber-500' : 'bg-white/5 text-white border-white/10 hover:bg-white/10'}`}
+                                                                    >
+                                                                        {isActive ? '取消派遣' : '請求派遣'}
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => upgradeGod(god.id)}
+                                                                        className="flex-1 py-2 bg-red-500/20 hover:bg-red-500 text-red-400 hover:text-white rounded-xl text-xs font-black transition-all border border-red-500/30 flex flex-col items-center justify-center gap-0.5"
+                                                                    >
+                                                                        <span>供奉升級</span>
+                                                                        <span className="text-[9px] opacity-70 font-bold">{upgradeCost} 🏮</span>
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        {/* Aura background fixed behind */}
+                                                        {isActive && <div className="absolute -bottom-20 -right-20 w-64 h-64 bg-amber-400/10 rounded-full blur-[60px] pointer-events-none" />}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Footer / Tip */}
+                            <div className="p-4 bg-red-950/40 border-t border-white/5 flex items-center justify-center gap-2 text-[11px] font-bold text-red-400/60 uppercase tracking-widest">
+                                <Info size={14} /> 神明將抵消惡劣天氣對您的各種負面屬性損失
+                            </div>
                         </div>
                     </div>
                 )}

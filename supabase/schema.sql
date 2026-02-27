@@ -9,7 +9,16 @@ create table public.profiles (
   attack integer default 12,
   defense integer default 4,
   gold double precision default 500,
-  base_materials double precision default 120,
+  base_materials double precision default 5000, -- 配合建築花費調整起點
+  
+  -- 新增多元幣值 (符合台灣故事背景)
+  ling_qi integer default 0,
+  tech_fragments integer default 0,
+  incense integer default 0,
+  salt_crystals integer default 0,
+  premium_gems integer default 0,
+  gods jsonb default '[]'::jsonb,
+  active_god_id text default null,
   
   -- 地圖位置
   current_location_lat double precision default 25.0330,
@@ -56,24 +65,44 @@ create policy "使用者可以建立自己的資料" on profiles for insert with
 create or replace function public.handle_new_user()
 returns trigger as $$
 begin
-  insert into public.profiles (id, nickname, buildings, equipment, equipped_weapon, equipped_armor, items, skills, partners)
+  insert into public.profiles (
+    id, 
+    nickname, 
+    gold,
+    base_materials,
+    ling_qi,
+    tech_fragments,
+    incense,
+    salt_crystals,
+    premium_gems,
+    gods,
+    active_god_id,
+    buildings, 
+    equipment, 
+    equipped_weapon, 
+    equipped_armor, 
+    items, 
+    skills, 
+    partners
+  )
   values (
     new.id,
     new.raw_user_meta_data->>'nickname',
+    5000, -- gold
+    2000, -- base_materials
+    0, 0, 0, 0, 0, -- ling_qi, tech_fragments, incense, salt_crystals, premium_gems
+    '[]'::jsonb, -- gods
+    null,        -- active_god_id
     -- 初始建築 (資源工坊, 淘金礦場)
     '[{"id": "b1", "name": "資源工坊", "type": "material_camp", "level": 1, "baseProduction": 60, "upgradeCost": 50, "description": "自動產出家園建材", "icon": "🧱"}, {"id": "b2", "name": "淘金礦場", "type": "gold_mine", "level": 1, "baseProduction": 30, "upgradeCost": 100, "description": "自動產出金幣", "icon": "⛏️"}]'::jsonb,
     -- 背包初始裝備
     '[{"id":"wp_01","name":"木劍","slot":"weapon","rarity":1,"attack":5,"defense":0,"hp":0,"icon":"🗡️","description":"新手冒險者必備的簡陋武器。"},{"id":"ar_01","name":"皮甲","slot":"armor","rarity":1,"attack":0,"defense":5,"hp":20,"icon":"🧥","description":"簡單的皮製護甲，提供微薄保護。"}]'::jsonb,
-    -- 初始裝上的武器 (改為不預先裝備)
-    NULL::jsonb,
-    -- 初始裝上的護甲 (改為不預先裝備)
-    NULL::jsonb,
+    NULL::jsonb, -- equipped_weapon
+    NULL::jsonb, -- equipped_armor
     -- 初始消耗道具
     '[{"id":"item_hp_pot","name":"小型生命藥水","type":"potion","icon":"🧪","description":"微微泛紅的初級藥水，能恢復 50 點生命值。","quantity":5},{"id":"item_herb","name":"藥草","type":"material","icon":"🌿","description":"生長在野外的普通草本植物，是煉製各類藥水的基本材料。","quantity":3}]'::jsonb,
-    -- 技能
-    '[]'::jsonb,
-    -- 夥伴
-    '[]'::jsonb
+    '[]'::jsonb, -- skills
+    '[]'::jsonb  -- partners
   );
   return new;
 end;
