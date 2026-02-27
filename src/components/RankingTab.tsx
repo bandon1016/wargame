@@ -58,12 +58,6 @@ const RankingTab: React.FC<RankingTabProps> = ({ player }) => {
         return <span className="text-gray-500 font-mono text-sm">{rank}</span>;
     };
 
-    const getRankBg = (rank: number) => {
-        if (rank === 1) return 'bg-yellow-400/10 border-yellow-400/30';
-        if (rank === 2) return 'bg-gray-300/10 border-gray-300/30';
-        if (rank === 3) return 'bg-amber-600/10 border-amber-600/30';
-        return 'bg-white/5 border-white/5';
-    };
 
     return (
         <div className="flex flex-col h-full anim-fade-in relative">
