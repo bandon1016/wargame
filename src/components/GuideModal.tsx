@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BookOpen, Map, Sword, TrendingUp, Hammer, Users, X, ChevronDown, Info, MapPin, Coins, Flame, Sparkles, Cpu, Waves, Diamond } from 'lucide-react';
+import { BookOpen, Map, Sword, TrendingUp, Hammer, Users, X, ChevronDown, Info, MapPin, Coins, Flame, Sparkles, Cpu, Waves, Diamond, Trophy } from 'lucide-react';
 import { POI_DETAILS } from '../types/game';
 
 interface GuideModalProps {
@@ -149,6 +149,45 @@ export const GuideModal: React.FC<GuideModalProps> = ({ onClose }) => {
                             <div className="flex items-start gap-2"><span className="w-10 text-right shrink-0 text-gray-300">東部:</span> <span className="text-white">花東水晶</span> 💠, <span className="text-white">玄武岩礦石</span> 🌑</div>
                             <div className="text-[11px] text-game-accent mt-2 pt-2 border-t border-white/5 font-bold">* 狩獵魔物時有隨機機率掉落當地特產，或透過流浪商人獲取。</div>
                         </div>
+                    </div>
+                </div>
+            )
+        },
+        {
+            id: 'ranking',
+            title: '全服巔峰榜',
+            icon: <Trophy className="w-5 h-5 text-game-gold" />,
+            emoji: '🏆',
+            content: (
+                <div className="space-y-4 text-sm text-gray-300 leading-relaxed">
+                    <p>追求卓越，名留青史。巔峰榜記錄了島嶼上最強大且最富有的勇者們。</p>
+                    <div className="space-y-3 bg-black/30 p-4 rounded-xl border border-white/5">
+                        <div className="flex gap-3">
+                            <TrendingUp size={18} className="text-game-accent shrink-0 mt-1" />
+                            <div>
+                                <strong className="text-white block mb-1 font-bold">三大巔峰榜單</strong>
+                                <ul className="list-disc list-inside space-y-1 text-gray-400 text-xs">
+                                    <li><span className="text-white">等級榜：</span>累計修行的見證，展示等級最高的冒險者。</li>
+                                    <li><span className="text-white">戰力榜：</span>實力的綜合體現，反映勇者的戰鬥能力。</li>
+                                    <li><span className="text-white">財富榜：</span>冒險與商業的收穫，展示資產最雄厚的豪傑。</li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div className="flex gap-3 pt-3 border-t border-white/5">
+                            <Info size={18} className="text-blue-400 shrink-0 mt-1" />
+                            <div>
+                                <strong className="text-white block mb-1 font-bold">結算與戰力機制</strong>
+                                <div className="text-xs text-gray-400 space-y-2">
+                                    <p>榜單於<span className="text-game-gold font-bold"> 每日凌晨 00:00 </span>進行系統快照結算並公告。</p>
+                                    <p>
+                                        冒險者的<span className="text-white">攻擊力、防禦力、生命上限與當前等級</span>皆會轉化為綜合戰力。均衡發展各項能力，更能穩健提升在全服巔峰榜中的席次。
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="bg-game-accent/5 p-3 rounded-lg border border-game-accent/20 text-[10px] font-bold text-game-accent text-center italic">
+                        "只有實力與智慧並備者，方能登上巔峰之座。"
                     </div>
                 </div>
             )

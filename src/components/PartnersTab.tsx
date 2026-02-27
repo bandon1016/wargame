@@ -843,43 +843,44 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
 
                 {/* GOD SANCTUARY MODAL */}
                 {isSanctuaryOpen && (
-                    <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-black/90 backdrop-blur-xl anim-fade-in">
-                        <div className="relative w-full max-w-5xl h-[90vh] md:h-[80vh] flex flex-col glass-panel rounded-[40px] border-2 border-red-500/20 shadow-2xl overflow-hidden anim-scale-in bg-gradient-to-br from-red-950/30 to-black">
+                    <div className="fixed inset-0 z-[2000] flex items-center justify-center p-2 sm:p-4 bg-black/95 backdrop-blur-xl anim-fade-in">
+                        <div className="relative w-full max-w-5xl h-[95vh] sm:h-[90vh] md:h-[80vh] flex flex-col glass-panel rounded-3xl sm:rounded-[40px] border-2 border-red-500/20 shadow-2xl overflow-hidden anim-scale-in bg-gradient-to-br from-red-950/30 to-black">
                             {/* Header */}
-                            <div className="flex items-center justify-between p-6 border-b border-white/5 bg-red-950/20">
-                                <div className="flex items-center gap-4">
-                                    <div className="w-12 h-12 rounded-2xl bg-red-500/20 flex items-center justify-center text-red-400 border border-red-500/30 shadow-lg">
-                                        <Flame size={28} className="anim-float" />
+                            <div className="flex items-center justify-between p-4 sm:p-6 border-b border-white/5 bg-red-950/20">
+                                <div className="flex items-center gap-3 sm:gap-4">
+                                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-red-500/20 flex items-center justify-center text-red-400 border border-red-500/30 shadow-lg shrink-0">
+                                        <Flame size={20} className="sm:w-7 sm:h-7 anim-float" />
                                     </div>
-                                    <div>
-                                        <h2 className="text-2xl font-black text-white italic tracking-widest">神明聖所 <span className="text-xs font-bold text-red-500 not-italic ml-2 tracking-normal uppercase border border-red-500/30 px-2 py-0.5 rounded-full">Divine Sanctuary</span></h2>
-                                        <p className="text-xs text-gray-400 font-black mt-1 uppercase tracking-widest flex items-center gap-2">
-                                            <Diamond size={12} className="text-red-400" /> 呼喚守護之靈，祈求全境庇佑
+                                    <div className="min-w-0">
+                                        <h2 className="text-lg sm:text-2xl font-black text-white italic tracking-widest truncate">神明聖所 <span className="hidden sm:inline text-xs font-bold text-red-500 not-italic ml-2 tracking-normal uppercase border border-red-500/30 px-2 py-0.5 rounded-full">Divine Sanctuary</span></h2>
+                                        <p className="text-[10px] sm:text-xs text-gray-400 font-black mt-0.5 sm:mt-1 uppercase tracking-widest flex items-center gap-2 truncate">
+                                            <Diamond size={10} className="text-red-400 shrink-0" /> <span className="truncate">呼喚守護之靈，祈求全境庇佑</span>
                                         </p>
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-6">
-                                    <div className="flex items-center gap-2 bg-black/40 px-4 py-2 rounded-xl border border-white/5">
-                                        <Flame size={16} className="text-red-400" />
-                                        <span className="text-lg font-black text-white tabular-nums">{player.incense}</span>
-                                        <span className="text-[10px] text-gray-500 font-bold ml-1 uppercase">香火</span>
+                                <div className="flex items-center gap-3 sm:gap-6 shrink-0">
+                                    <div className="flex items-center gap-1.5 sm:gap-2 bg-black/40 px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl border border-white/5">
+                                        <Flame size={14} className="text-red-400" />
+                                        <span className="text-sm sm:text-lg font-black text-white tabular-nums">{player.incense}</span>
                                     </div>
-                                    <button onClick={() => setIsSanctuaryOpen(false)} className="p-2 rounded-full hover:bg-white/5 transition-colors text-gray-500 hover:text-white"><X size={24} /></button>
+                                    <button onClick={() => setIsSanctuaryOpen(false)} className="p-1.5 rounded-full hover:bg-white/5 transition-colors text-gray-500 hover:text-white shrink-0">
+                                        <X className="w-5 h-5 sm:w-6 sm:h-6" />
+                                    </button>
                                 </div>
                             </div>
 
                             <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
                                 {/* Left: Divine Invocation */}
-                                <div className="w-full md:w-80 p-8 border-b md:border-b-0 md:border-r border-white/5 flex flex-col items-center bg-red-950/10">
-                                    <div className="relative mb-8 group">
+                                <div className="w-full md:w-72 p-6 sm:p-8 border-b md:border-b-0 md:border-r border-white/5 flex flex-col items-center bg-red-950/10 shrink-0">
+                                    <div className="relative mb-6 sm:mb-8 group">
                                         <div className="absolute inset-0 bg-red-500/20 rounded-full blur-2xl group-hover:bg-red-500/40 transition-all duration-500 anim-god-aura" />
-                                        <div className={`w-32 h-32 rounded-full bg-gradient-to-br from-red-600/20 to-rose-600/20 flex items-center justify-center border-4 border-red-500/40 shadow-[0_0_30px_rgba(239,68,68,0.2)] relative z-10 transition-transform ${godDrawLoading ? 'scale-90 rotate-180' : 'group-hover:scale-110'}`}>
-                                            {godDrawLoading ? <Loader2 size={48} className="animate-spin text-red-400" /> : <Flame size={64} className="text-red-400" />}
+                                        <div className={`w-24 h-24 sm:w-32 sm:h-32 rounded-full bg-gradient-to-br from-red-600/20 to-rose-600/20 flex items-center justify-center border-4 border-red-500/40 shadow-[0_0_30px_rgba(239,68,68,0.2)] relative z-10 transition-transform ${godDrawLoading ? 'scale-90 rotate-180' : 'group-hover:scale-110'}`}>
+                                            {godDrawLoading ? <Loader2 size={36} className="sm:w-12 sm:h-12 animate-spin text-red-400" /> : <Flame size={48} className="sm:w-16 sm:h-16 text-red-400" />}
                                         </div>
                                     </div>
 
-                                    <h3 className="text-xl font-black text-white mb-2 italic">焚香請願</h3>
-                                    <p className="text-xs text-gray-500 text-center mb-8 leading-relaxed font-bold">
+                                    <h3 className="text-lg sm:text-xl font-black text-white mb-1 sm:mb-2 italic">焚香請願</h3>
+                                    <p className="text-[10px] sm:text-xs text-gray-500 text-center mb-6 sm:mb-8 leading-relaxed font-bold">
                                         消耗 1000 香火進行請願<br />
                                         <span className="text-red-400">極低機率</span>獲得隨機本島神明
                                     </p>
@@ -887,20 +888,14 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
                                     <button
                                         onClick={drawGod}
                                         disabled={godDrawLoading || player.incense < 1000}
-                                        className="w-full py-4 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-black rounded-2xl transition-all shadow-lg active:scale-95 disabled:opacity-30 disabled:grayscale mb-4 flex items-center justify-center gap-2 group relative overflow-hidden"
+                                        className="w-full py-3 sm:py-4 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-black rounded-2xl transition-all shadow-lg active:scale-95 disabled:opacity-30 disabled:grayscale mb-4 flex items-center justify-center gap-2 group relative overflow-hidden text-sm sm:text-base"
                                     >
                                         <div className="absolute inset-0 bg-white/10 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
-                                        {godDrawLoading ? '儀式進行中...' : <><Sparkles size={18} /> 開始招募</>}
+                                        {godDrawLoading ? '儀式進行中...' : <><Sparkles size={16} /> 開始招募</>}
                                     </button>
 
                                     {drawGodResult && (
-                                        <div className="mt-4 p-4 rounded-2xl bg-amber-500/10 border-2 border-amber-500/30 text-center animate-in zoom-in-95 fill-mode-both">
-                                            <div className="text-4xl mb-2 anim-god-glow">{drawGodResult.avatar}</div>
-                                            <div className="font-bold text-amber-500 text-sm">恭請！{drawGodResult.name}</div>
-                                        </div>
-                                    )}
-                                    {!drawGodResult && !godDrawLoading && (
-                                        <div className="mt-4 text-[11px] text-gray-600 font-bold border border-white/5 p-3 rounded-xl bg-black/20 italic">
+                                        <div className="mt-2 text-[11px] text-gray-600 font-bold border border-white/5 p-3 rounded-xl bg-black/20 italic">
                                             "信仰本無蹤，唯心誠則靈"
                                         </div>
                                     )}
@@ -924,42 +919,42 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
                                             <p className="font-bold">聖所目下尚無神明降臨</p>
                                         </div>
                                     ) : (
-                                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 pb-24 md:pb-0">
                                             {player.gods.map(god => {
                                                 const isActive = player.activeGodId === god.id;
                                                 const upgradeCost = Math.floor(Math.pow(god.level, 1.8) * 1000);
                                                 return (
-                                                    <div key={god.id} className={`p-5 rounded-[32px] border-2 transition-all relative group overflow-hidden ${isActive ? 'bg-amber-500/10 border-amber-400 shadow-[0_0_30px_rgba(251,191,36,0.25)]' : 'bg-black/30 border-white/5 hover:border-white/20'}`}>
-                                                        {isActive && <div className="absolute top-0 right-0 bg-amber-400 text-game-dark text-[10px] font-black px-4 py-1 rounded-bl-xl shadow-lg anim-pulse-glow z-10">守護中</div>}
+                                                    <div key={god.id} className={`p-4 sm:p-5 rounded-[24px] sm:rounded-[32px] border-2 transition-all relative group overflow-hidden ${isActive ? 'bg-amber-500/10 border-amber-400 shadow-[0_0_30px_rgba(251,191,36,0.25)]' : 'bg-black/30 border-white/5 hover:border-white/20'}`}>
+                                                        {isActive && <div className="absolute top-0 right-0 bg-amber-400 text-game-dark text-[8px] sm:text-[10px] font-black px-3 sm:px-4 py-1 rounded-bl-xl shadow-lg anim-pulse-glow z-10">守護中</div>}
 
-                                                        <div className="flex gap-6 items-start relative z-10">
-                                                            <div className="flex flex-col items-center gap-3">
-                                                                <div className={`w-20 h-20 rounded-[24px] bg-gradient-to-br from-slate-900 to-black flex items-center justify-center text-4xl border-2 transition-transform duration-500 ${isActive ? 'border-amber-400/50 scale-105 anim-god-glow' : 'border-white/10 group-hover:scale-105'}`}>
+                                                        <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 items-center sm:items-start relative z-10">
+                                                            <div className="flex flex-row sm:flex-col items-center gap-3 shrink-0">
+                                                                <div className={`w-14 h-14 sm:w-20 sm:h-20 rounded-xl sm:rounded-3xl bg-gradient-to-br from-slate-900 to-black flex items-center justify-center text-3xl sm:text-4xl border-2 transition-transform duration-500 ${isActive ? 'border-amber-400/50 scale-105 anim-god-glow' : 'border-white/10 group-hover:scale-105'}`}>
                                                                     {god.avatar}
                                                                 </div>
-                                                                <div className="bg-black/60 px-3 py-1 rounded-full border border-white/10 text-xs font-black text-white tracking-widest">Lv.{god.level}</div>
+                                                                <div className="bg-black/60 px-3 py-1 rounded-full border border-white/10 text-[10px] sm:text-xs font-black text-white tracking-widest whitespace-nowrap">Lv.{god.level}</div>
                                                             </div>
 
-                                                            <div className="flex-1 min-w-0">
+                                                            <div className="flex-1 min-w-0 w-full text-center sm:text-left">
                                                                 <div className="font-black text-xl text-white mb-1 truncate">{god.name}</div>
-                                                                <div className="flex items-center gap-2 mb-3">
-                                                                    <span className="text-[10px] font-black uppercase text-red-400 bg-red-400/10 px-2 py-0.5 rounded border border-red-400/20">天氣抗性</span>
-                                                                    <span className="text-[11px] font-bold text-gray-300 italic">{god.description}</span>
+                                                                <div className="flex items-start sm:items-center gap-2 mb-3">
+                                                                    <span className="text-[9px] sm:text-[10px] font-black uppercase text-red-400 bg-red-400/10 px-1.5 sm:px-2 py-0.5 rounded border border-red-400/20 whitespace-nowrap shrink-0">守護能力</span>
+                                                                    <p className="text-[10px] sm:text-[11px] font-bold text-gray-400 italic leading-snug">{god.description}</p>
                                                                 </div>
 
-                                                                <div className="flex flex-wrap gap-2 mt-auto">
+                                                                <div className="grid grid-cols-2 gap-2 mt-auto">
                                                                     <button
                                                                         onClick={() => toggleGod(god.id)}
-                                                                        className={`flex-1 py-2 rounded-xl text-xs font-black transition-all border ${isActive ? 'bg-amber-400 text-game-dark border-amber-500' : 'bg-white/5 text-white border-white/10 hover:bg-white/10'}`}
+                                                                        className={`py-2 rounded-xl text-[10px] sm:text-xs font-black transition-all border ${isActive ? 'bg-amber-400 text-game-dark border-amber-500' : 'bg-white/5 text-white border-white/10 hover:bg-white/10'}`}
                                                                     >
                                                                         {isActive ? '取消派遣' : '請求派遣'}
                                                                     </button>
                                                                     <button
                                                                         onClick={() => upgradeGod(god.id)}
-                                                                        className="flex-1 py-2 bg-red-500/20 hover:bg-red-500 text-red-400 hover:text-white rounded-xl text-xs font-black transition-all border border-red-500/30 flex flex-col items-center justify-center gap-0.5"
+                                                                        className="py-2 bg-red-500/20 hover:bg-red-500 text-red-400 hover:text-white rounded-xl text-[10px] sm:text-xs font-black transition-all border border-red-500/30 flex flex-col items-center justify-center gap-0.5"
                                                                     >
-                                                                        <span>供奉升級</span>
-                                                                        <span className="text-[9px] opacity-70 font-bold">{upgradeCost} 🏮</span>
+                                                                        <span className="leading-none text-[9px] sm:text-xs">供奉升級</span>
+                                                                        <span className="text-[8px] sm:text-[9px] opacity-70 font-bold tabular-nums">-{upgradeCost} 🏮</span>
                                                                     </button>
                                                                 </div>
                                                             </div>

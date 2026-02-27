@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap, Circle, Polyline, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Compass, Sword, Home, Users, Package, Settings as SettingsIcon, Book, Heart, Shield, Zap, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, MapPin, Loader2, X, PlusCircle, ShieldAlert, TrainFront, Coins, Sparkles, Cpu, Flame, Waves, Diamond } from 'lucide-react';
+import { Compass, Sword, Home, Users, Package, Settings as SettingsIcon, Book, Heart, Shield, Zap, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, MapPin, Loader2, X, PlusCircle, ShieldAlert, TrainFront, Coins, Sparkles, Cpu, Flame, Waves, Diamond, Trophy } from 'lucide-react';
 import type { CharacterStats, Equipment, GameItem, Skill, MapPOI, Town, WeatherType, Enemy, AlchemyRecipe, BlacksmithRecipe } from './types/game';
 import { MONSTER_DATABASE, SKILL_DATABASE, ITEM_DATABASE, EQUIPMENT_DATABASE, RARITY_COLORS, WEATHER_TYPES, getRegionByCityName, getRegionalMaterials, getRegionByCoordinates, TOWN_DATABASE, getPartnerAvatar, getRailwayPath, POI_NAMES } from './types/game';
 import { CombatScreen } from './components/CombatScreen';
@@ -10,6 +10,7 @@ import { HomeTab } from './components/HomeTab';
 import { AuthScreen } from './components/AuthScreen';
 import { TownScreen } from './components/TownScreen';
 import { GuideModal } from './components/GuideModal';
+import RankingTab from './components/RankingTab';
 import { supabase } from './lib/supabase';
 
 // Fix leaflet default icon paths in React
@@ -19,11 +20,16 @@ import iconShadow from 'leaflet/dist/images/marker-shadow.png';
 L.Marker.prototype.options.icon = L.icon({ iconUrl: iconImg, shadowUrl: iconShadow, iconSize: [25, 41], iconAnchor: [12, 41] });
 
 // Custom Player Icon (Avatar Emoji)
-const createPlayerIcon = (emoji: string, isGodActive: boolean = false) => L.divIcon({
+const createPlayerIcon = (emoji: string, godAvatar: string | null = null) => L.divIcon({
   html: `
     <div class="relative flex items-center justify-center">
-      ${isGodActive ? '<div class="absolute inset-0 w-12 h-12 -m-2 bg-amber-400/30 rounded-full anim-god-aura blur-sm border border-amber-500/50"></div>' : ''}
-      <div class="relative text-3xl drop-shadow-lg ${isGodActive ? 'anim-god-glow' : ''}">${emoji}</div>
+      ${godAvatar ? `
+        <div class="absolute -top-3 -right-3 w-7 h-7 bg-amber-400 rounded-full flex items-center justify-center border-2 border-black shadow-[0_0_10px_rgba(251,191,36,0.5)] z-20 anim-god-glow">
+          <span class="text-sm">${godAvatar}</span>
+        </div>
+        <div class="absolute inset-0 w-12 h-12 -m-1 bg-amber-400/20 rounded-full anim-god-aura blur-[2px] border border-amber-500/30"></div>
+      ` : ''}
+      <div class="relative text-3xl drop-shadow-lg ${godAvatar ? 'anim-god-glow' : ''}">${emoji}</div>
     </div>
   `,
   className: 'player-div-icon',
@@ -1770,10 +1776,15 @@ const App: React.FC = () => {
         >
           <div className="relative flex-shrink-0">
             <div className={`w-12 h-12 rounded-full border-2 bg-gradient-to-br from-game-medium to-game-dark flex items-center justify-center text-2xl ${activeGod ? 'border-amber-400 anim-god-glow' : 'border-game-gold anim-pulse-glow'}`}>
-              {activeGod ? activeGod.avatar : '🧙‍♂️'}
+              {isTraveling ? '🚂' : isWalking ? '🏃‍♂️' : '🧙‍♂️'}
             </div>
-            <div className={`absolute -bottom-1 -right-1 text-game-dark text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center shadow-lg ${activeGod ? 'bg-amber-400' : 'bg-game-gold'}`}>
-              {activeGod ? activeGod.level : player.level}
+            {activeGod && (
+              <div className="absolute -top-1 -right-1 w-6 h-6 bg-amber-400 rounded-full flex items-center justify-center border-2 border-[#0a0e1a] shadow-lg anim-god-glow z-10">
+                <span className="text-[10px]">{activeGod.avatar}</span>
+              </div>
+            )}
+            <div className="absolute -bottom-1 -right-1 bg-game-gold text-game-dark text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center shadow-lg border border-game-dark/20">
+              {player.level}
             </div>
           </div>
           <div className="min-w-0">
@@ -1937,7 +1948,7 @@ const App: React.FC = () => {
                   </Marker>
                 );
               })}
-              <Marker position={position} icon={createPlayerIcon(isTraveling ? '🚂' : isWalking ? '🏃‍♂️' : '🧙‍♂️')}>
+              <Marker position={position} icon={createPlayerIcon(isTraveling ? '🚂' : isWalking ? '🏃‍♂️' : '🧙‍♂️', activeGod?.avatar)}>
                 <Popup>你的位置</Popup>
               </Marker>
               <MapClickHandler />
@@ -2158,8 +2169,10 @@ const App: React.FC = () => {
         {/* ─── PARTNERS ─── */}
         {activeTab === 'partners' && <PartnersTab player={player!} onUpdatePlayer={setPlayer as any} saveProfile={saveProfile} isCombatAction={isCombatAction} />}
 
-        {/* ─── HOME ─── */}
         {activeTab === 'home' && <HomeTab player={player!} onUpdatePlayer={setPlayer as any} saveProfile={saveProfile} />}
+
+        {/* ─── RANKING (排行) ─── */}
+        {activeTab === 'ranking' && <RankingTab player={player!} />}
 
         {/* ─── STATS (勇者) ─── */}
         {activeTab === 'stats' && (
@@ -2558,7 +2571,8 @@ const App: React.FC = () => {
           { key: 'explore', icon: <Compass size={22} />, label: '探索' },
           { key: 'partners', icon: <Users size={22} />, label: '夥伴' },
           { key: 'home', icon: <Home size={22} />, label: '家園' },
-          { key: 'bag', icon: <Package size={22} />, label: '行囊' }
+          { key: 'bag', icon: <Package size={22} />, label: '行囊' },
+          { key: 'ranking', icon: <Trophy size={22} />, label: '排行' }
         ].map(tab => (
           <button key={tab.key}
             onClick={() => {

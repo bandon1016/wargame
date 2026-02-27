@@ -160,6 +160,17 @@ export interface God {
     description: string;
 }
 
+export interface RankingEntry {
+    user_id: string;
+    nickname: string;
+    level: number;
+    gold: number;
+    power_score: number;
+    rank_type: 'level' | 'gold' | 'power';
+    rank_position: number;
+    snapshot_date: string;
+}
+
 export interface Enemy {
     id: string;
     name: string;
@@ -624,14 +635,14 @@ export const GOD_DATABASE: Omit<God, 'id' | 'level' | 'exp' | 'maxExp'>[] = [
     },
     {
         name: '福德正神-土地公',
-        avatar: '🎋',
+        avatar: '⛰️',
         rarity: 5,
         resistanceType: 'foggy',
         description: '鄉里社稷之守護神，能看穿一切虛妄濃霧，保持視野清晰。'
     },
     {
         name: '中壇元帥-三太子',
-        avatar: '🛞',
+        avatar: '🪭',
         rarity: 5,
         resistanceType: 'sunny',
         description: '乾坤火德之化身，免疫酷暑熱浪帶來的體力煎熬。'
@@ -642,5 +653,33 @@ export const GOD_DATABASE: Omit<God, 'id' | 'level' | 'exp' | 'maxExp'>[] = [
         rarity: 5,
         resistanceType: 'stormy',
         description: '北極鎮天真武大帝，能鎮壓狂雷電閃，抵禦環境傷害。'
+    },
+    {
+        name: '關聖帝君-關公',
+        avatar: '🗡️',
+        rarity: 5,
+        resistanceType: 'all',
+        description: '忠義與武力之化身，雖無特定天氣加成，但能穩定護持勇者之心。'
+    },
+    {
+        name: '濟公活佛',
+        avatar: '🍶',
+        rarity: 5,
+        resistanceType: 'foggy',
+        description: '隨緣濟世之聖僧，其神通能散去障目煙塵，指引明路。'
+    },
+    {
+        name: '虎爺公',
+        avatar: '🐯',
+        rarity: 5,
+        resistanceType: 'sunny',
+        description: '地主神之坐騎，威猛凶悍，能抵禦烈日侵蝕並守護財富。'
+    },
+    {
+        name: '文昌帝君',
+        avatar: '✍️',
+        rarity: 5,
+        resistanceType: 'rainy',
+        description: '掌管功名掌祿之神，在雨中研讀亦能心如止水，不受環境干擾。'
     }
 ];
