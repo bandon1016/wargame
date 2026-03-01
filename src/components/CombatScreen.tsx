@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { CharacterStats, Enemy, Skill, WeatherType } from '../types/game';
-import { SKILL_DATABASE } from '../types/game';
+import { SKILL_DATABASE, ELEMENT_META, WEATHER_TYPES } from '../types/game';
 import { Shield, Sword, Heart, Play, Square, X, Award, PlusCircle } from 'lucide-react';
 
 interface CombatScreenProps {
@@ -14,9 +14,10 @@ interface CombatScreenProps {
     onAutoHeal?: () => void;
     onRevive?: () => void;
     onUseItem?: (item: any) => void;
+    hasWeatherResistance: (type: WeatherType) => boolean;
 }
 
-export const CombatScreen: React.FC<CombatScreenProps> = ({ player, enemy, onWin, onLose, onFlee, autoExplore, weather, onAutoHeal, onRevive, onUseItem }) => {
+export const CombatScreen: React.FC<CombatScreenProps> = ({ player, enemy, onWin, onLose, onFlee, autoExplore, weather, onAutoHeal, onRevive, onUseItem, hasWeatherResistance }) => {
     const [combatStats] = useState({
         attack: player.attack,
         defense: player.defense,
@@ -42,6 +43,7 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({ player, enemy, onWin
     const [awaitingRevive, setAwaitingRevive] = useState(false);
     const [activeBuffs, setActiveBuffs] = useState<{ id: string; name: string; turns: number; type: string; power: number }[]>([]);
     const [enemyDebuffs, setEnemyDebuffs] = useState<{ id: string; name: string; type: string; turns: number; damage: number; icon: string }[]>([]);
+    const [round, setRound] = useState(1);
     const revivePotCount = player.items.find(i => i.id === 'item_revive_pot')?.quantity || 0;
 
     useEffect(() => { logRef.current?.scrollTo({ top: 999999, behavior: 'smooth' }); }, [logs]);
@@ -90,7 +92,10 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({ player, enemy, onWin
         }
 
         const atkBuff = activeBuffs.filter(b => b.type === 'atk').reduce((sum, b) => sum + b.power, 0);
-        const pDmg = Math.max(1, (combatStats.attack + atkBuff) - enemy.defense + Math.floor(Math.random() * 6));
+
+        // 天氣屬性傷害修飾
+        const weatherMod = weather ? (WEATHER_TYPES[weather].elementMods?.[enemy.element] ?? 1.0) : 1.0;
+        const pDmg = Math.max(1, Math.round(((combatStats.attack + atkBuff) - enemy.defense + Math.floor(Math.random() * 6)) * weatherMod));
         const newEHp = Math.max(0, eHp - pDmg);
         setEHp(newEHp);
         setEShake(true); setTimeout(() => setEShake(false), 300);
@@ -124,11 +129,21 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({ player, enemy, onWin
 
         if (skillDef.type === 'attack') {
             const atkBuff = activeBuffs.filter(b => b.type === 'atk').reduce((sum, b) => sum + b.power, 0);
-            const dmg = Math.max(1, power + Math.floor((combatStats.attack + atkBuff) * 0.5) - enemy.defense + Math.floor(Math.random() * 10));
+            // 雙重屬性連動：
+            // 1. 技能本身的屬性受天氣加成（如：雷暴時「雷擊」傷害 ×1.2）
+            // 2. 敵人弱點受天氣加成（如：雨天對水系怪物傷害 ×1.2）
+            const skillElemMod = (weather && skillDef.element && skillDef.element !== 'neutral')
+                ? (WEATHER_TYPES[weather].elementMods?.[skillDef.element] ?? 1.0)
+                : 1.0;
+            const enemyElemMod = weather ? (WEATHER_TYPES[weather].elementMods?.[enemy.element] ?? 1.0) : 1.0;
+            const totalMod = skillElemMod * enemyElemMod;
+            const dmg = Math.max(1, Math.round((power + Math.floor((combatStats.attack + atkBuff) * 0.5) - enemy.defense + Math.floor(Math.random() * 10)) * totalMod));
             currentEHp = Math.max(0, eHp - dmg);
             setEHp(currentEHp);
             setEShake(true); setTimeout(() => setEShake(false), 300);
-            log(`${skillDef.icon} 使用了 ${skillDef.name}！對 ${enemy.name} 造成 ${dmg} 傷害`);
+            const elemTag = skillDef.element && skillDef.element !== 'neutral' ? ELEMENT_META[skillDef.element].icon : '';
+            const boostTag = totalMod > 1.05 ? ` ✨天氣加持！` : totalMod < 0.95 ? ` 💧天氣減弱` : '';
+            log(`${skillDef.icon}${elemTag} 使用了 ${skillDef.name}！對 ${enemy.name} 造成 ${dmg} 傷害${boostTag}`);
 
             // Apply debuff to enemy
             if (skillDef.debuff && currentEHp > 0) {
@@ -211,16 +226,28 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({ player, enemy, onWin
         let stormDmgPlayer = 0;
         let stormDmgEnemy = 0;
 
-        if (weather === 'stormy' && Math.random() > 0.7) {
-            stormDmgPlayer = Math.floor(combatStats.maxHp * 0.05);
+        const weatherConf = weather ? WEATHER_TYPES[weather] : null;
+        if (weather === 'stormy' && weatherConf && weatherConf.envDmgPerRounds > 0 && round % weatherConf.envDmgPerRounds === 0) {
+            // Check god resistance for player
+            const hasRes = hasWeatherResistance('stormy');
+
+            stormDmgPlayer = hasRes ? 0 : Math.floor(combatStats.maxHp * 0.05);
             stormDmgEnemy = Math.floor(enemy.maxHp * 0.05);
+
             nextPHp = Math.max(0, nextPHp - stormDmgPlayer);
             nextEHp = Math.max(0, nextEHp - stormDmgEnemy);
             setPHp(nextPHp);
             setEHp(nextEHp);
-            setPShake(true); setEShake(true);
+
+            if (stormDmgPlayer > 0) setPShake(true);
+            setEShake(true);
             setTimeout(() => { setPShake(false); setEShake(false); }, 300);
-            log(`⚡ 狂雷劈下！雙方分別受到 ${stormDmgPlayer} / ${stormDmgEnemy} 點環境傷害`);
+
+            if (hasRes) {
+                log(`⚡ 狂雷劈下！魔物受到 ${stormDmgEnemy} 點傷害，你憑藉神明守護毫髮無傷`);
+            } else {
+                log(`⚡ 狂雷劈下！雙方分別受到 ${stormDmgPlayer} / ${stormDmgEnemy} 點環境傷害`);
+            }
 
             if (nextEHp <= 0) { win(nextEHp, nextPHp, currentPMp); return; }
             if (nextPHp <= 0) { checkRevive(nextPHp, currentPMp); return; }
@@ -306,6 +333,7 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({ player, enemy, onWin
         }
 
         setIsPlayerTurn(true);
+        setRound(r => r + 1);
     };
 
     const checkRevive = (hp: number, mp: number) => {
@@ -427,7 +455,24 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({ player, enemy, onWin
                             </div>
                         )}
                     </div>
-                    <div className="font-bold text-sm text-game-danger">{enemy.name} <span className="text-gray-500 text-xs">Lv.{enemy.level}</span></div>
+                    <div className="flex items-center gap-1.5 font-bold text-sm text-game-danger">
+                        {enemy.name} <span className="text-gray-500 text-xs">Lv.{enemy.level}</span>
+                        {/* 屬性 Badge */}
+                        {(() => {
+                            const meta = ELEMENT_META[enemy.element];
+                            const weatherBoost = weather ? (WEATHER_TYPES[weather].elementMods?.[enemy.element] ?? 1.0) : 1.0;
+                            const isBuffed = weatherBoost > 1.0;
+                            return (
+                                <span
+                                    className={`element-badge ${isBuffed ? 'buffed' : ''}`}
+                                    style={{ backgroundColor: meta.color + '33', color: meta.color, borderColor: meta.color + '66' }}
+                                    title={`屬性：${meta.label}${isBuffed ? ` (天氣加成 x${weatherBoost.toFixed(2)})` : ''}`}
+                                >
+                                    {meta.icon}
+                                </span>
+                            );
+                        })()}
+                    </div>
                     <div className="w-full mt-2">
                         <div className="flex justify-between text-[11px] text-gray-400 mb-0.5"><span className="flex items-center gap-1"><Heart size={10} className="text-red-400" /> HP</span><span>{eHp}/{enemy.maxHp}</span></div>
                         <div className="h-2.5 bg-gray-800 rounded-full overflow-hidden">
@@ -492,14 +537,32 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({ player, enemy, onWin
                                             const sk = SKILL_DATABASE.find(s => s.id === ps.id);
                                             if (!sk) return null;
                                             const cost = sk.baseMpCost + (ps.level - 1) * sk.mpCostGrowth;
+                                            // 計算技能天氣加成
+                                            const elemMod = (weather && sk.element && sk.element !== 'neutral')
+                                                ? (WEATHER_TYPES[weather].elementMods?.[sk.element] ?? 1.0)
+                                                : 1.0;
+                                            const isWeatherBuffed = elemMod > 1.0;
+                                            const elemMeta = sk.element ? ELEMENT_META[sk.element] : null;
                                             return (
                                                 <button
                                                     key={ps.id}
                                                     onClick={() => handleUseSkill(ps.id)}
                                                     disabled={pMp < cost}
-                                                    className="glass-panel border border-blue-400/30 text-blue-400 font-bold py-2 rounded-lg text-xs flex flex-col items-center justify-center gap-1 hover:bg-white/5 active:scale-95 transition-all disabled:opacity-30"
+                                                    className={`glass-panel border text-blue-400 font-bold py-2 rounded-lg text-xs flex flex-col items-center justify-center gap-1 hover:bg-white/5 active:scale-95 transition-all disabled:opacity-30 ${isWeatherBuffed ? 'border-yellow-400/60 shadow-[0_0_8px_rgba(251,191,36,0.3)]' : 'border-blue-400/30'}`}
                                                 >
-                                                    <div className="flex items-center gap-1">{sk.icon} {sk.name}</div>
+                                                    <div className="flex items-center gap-1">
+                                                        {sk.icon}
+                                                        {elemMeta && sk.element !== 'neutral' && (
+                                                            <span
+                                                                className={`text-[10px] ${isWeatherBuffed ? 'element-badge buffed' : ''}`}
+                                                                style={{ color: elemMeta.color }}
+                                                                title={`${elemMeta.label}屬性${isWeatherBuffed ? ` ×${elemMod.toFixed(1)} 天氣加持` : ''}`}
+                                                            >
+                                                                {elemMeta.icon}{isWeatherBuffed && '▲'}
+                                                            </span>
+                                                        )}
+                                                        {sk.name}
+                                                    </div>
                                                     <div className="text-[10px] opacity-70">MP {cost}</div>
                                                 </button>
                                             );

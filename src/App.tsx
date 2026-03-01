@@ -2,8 +2,8 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap, Circle, Polyline, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Compass, Sword, Home, Users, Package, Settings as SettingsIcon, Book, Heart, Shield, Zap, ChevronRight, MapPin, Loader2, X, PlusCircle, ShieldAlert, TrainFront, Coins, Sparkles, Cpu, Flame, Waves, Diamond, Trophy, Copy, Check } from 'lucide-react';
-import type { CharacterStats, Equipment, GameItem, Skill, MapPOI, Town, WeatherType, Enemy, AlchemyRecipe, BlacksmithRecipe } from './types/game';
-import { MONSTER_DATABASE, SKILL_DATABASE, ITEM_DATABASE, EQUIPMENT_DATABASE, RARITY_COLORS, WEATHER_TYPES, getRegionByCityName, getRegionalMaterials, getRegionByCoordinates, TOWN_DATABASE, getPartnerAvatar, getRailwayPath, POI_NAMES } from './types/game';
+import type { CharacterStats, Equipment, GameItem, Skill, MapPOI, Town, WeatherType, Enemy, AlchemyRecipe, BlacksmithRecipe, ElementType } from './types/game';
+import { MONSTER_DATABASE, SKILL_DATABASE, ITEM_DATABASE, EQUIPMENT_DATABASE, RARITY_COLORS, WEATHER_TYPES, getRegionByCityName, getRegionalMaterials, getRegionByCoordinates, TOWN_DATABASE, getPartnerAvatar, getRailwayPath, POI_NAMES, ELEMENT_META } from './types/game';
 import { CombatScreen } from './components/CombatScreen';
 import { PartnersTab } from './components/PartnersTab';
 import { HomeTab } from './components/HomeTab';
@@ -11,6 +11,7 @@ import { AuthScreen } from './components/AuthScreen';
 import { TownScreen } from './components/TownScreen';
 import { GuideModal } from './components/GuideModal';
 import RankingTab from './components/RankingTab';
+import { WeatherRain } from './components/WeatherRain';
 import { supabase } from './lib/supabase';
 
 // Fix leaflet default icon paths in React
@@ -250,6 +251,7 @@ const App: React.FC = () => {
   const [activePoiCombat, setActivePoiCombat] = useState<string | null>(null);
   const [pendingTarget, setPendingTarget] = useState<{ lat: number, lng: number, label: string } | null>(null);
   const [isMerchantOpen, setIsMerchantOpen] = useState(false);
+  const [isWeatherPanelOpen, setIsWeatherPanelOpen] = useState(false);
   const [copiedUid, setCopiedUid] = useState(false);
   const [isDoubleTabbed, setIsDoubleTabbed] = useState(false);
   const isDoubleTabbedRef = React.useRef(isDoubleTabbed);
@@ -744,34 +746,36 @@ const App: React.FC = () => {
         walk_started_at: null,
       };
 
-    const { error } = await supabase.from('profiles').update({
-      level: p.level, exp: p.exp, max_exp: p.maxExp,
-      hp: p.hp, max_hp: p.maxHp, mp: p.mp, max_mp: p.maxMp, attack: p.attack, defense: p.defense,
-      gold: p.gold, base_materials: p.baseMaterials,
-      ling_qi: p.lingQi,
-      tech_fragments: p.techFragments,
-      incense: p.incense,
-      salt_crystals: p.saltCrystals,
-      premium_gems: p.premiumGems,
-      buildings: p.buildings,
-      equipment: p.equipment,
-      equipped_weapon: p.equippedWeapon,
-      equipped_armor: p.equippedArmor,
-      equipped_helmet: p.equippedHelmet,
-      equipped_boots: p.equippedBoots,
-      equipped_accessory: p.equippedAccessory,
-      items: p.items,
-      skills: p.skills,
-      partners: p.partners,
-      gods: p.gods,
-      active_god_id: p.activeGodId,
-      session_id: mySessionId,
-      current_location_lat: forceLocation ? forceLocation[0] : positionRef.current[0],
-      current_location_lng: forceLocation ? forceLocation[1] : positionRef.current[1],
-      ...travelSaveData,
-      ...walkSaveData,
-      updated_at: new Date().toISOString()
-    }).eq('id', session.user.id);
+    const { data: updatedProfile, error } = await supabase.rpc('secure_sync_profile', {
+      p_lat: forceLocation ? forceLocation[0] : positionRef.current[0],
+      p_lng: forceLocation ? forceLocation[1] : positionRef.current[1],
+      p_hp: p.hp,
+      p_mp: p.mp,
+      p_exp: p.exp,
+      p_travel_data: {
+        path: travelSaveData.travel_path,
+        started_at: travelSaveData.travel_started_at,
+        duration: travelSaveData.travel_duration_seconds
+      },
+      p_walk_data: {
+        target_lat: walkSaveData.walk_target_lat,
+        target_lng: walkSaveData.walk_target_lng,
+        start_lat: walkSaveData.walk_start_lat,
+        start_lng: walkSaveData.walk_start_lng,
+        started_at: walkSaveData.walk_started_at
+      }
+    });
+
+    if (error) {
+      console.error('存檔失敗:', error.message);
+    } else if (updatedProfile) {
+      // 伺服器同步成功，確保本地與伺服器一致
+      setPlayer(prev => prev ? {
+        ...prev,
+        current_location_lat: updatedProfile.current_location_lat,
+        current_location_lng: updatedProfile.current_location_lng
+      } : null);
+    }
 
     if (error) {
       console.error('Save Profile Error:', error);
@@ -834,14 +838,9 @@ const App: React.FC = () => {
         });
 
         if (dg === 0 && dm === 0) {
-          // still process natural MP recovery
-          if (p.mp < p.maxMp) {
-            return { ...p, mp: Math.min(p.maxMp, p.mp + 0.5) }; // 每秒恢復 0.5 點 MP
-          }
           return p;
         }
-        const nextMp = Math.min(p.maxMp, p.mp + 0.5);
-        return { ...p, gold: p.gold + dg, baseMaterials: p.baseMaterials + dm, mp: nextMp };
+        return { ...p, gold: p.gold + dg, baseMaterials: p.baseMaterials + dm };
       });
     }, 1000);
     return () => window.clearInterval(t);
@@ -939,7 +938,14 @@ const App: React.FC = () => {
     let frameId: number;
     // Speed is ~0.00008 lat/lng units per frame (assuming 60fps = ~0.0048 per sec limit)
     // Actually walking is 0.00008 hypot distance per frame ~ 0.0048 per second
-    const speedPerSec = 0.0048;
+    const baseSpeedPerSec = 0.0048;
+    // 天氣移動速度修飾（神明抵禦可免疫懲罰）
+    const currentWeather = weatherRef.current;
+    const weatherSpeedMod = currentWeather && !hasWeatherResistance(currentWeather)
+      ? WEATHER_TYPES[currentWeather].walkSpeedMod
+      : (currentWeather === 'sunny' ? WEATHER_TYPES.sunny.walkSpeedMod : 1.0);
+    const speedPerSec = baseSpeedPerSec * weatherSpeedMod;
+
 
     // Initialize refs if starting a new walk
     if (!walkStartRef.current || !walkStartedAtRef.current || !walkTargetRef.current || walkTargetRef.current[0] !== targetPosition[0] || walkTargetRef.current[1] !== targetPosition[1]) {
@@ -1116,6 +1122,7 @@ const App: React.FC = () => {
     const enemy = {
       id: Math.random().toString(),
       name: (isBoss ? '【首領】' : isElite ? '【菁英】' : '') + template.name, avatar: template.avatar,
+      element: template.element,
       level: lv + Math.floor(Math.random() * 3) - 1 + (isBoss ? 5 : isElite ? 2 : 0),
       hp, maxHp: hp,
       attack: eAtk,
@@ -2143,16 +2150,82 @@ const App: React.FC = () => {
             )}
 
 
+            {/* ─── Weather Visual Overlays ─── */}
+            {weather === 'foggy' && (
+              <div className="weather-fog-overlay" />
+            )}
+            {(weather === 'rainy' || weather === 'stormy') && (
+              <WeatherRain weather={weather as 'rainy' | 'stormy'} />
+            )}
+            {weather === 'stormy' && (
+              <div className="weather-lightning-flash" />
+            )}
+
             {/* Weather Overlay - Moved to Map */}
-            <div className="absolute top-4 right-4 z-[1000]">
-              <div className="flex items-center gap-2 bg-black/60 backdrop-blur-md px-4 py-2 rounded-full border border-white/20 shadow-lg tooltip-wrap cursor-help pointer-events-auto transition-all hover:bg-black/80">
+            <div className="absolute top-4 right-4 z-[1000] flex flex-col items-end gap-2">
+              <button
+                onClick={() => setIsWeatherPanelOpen(!isWeatherPanelOpen)}
+                className={`flex items-center gap-2 bg-black/60 backdrop-blur-md px-4 py-2 rounded-full border shadow-lg transition-all hover:bg-black/80 pointer-events-auto ${isWeatherPanelOpen ? 'border-game-gold ring-1 ring-game-gold/50' : 'border-white/20'}`}
+              >
                 <span className="text-2xl drop-shadow-md">{WEATHER_TYPES[weather].icon}</span>
                 <span className="text-sm font-bold text-white drop-shadow-md">{WEATHER_TYPES[weather].label}</span>
-                <div className="tooltip-text tooltip-bottom">
-                  <div className="font-bold text-white mb-1">{WEATHER_TYPES[weather].label}</div>
-                  <div className="text-gray-400 text-[10px] whitespace-nowrap">{WEATHER_TYPES[weather].description}</div>
-                </div>
-              </div>
+              </button>
+
+              {isWeatherPanelOpen && (
+                <>
+                  {/* Backdrop to close */}
+                  <div className="fixed inset-0 z-[-1] pointer-events-auto" onClick={() => setIsWeatherPanelOpen(false)} />
+
+                  <div className="bg-black/80 backdrop-blur-xl p-4 rounded-2xl border border-white/20 shadow-2xl w-64 anim-scale-in pointer-events-auto">
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="text-2xl">{WEATHER_TYPES[weather].icon}</span>
+                      <div>
+                        <div className="font-black text-white">{WEATHER_TYPES[weather].label}</div>
+                        <div className="text-[10px] text-gray-400 leading-tight">{WEATHER_TYPES[weather].description}</div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2 border-t border-white/10 pt-3">
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="text-gray-400">移動速度</span>
+                        <span className={`font-bold ${WEATHER_TYPES[weather].walkSpeedMod > 1 ? 'text-emerald-400' : WEATHER_TYPES[weather].walkSpeedMod < 1 ? 'text-red-400' : 'text-white'}`}>
+                          {WEATHER_TYPES[weather].walkSpeedMod > 1 ? '+' : ''}{Math.round((WEATHER_TYPES[weather].walkSpeedMod - 1) * 100)}%
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="text-gray-400">感應半徑</span>
+                        <span className={`font-bold ${WEATHER_TYPES[weather].poiRadiusMod > 1 ? 'text-emerald-400' : WEATHER_TYPES[weather].poiRadiusMod < 1 ? 'text-red-400' : 'text-white'}`}>
+                          {WEATHER_TYPES[weather].poiRadiusMod > 1 ? '+' : ''}{Math.round((WEATHER_TYPES[weather].poiRadiusMod - 1) * 100)}%
+                        </span>
+                      </div>
+                      {WEATHER_TYPES[weather].envHpTickDmg > 0 && (
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-gray-400">環境傷害</span>
+                          <span className="font-bold text-red-500">每10秒 -{Math.round(WEATHER_TYPES[weather].envHpTickDmg * 100)}%</span>
+                        </div>
+                      )}
+
+                      {Object.keys(WEATHER_TYPES[weather].elementMods).length > 0 && (
+                        <div className="pt-2 border-t border-white/5">
+                          <div className="text-[9px] font-black text-gray-500 uppercase mb-1.5 tracking-wider">屬性對應</div>
+                          <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+                            {Object.entries(WEATHER_TYPES[weather].elementMods).map(([elem, mod]: [any, any]) => (
+                              <div key={elem} className="flex justify-between items-center text-[10px]">
+                                <span className="text-gray-400 flex items-center gap-1">
+                                  {ELEMENT_META[elem as ElementType]?.icon} {ELEMENT_META[elem as ElementType]?.label}
+                                </span>
+                                <span className={mod > 1 ? 'text-emerald-400' : 'text-red-400'}>
+                                  {mod > 1 ? '+' : ''}{Math.round((mod - 1) * 100)}%
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
 
 
@@ -2572,6 +2645,8 @@ const App: React.FC = () => {
               heal: effectiveHeal
             }}
             enemy={currentEnemy}
+            weather={weather}
+            hasWeatherResistance={hasWeatherResistance}
             onWin={(exp: number, gold: number, skill?: Skill, loot?: GameItem[], eq?: Equipment, finalHp?: number, finalMp?: number) => {
               handleCombatWin(exp, gold, skill, loot, eq, finalHp, finalMp);
             }}
@@ -2580,7 +2655,6 @@ const App: React.FC = () => {
             }}
             onFlee={() => { setIsCombatAction(false); setAutoExplore(false); }}
             autoExplore={autoExplore}
-            weather={weather}
             onAutoHeal={() => {
               const pot = player.items.find(i => i.type === 'potion' && i.id !== 'item_revive_pot');
               if (pot) useItem(pot, true);

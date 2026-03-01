@@ -50,15 +50,23 @@ create table public.profiles (
   walk_started_at timestamp with time zone default null,
   
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
-  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  
+  -- 安全性約束：防止負數資源
+  constraint gold_positive check (gold >= 0),
+  constraint mp_positive check (mp >= 0),
+  constraint base_materials_positive check (base_materials >= 0),
+  constraint incense_positive check (incense >= 0)
 );
 
 -- 2. 開啟資料列等級安全控制 (RLS)
 alter table public.profiles enable row level security;
 
--- 3. 新增存取政策：使用者只能讀取和修改自己的存檔
+-- 3. 新增存取政策
 create policy "使用者可以檢視自己的資料" on profiles for select using ( auth.uid() = id );
-create policy "使用者可以更新自己的資料" on profiles for update using ( auth.uid() = id );
+create policy "使用者可以更新自己的基本資料" on profiles for update 
+  using ( auth.uid() = id )
+  with check ( auth.uid() = id );
 create policy "使用者可以建立自己的資料" on profiles for insert with check ( auth.uid() = id );
 
 -- 4. 自動建立 Profile 的觸發器 (當新會員註冊時，自動給予初始資源與裝備)
@@ -121,8 +129,13 @@ create table public.map_pois (
   lng double precision not null,
   is_active boolean default true,
   respawn_at timestamp with time zone,
-  expires_at timestamp with time zone
+  expires_at timestamp with time zone,
+  uid_12_code text -- 增加 UID 支援
 );
+
+-- 開啟 POI RLS
+alter table public.map_pois enable row level security;
+create policy "所有人都可以檢視活躍的 POI" on map_pois for select using ( is_active = true );
 
 create table public.poi_claims (
   poi_id uuid not null,
@@ -130,6 +143,10 @@ create table public.poi_claims (
   claimed_at timestamp with time zone default now(),
   primary key (poi_id, user_id)
 );
+
+-- 開啟 Claims RLS
+alter table public.poi_claims enable row level security;
+create policy "使用者只能檢視自己的領取紀錄" on poi_claims for select using ( auth.uid() = user_id );
 
 -- 6. RPC: 同步並產生 POI
 create or replace function public.sync_pois(center_lat double precision, center_lng double precision)
@@ -180,37 +197,113 @@ begin
 end;
 $$;
 
--- 7. RPC: 互動並鎖定 POI
-create or replace function public.interact_poi(p_poi_id uuid)
-returns boolean
+-- 7. RPC: 高安全性同步玩家狀態 (取代直接 Update)
+-- 此函數會驗證座標有效性，並限制敏感欄位修改
+create or replace function public.secure_sync_profile(
+  p_lat double precision,
+  p_lng double precision,
+  p_hp integer,
+  p_mp double precision,
+  p_exp integer,
+  p_travel_data jsonb default null,
+  p_walk_data jsonb default null
+)
+returns public.profiles
+language plpgsql
+security definer
+as $$
+declare
+  v_profile public.profiles;
+  v_dist double precision;
+begin
+  -- 1. 取得現有資料
+  select * into v_profile from public.profiles where id = auth.uid();
+  
+  -- 2. 基本地理校驗 (防止飛到海裡或境外)
+  if p_lat < 21.0 or p_lat > 26.0 or p_lng < 119.0 or p_lng > 123.0 then
+    raise exception '非法地理位置';
+  end if;
+
+  -- 3. 更新資料
+  update public.profiles
+  set 
+    current_location_lat = p_lat,
+    current_location_lng = p_lng,
+    hp = p_hp,
+    mp = p_mp,
+    exp = p_exp,
+    travel_path = p_travel_data->'path',
+    travel_started_at = (p_travel_data->>'started_at')::timestamp with time zone,
+    travel_duration_seconds = (p_travel_data->>'duration')::double precision,
+    walk_target_lat = (p_walk_data->>'target_lat')::double precision,
+    walk_target_lng = (p_walk_data->>'target_lng')::double precision,
+    walk_start_lat = (p_walk_data->>'start_lat')::double precision,
+    walk_start_lng = (p_walk_data->>'start_lng')::double precision,
+    walk_started_at = (p_walk_data->>'started_at')::timestamp with time zone,
+    updated_at = now()
+  where id = auth.uid()
+  returning * into v_profile;
+
+  return v_profile;
+end;
+$$;
+
+-- 8. RPC: 高安全性領取 POI 獎勵
+create or replace function public.secure_claim_poi(p_poi_id uuid, p_player_lat double precision, p_player_lng double precision)
+returns jsonb
 language plpgsql
 security definer
 as $$
 declare
   v_poi public.map_pois;
+  v_dist double precision;
+  v_reward_gold integer;
+  v_reward_incense integer;
 begin
-  -- 取得目標 POI 並鎖定資料列
+  -- 1. 取得並鎖定 POI
   select * into v_poi from public.map_pois where id = p_poi_id and is_active = true for update;
-  
   if not found then
-    return false;
+    return jsonb_build_object('success', false, 'message', '事件已消失');
   end if;
 
-  -- 檢查該玩家是否已經互動過這個 POI
+  -- 2. 位置驗證 (距離玩家座標不可超過 0.005 度)
+  v_dist := sqrt(pow(v_poi.lat - p_player_lat, 2) + pow(v_poi.lng - p_player_lng, 2));
+  if v_dist > 0.005 then
+    return jsonb_build_object('success', false, 'message', '距離目標太遠');
+  end if;
+
+  -- 3. 重複領取檢查
   if exists (select 1 from public.poi_claims where poi_id = p_poi_id and user_id = auth.uid()) then
-    return false;
+    return jsonb_build_object('success', false, 'message', '已領取過此獎勵');
   end if;
 
-  -- 記錄玩家互動
+  -- 4. 計算隨機獎勵
+  v_reward_gold := floor(random() * 100 + 50);
+  v_reward_incense := 0;
+  if v_poi.type = 'altar' then
+     v_reward_incense := floor(random() * 10 + 5);
+  end if;
+
+  -- 5. 發放獎勵
+  update public.profiles
+  set 
+    gold = gold + v_reward_gold,
+    incense = incense + v_reward_incense
+  where id = auth.uid();
+
+  -- 6. 標記領取
   insert into public.poi_claims (poi_id, user_id) values (p_poi_id, auth.uid());
 
-  -- 如果是寶箱或菁英怪，則讓它立馬消失並進入 30 分鐘重生冷卻
+  -- 7. 關閉 POI
   if v_poi.type in ('chest', 'elite') then
-    update public.map_pois 
-    set is_active = false, respawn_at = now() + interval '30 minutes'
-    where id = p_poi_id;
+    update public.map_pois set is_active = false, respawn_at = now() + interval '30 minutes' where id = p_poi_id;
   end if;
 
-  return true;
+  return jsonb_build_object(
+    'success', true, 
+    'gold', v_reward_gold, 
+    'incense', v_reward_incense,
+    'message', '領取成功'
+  );
 end;
 $$;

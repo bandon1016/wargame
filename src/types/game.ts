@@ -14,6 +14,7 @@ export interface Skill {
     type: 'attack' | 'heal' | 'buff';
     description: string;
     icon: string; // emoji
+    element?: ElementType; // 技能屬性，影響天氣傷害加成
 
     // 數值
     basePower: number;
@@ -172,6 +173,17 @@ export interface RankingEntry {
     snapshot_date: string;
 }
 
+export type ElementType = 'fire' | 'water' | 'lightning' | 'light' | 'dark' | 'neutral';
+
+export const ELEMENT_META: Record<ElementType, { icon: string; label: string; color: string }> = {
+    fire: { icon: '🔥', label: '火', color: '#ef4444' },
+    water: { icon: '💧', label: '水', color: '#38bdf8' },
+    lightning: { icon: '⚡', label: '雷', color: '#fbbf24' },
+    light: { icon: '✨', label: '光', color: '#f9fafb' },
+    dark: { icon: '🌑', label: '暗', color: '#7c3aed' },
+    neutral: { icon: '⚪', label: '無', color: '#94a3b8' },
+};
+
 export interface Enemy {
     id: string;
     name: string;
@@ -185,49 +197,56 @@ export interface Enemy {
     skillReward?: Skill;
     lootTable: GameItem[];
     avatar: string; // emoji
+    element: ElementType; // 屬性
 }
 
 // 怪物列表 & 掉落資料
 export const MONSTER_DATABASE = [
-    { name: '史萊姆', avatar: '🟢', minLv: 1, maxLv: 5, baseHp: 40, baseAtk: 4, baseDef: 1 },
-    { name: '哥布林', avatar: '👺', minLv: 1, maxLv: 8, baseHp: 55, baseAtk: 7, baseDef: 2 },
-    { name: '野豬', avatar: '🐗', minLv: 3, maxLv: 12, baseHp: 80, baseAtk: 10, baseDef: 5 },
-    { name: '骷髏兵', avatar: '💀', minLv: 5, maxLv: 15, baseHp: 70, baseAtk: 12, baseDef: 4 },
-    { name: '石像鬼', avatar: '🗿', minLv: 8, maxLv: 20, baseHp: 120, baseAtk: 9, baseDef: 12 },
-    { name: '火焰蜥蜴', avatar: '🦎', minLv: 10, maxLv: 25, baseHp: 100, baseAtk: 18, baseDef: 6 },
-    { name: '暗影狼', avatar: '🐺', minLv: 12, maxLv: 30, baseHp: 90, baseAtk: 22, baseDef: 7 },
-    { name: '冰霜巨人', avatar: '🧊', minLv: 20, maxLv: 40, baseHp: 200, baseAtk: 25, baseDef: 15 },
-    { name: '黑龍', avatar: '🐉', minLv: 30, maxLv: 50, baseHp: 350, baseAtk: 40, baseDef: 20 },
+    { name: '史萊姆', avatar: '🟢', element: 'water' as ElementType, minLv: 1, maxLv: 5, baseHp: 40, baseAtk: 4, baseDef: 1 },
+    { name: '哥布林', avatar: '👺', element: 'lightning' as ElementType, minLv: 1, maxLv: 8, baseHp: 55, baseAtk: 7, baseDef: 2 },
+    { name: '野豬', avatar: '🐗', element: 'neutral' as ElementType, minLv: 3, maxLv: 12, baseHp: 80, baseAtk: 10, baseDef: 5 },
+    { name: '骷髏兵', avatar: '💀', element: 'dark' as ElementType, minLv: 5, maxLv: 15, baseHp: 70, baseAtk: 12, baseDef: 4 },
+    { name: '石像鬼', avatar: '🗿', element: 'light' as ElementType, minLv: 8, maxLv: 20, baseHp: 120, baseAtk: 9, baseDef: 12 },
+    { name: '火焰蜥蜴', avatar: '🦎', element: 'fire' as ElementType, minLv: 10, maxLv: 25, baseHp: 100, baseAtk: 18, baseDef: 6 },
+    { name: '暗影狼', avatar: '🐺', element: 'dark' as ElementType, minLv: 12, maxLv: 30, baseHp: 90, baseAtk: 22, baseDef: 7 },
+    { name: '冰霜巨人', avatar: '🧊', element: 'water' as ElementType, minLv: 20, maxLv: 40, baseHp: 200, baseAtk: 25, baseDef: 15 },
+    { name: '黑龍', avatar: '🐉', element: 'dark' as ElementType, minLv: 30, maxLv: 50, baseHp: 350, baseAtk: 40, baseDef: 20 },
 ];
 
 export const SKILL_DATABASE: Skill[] = [
     {
         id: 'sk_slash', name: '旋風斬', type: 'attack', description: '揮動武器造成範圍傷害', icon: '🌪️',
+        element: 'neutral' as ElementType,
         basePower: 25, powerGrowth: 10, baseMpCost: 15, mpCostGrowth: 2,
         debuff: { type: 'rend', baseChance: 30, chanceGrowth: 2, baseDuration: 2, durationGrowth: 0, baseDamage: 10, damageGrowth: 4 }
     },
     {
         id: 'sk_fireball', name: '火球術', type: 'attack', description: '召喚火焰轟擊敵人', icon: '🔥',
+        element: 'fire' as ElementType,
         basePower: 35, powerGrowth: 15, baseMpCost: 25, mpCostGrowth: 3,
         debuff: { type: 'burn', baseChance: 40, chanceGrowth: 3, baseDuration: 3, durationGrowth: 0.1, baseDamage: 10, damageGrowth: 5 }
     },
     {
         id: 'sk_heal', name: '治癒之光', type: 'heal', description: '恢復自身 HP', icon: '💚',
+        element: 'light' as ElementType,
         basePower: 30, powerGrowth: 12, baseMpCost: 20, mpCostGrowth: 2,
         debuff: { type: 'regen', baseChance: 100, chanceGrowth: 0, baseDuration: 3, durationGrowth: 0, baseDamage: 15, damageGrowth: 5 }
     },
     {
         id: 'sk_thunder', name: '雷擊', type: 'attack', description: '閃電從天而降', icon: '⚡',
+        element: 'lightning' as ElementType,
         basePower: 40, powerGrowth: 18, baseMpCost: 30, mpCostGrowth: 4,
         debuff: { type: 'shock', baseChance: 25, chanceGrowth: 2, baseDuration: 2, durationGrowth: 0, baseDamage: 15, damageGrowth: 6 }
     },
     {
         id: 'sk_iceblast', name: '冰爆', type: 'attack', description: '冰晶碎片刺穿敵人', icon: '❄️',
+        element: 'water' as ElementType,
         basePower: 30, powerGrowth: 15, baseMpCost: 20, mpCostGrowth: 3,
         debuff: { type: 'freeze', baseChance: 20, chanceGrowth: 1.5, baseDuration: 1, durationGrowth: 0.2, baseDamage: 5, damageGrowth: 2 }
     },
     {
         id: 'sk_shield', name: '鐵壁', type: 'buff', description: '暫時提升防禦', icon: '🛡️',
+        element: 'light' as ElementType,
         basePower: 20, powerGrowth: 8, baseMpCost: 25, mpCostGrowth: 3, durationTurns: 3,
         debuff: { type: 'reflect', baseChance: 100, chanceGrowth: 0, baseDuration: 3, durationGrowth: 0, baseDamage: 15, damageGrowth: 2 } // baseDamage used as % reflect
     },
@@ -461,13 +480,46 @@ export interface WeatherEffect {
     icon: string;
     label: string;
     description: string;
+    // 地圖效應
+    walkSpeedMod: number;     // 移動速度乘數 (1.0 = 正常)
+    poiRadiusMod: number;     // POI 感應半徑乘數
+    envHpTickDmg: number;     // 每 10 秒扣血比例 (0 = 無)
+    // 戰鬥效應 - 各屬性加乘 (1.0 = 正常, >1 = 加強, <1 = 減弱)
+    elementMods: Partial<Record<ElementType, number>>;
+    evadeMod: number;         // 閃避率修飾
+    hitMod: number;           // 命中率修飾
+    envDmgPerRounds: number;  // 幾回合觸發環境傷害 (0 = 無)
 }
 
 export const WEATHER_TYPES: Record<WeatherType, WeatherEffect> = {
-    sunny: { weather: 'sunny', icon: '☀️', label: '晴天', description: '天氣晴朗，視野清晰。' },
-    rainy: { weather: 'rainy', icon: '🌧️', label: '雨天', description: '大雨滂沱，水系怪物稍微轉強。' },
-    foggy: { weather: 'foggy', icon: '🌫️', label: '濃霧', description: '能見度極低，遇敵機率大幅上升。' },
-    stormy: { weather: 'stormy', icon: '⚡', label: '雷暴', description: '狂雷交加，戰鬥中有機率受到環境傷害。' },
+    sunny: {
+        weather: 'sunny', icon: '☀️', label: '晴天',
+        description: '天氣晴朗，火光系攻擊更銳利，水暗系稍微遜色。',
+        walkSpeedMod: 1.1, poiRadiusMod: 1.0, envHpTickDmg: 0,
+        elementMods: { fire: 1.05, light: 1.05, water: 0.95, dark: 0.95 },
+        evadeMod: 1.0, hitMod: 1.0, envDmgPerRounds: 0,
+    },
+    rainy: {
+        weather: 'rainy', icon: '🌧️', label: '雨天',
+        description: '大雨滂沱，水系力量大增，火系被雨水壓制。',
+        walkSpeedMod: 0.8, poiRadiusMod: 1.0, envHpTickDmg: 0,
+        elementMods: { water: 1.1, fire: 0.9 },
+        evadeMod: 1.0, hitMod: 1.0, envDmgPerRounds: 0,
+    },
+    foggy: {
+        weather: 'foggy', icon: '🌫️', label: '濃霧',
+        description: '能見度極低，雙方命中率下降，閃避有所提升。',
+        walkSpeedMod: 1.0, poiRadiusMod: 0.7, envHpTickDmg: 0,
+        elementMods: {},
+        evadeMod: 1.1, hitMod: 0.9, envDmgPerRounds: 0,
+    },
+    stormy: {
+        weather: 'stormy', icon: '⚡', label: '雷暴',
+        description: '狂雷交加，雷系怪物力量暴增，每兩回合有環境雷擊應對。',
+        walkSpeedMod: 0.7, poiRadiusMod: 1.0, envHpTickDmg: 0.01,
+        elementMods: { lightning: 1.1 },
+        evadeMod: 1.0, hitMod: 1.0, envDmgPerRounds: 2,
+    },
 };
 
 export const RARITY_COLORS: Record<number, { border: string, bg: string, text: string, glow: string, label: string }> = {
