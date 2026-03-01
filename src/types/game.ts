@@ -385,7 +385,12 @@ export const EQUIPMENT_DATABASE: Equipment[] = [
     { id: 'eq_iron_ring', name: '鐵戒指', slot: 'accessory', rarity: 2, attack: 5, defense: 2, hp: 15, icon: '💍', description: '打磨光滑的鐵製戒指' },
     { id: 'eq_ruby_ring', name: '红寶石戒指', slot: 'accessory', rarity: 3, attack: 10, defense: 5, hp: 30, icon: '💍', description: '散發著微火魔力的寶石戒指' },
     { id: 'eq_crystal_necklace', name: '水晶項鍊', slot: 'accessory', rarity: 4, attack: 5, defense: 10, hp: 60, icon: '📿', description: '能增幅法力的純淨水晶' },
-    { id: 'eq_star_hourglass', name: '星辰沙漏', slot: 'accessory', rarity: 5, attack: 15, defense: 15, hp: 100, icon: '⏳', description: '蘊含時光與星辰之力的傳說寶物' }
+    { id: 'eq_star_hourglass', name: '星辰沙漏', slot: 'accessory', rarity: 5, attack: 15, defense: 15, hp: 100, icon: '⏳', description: '蘊含時光與星辰之力的傳說寶物' },
+
+    // 台中城 (town_txg) - 中央山脈系列
+    { id: 'eq_central_blade', name: '中央之劍', slot: 'weapon', rarity: 3, attack: 28, defense: 5, hp: 0, icon: '🗡️', description: '取用中央山脈的高山鐵礦打造而成' },
+    { id: 'eq_sacred_wood_armor', name: '太古木甲', slot: 'armor', rarity: 4, attack: 0, defense: 35, hp: 120, icon: '🌲', description: '使用台中特產太古神木製作的精良護甲' },
+    { id: 'eq_sun_moon_ring', name: '日月明珠', slot: 'accessory', rarity: 5, attack: 20, defense: 10, hp: 50, icon: '💍', description: '融合了太陽與月亮精華的絕世飾品' }
 ];
 
 export const ITEM_DATABASE: Omit<GameItem, 'quantity'>[] = [
@@ -425,39 +430,44 @@ export interface BlacksmithRecipe {
 
 export const BLACKSMITH_RECIPES: BlacksmithRecipe[] = [
     // 台北城 (town_tpe) - 武器 Weapon
-    { id: 'forge_wood_sword', targetEquipmentId: 'eq_wood_sword', cityId: 'town_tpe', materials: [{ id: 'item_iron_ore', name: '鐵礦石', quantity: 2 }, { id: 'item_herb', name: '藥草', quantity: 1 }], goldCost: 50 },
-    { id: 'forge_iron_sword', targetEquipmentId: 'eq_iron_sword', cityId: 'town_tpe', materials: [{ id: 'item_iron_ore', name: '鐵礦石', quantity: 5 }, { id: 'mat_north_tech', name: '科技廢料', quantity: 1 }], goldCost: 200 },
-    { id: 'forge_steel_sword', targetEquipmentId: 'eq_steel_sword', cityId: 'town_tpe', materials: [{ id: 'item_iron_ore', name: '鐵礦石', quantity: 10 }, { id: 'mat_north_tech', name: '科技廢料', quantity: 3 }], goldCost: 500 },
-    { id: 'forge_flame_blade', targetEquipmentId: 'eq_flame_blade', cityId: 'town_tpe', materials: [{ id: 'item_iron_ore', name: '鐵礦石', quantity: 15 }, { id: 'mat_north_glass', name: '魔法玻璃', quantity: 3 }, { id: 'item_magic_gem', name: '魔力寶石', quantity: 1 }], goldCost: 1500 },
-    { id: 'forge_dragon_slayer', targetEquipmentId: 'eq_dragon_slayer', cityId: 'town_tpe', materials: [{ id: 'item_dragon_scale', name: '龍鱗碎片', quantity: 5 }, { id: 'mat_north_glass', name: '魔法玻璃', quantity: 5 }, { id: 'mat_central_iron', name: '高山鐵礦', quantity: 5 }], goldCost: 5000 },
+    { id: 'forge_wood_sword', targetEquipmentId: 'eq_wood_sword', cityId: 'town_tpe', materials: [{ id: 'item_iron_ore', name: '鐵礦石', quantity: 12 }, { id: 'item_herb', name: '藥草', quantity: 5 }], goldCost: 200 },
+    { id: 'forge_iron_sword', targetEquipmentId: 'eq_iron_sword', cityId: 'town_tpe', materials: [{ id: 'item_iron_ore', name: '鐵礦石', quantity: 35 }, { id: 'mat_north_tech', name: '科技廢料', quantity: 12 }], goldCost: 1500 },
+    { id: 'forge_steel_sword', targetEquipmentId: 'eq_steel_sword', cityId: 'town_tpe', materials: [{ id: 'item_iron_ore', name: '鐵礦石', quantity: 70 }, { id: 'mat_north_tech', name: '科技廢料', quantity: 25 }, { id: 'item_magic_gem', name: '魔力寶石', quantity: 6 }], goldCost: 8500 },
+    { id: 'forge_flame_blade', targetEquipmentId: 'eq_flame_blade', cityId: 'town_tpe', materials: [{ id: 'item_iron_ore', name: '鐵礦石', quantity: 120 }, { id: 'mat_north_glass', name: '魔法玻璃', quantity: 45 }, { id: 'item_magic_gem', name: '魔力寶石', quantity: 15 }], goldCost: 42000 },
+    { id: 'forge_dragon_slayer', targetEquipmentId: 'eq_dragon_slayer', cityId: 'town_tpe', materials: [{ id: 'item_dragon_scale', name: '龍鱗碎片', quantity: 22 }, { id: 'mat_north_glass', name: '魔法玻璃', quantity: 60 }, { id: 'mat_central_iron', name: '高山鐵礦', quantity: 60 }, { id: 'item_magic_gem', name: '魔力寶石', quantity: 30 }], goldCost: 180000 },
 
     // 新北城 (town_ntpc) - 盔甲 Armor
-    { id: 'forge_leather_armor', targetEquipmentId: 'eq_leather_armor', cityId: 'town_ntpc', materials: [{ id: 'item_iron_ore', name: '鐵礦石', quantity: 2 }, { id: 'item_herb', name: '藥草', quantity: 1 }], goldCost: 50 },
-    { id: 'forge_chain_mail', targetEquipmentId: 'eq_chain_mail', cityId: 'town_ntpc', materials: [{ id: 'item_iron_ore', name: '鐵礦石', quantity: 5 }], goldCost: 200 },
-    { id: 'forge_steel_armor', targetEquipmentId: 'eq_steel_armor', cityId: 'town_ntpc', materials: [{ id: 'item_iron_ore', name: '鐵礦石', quantity: 10 }, { id: 'mat_central_iron', name: '高山鐵礦', quantity: 2 }], goldCost: 600 },
-    { id: 'forge_wood_armor', targetEquipmentId: 'eq_wood_armor', cityId: 'town_ntpc', materials: [{ id: 'item_iron_ore', name: '鐵礦石', quantity: 15 }, { id: 'mat_central_wood', name: '神木枝枒', quantity: 5 }], goldCost: 1600 },
-    { id: 'forge_dragon_armor', targetEquipmentId: 'eq_dragon_armor', cityId: 'town_ntpc', materials: [{ id: 'item_dragon_scale', name: '龍鱗碎片', quantity: 5 }, { id: 'mat_central_iron', name: '高山鐵礦', quantity: 10 }, { id: 'item_magic_gem', name: '魔力寶石', quantity: 2 }], goldCost: 5500 },
+    { id: 'forge_leather_armor', targetEquipmentId: 'eq_leather_armor', cityId: 'town_ntpc', materials: [{ id: 'item_iron_ore', name: '鐵礦石', quantity: 10 }, { id: 'item_herb', name: '藥草', quantity: 8 }], goldCost: 200 },
+    { id: 'forge_chain_mail', targetEquipmentId: 'eq_chain_mail', cityId: 'town_ntpc', materials: [{ id: 'item_iron_ore', name: '鐵礦石', quantity: 38 }, { id: 'mat_north_tech', name: '科技廢料', quantity: 10 }], goldCost: 1600 },
+    { id: 'forge_steel_armor', targetEquipmentId: 'eq_steel_armor', cityId: 'town_ntpc', materials: [{ id: 'item_iron_ore', name: '鐵礦石', quantity: 75 }, { id: 'mat_central_iron', name: '高山鐵礦', quantity: 28 }, { id: 'item_magic_gem', name: '魔力寶石', quantity: 5 }], goldCost: 9000 },
+    { id: 'forge_wood_armor', targetEquipmentId: 'eq_wood_armor', cityId: 'town_ntpc', materials: [{ id: 'item_iron_ore', name: '鐵礦石', quantity: 140 }, { id: 'mat_central_wood', name: '神木枝枒', quantity: 45 }, { id: 'item_magic_gem', name: '魔力寶石', quantity: 12 }], goldCost: 38000 },
+    { id: 'forge_dragon_armor', targetEquipmentId: 'eq_dragon_armor', cityId: 'town_ntpc', materials: [{ id: 'item_dragon_scale', name: '龍鱗碎片', quantity: 25 }, { id: 'mat_central_iron', name: '高山鐵礦', quantity: 80 }, { id: 'mat_south_sand', name: '炎漠紅砂', quantity: 50 }, { id: 'item_magic_gem', name: '魔力寶石', quantity: 25 }], goldCost: 195000 },
 
     // 桃園城 (town_tyn) - 頭盔 Helmet
-    { id: 'forge_leather_helm', targetEquipmentId: 'eq_leather_helm', cityId: 'town_tyn', materials: [{ id: 'item_iron_ore', name: '鐵礦石', quantity: 2 }], goldCost: 40 },
-    { id: 'forge_iron_helm', targetEquipmentId: 'eq_iron_helm', cityId: 'town_tyn', materials: [{ id: 'item_iron_ore', name: '鐵礦石', quantity: 5 }], goldCost: 150 },
-    { id: 'forge_knight_helm', targetEquipmentId: 'eq_knight_helm', cityId: 'town_tyn', materials: [{ id: 'item_iron_ore', name: '鐵礦石', quantity: 10 }, { id: 'mat_central_iron', name: '高山鐵礦', quantity: 2 }], goldCost: 500 },
-    { id: 'forge_crystal_crown', targetEquipmentId: 'eq_crystal_crown', cityId: 'town_tyn', materials: [{ id: 'mat_east_crystal', name: '花東水晶', quantity: 3 }, { id: 'item_magic_gem', name: '魔力寶石', quantity: 2 }], goldCost: 1800 },
-    { id: 'forge_dawn_helm', targetEquipmentId: 'eq_dawn_helm', cityId: 'town_tyn', materials: [{ id: 'item_dragon_scale', name: '龍鱗碎片', quantity: 3 }, { id: 'mat_central_iron', name: '高山鐵礦', quantity: 8 }, { id: 'item_magic_gem', name: '魔力寶石', quantity: 3 }], goldCost: 4500 },
+    { id: 'forge_leather_helm', targetEquipmentId: 'eq_leather_helm', cityId: 'town_tyn', materials: [{ id: 'item_iron_ore', name: '鐵礦石', quantity: 12 }], goldCost: 180 },
+    { id: 'forge_iron_helm', targetEquipmentId: 'eq_iron_helm', cityId: 'town_tyn', materials: [{ id: 'item_iron_ore', name: '鐵礦石', quantity: 42 }, { id: 'mat_north_tech', name: '科技廢料', quantity: 12 }], goldCost: 1400 },
+    { id: 'forge_knight_helm', targetEquipmentId: 'eq_knight_helm', cityId: 'town_tyn', materials: [{ id: 'item_iron_ore', name: '鐵礦石', quantity: 80 }, { id: 'mat_central_iron', name: '高山鐵礦', quantity: 32 }, { id: 'item_magic_gem', name: '魔力寶石', quantity: 5 }], goldCost: 7500 },
+    { id: 'forge_crystal_crown', targetEquipmentId: 'eq_crystal_crown', cityId: 'town_tyn', materials: [{ id: 'mat_east_crystal', name: '花東水晶', quantity: 38 }, { id: 'mat_north_glass', name: '魔法玻璃', quantity: 25 }, { id: 'item_magic_gem', name: '魔力寶石', quantity: 15 }], goldCost: 32000 },
+    { id: 'forge_dawn_helm', targetEquipmentId: 'eq_dawn_helm', cityId: 'town_tyn', materials: [{ id: 'item_dragon_scale', name: '龍鱗碎片', quantity: 20 }, { id: 'mat_central_iron', name: '高山鐵礦', quantity: 70 }, { id: 'mat_north_glass', name: '魔法玻璃', quantity: 50 }, { id: 'item_magic_gem', name: '魔力寶石', quantity: 25 }], goldCost: 165000 },
 
     // 台南城 (town_tnn) - 鞋子 Boots
-    { id: 'forge_leather_boots', targetEquipmentId: 'eq_leather_boots', cityId: 'town_tnn', materials: [{ id: 'item_iron_ore', name: '鐵礦石', quantity: 2 }], goldCost: 40 },
-    { id: 'forge_iron_boots_2', targetEquipmentId: 'eq_iron_boots_2', cityId: 'town_tnn', materials: [{ id: 'item_iron_ore', name: '鐵礦石', quantity: 5 }, { id: 'mat_south_sand', name: '炎漠紅砂', quantity: 1 }], goldCost: 180 },
-    { id: 'forge_steel_greaves', targetEquipmentId: 'eq_steel_greaves', cityId: 'town_tnn', materials: [{ id: 'item_iron_ore', name: '鐵礦石', quantity: 10 }, { id: 'mat_south_sand', name: '炎漠紅砂', quantity: 3 }], goldCost: 700 },
-    { id: 'forge_lava_boots', targetEquipmentId: 'eq_lava_boots', cityId: 'town_tnn', materials: [{ id: 'mat_lava_sand', name: '熔岩紅砂', quantity: 4 }, { id: 'mat_central_iron', name: '高山鐵礦', quantity: 5 }], goldCost: 2000 },
-    { id: 'forge_flame_boots', targetEquipmentId: 'eq_flame_boots', cityId: 'town_tnn', materials: [{ id: 'mat_lava_sand', name: '熔岩紅砂', quantity: 8 }, { id: 'item_dragon_scale', name: '龍鱗碎片', quantity: 3 }, { id: 'item_magic_gem', name: '魔力寶石', quantity: 2 }], goldCost: 5200 },
+    { id: 'forge_leather_boots', targetEquipmentId: 'eq_leather_boots', cityId: 'town_tnn', materials: [{ id: 'item_iron_ore', name: '鐵礦石', quantity: 12 }], goldCost: 180 },
+    { id: 'forge_iron_boots_2', targetEquipmentId: 'eq_iron_boots_2', cityId: 'town_tnn', materials: [{ id: 'item_iron_ore', name: '鐵礦石', quantity: 45 }, { id: 'mat_south_sand', name: '炎漠紅砂', quantity: 15 }], goldCost: 1500 },
+    { id: 'forge_steel_greaves', targetEquipmentId: 'eq_steel_greaves', cityId: 'town_tnn', materials: [{ id: 'item_iron_ore', name: '鐵礦石', quantity: 85 }, { id: 'mat_south_sand', name: '炎漠紅砂', quantity: 35 }, { id: 'item_magic_gem', name: '魔力寶石', quantity: 5 }], goldCost: 7800 },
+    { id: 'forge_lava_boots', targetEquipmentId: 'eq_lava_boots', cityId: 'town_tnn', materials: [{ id: 'mat_lava_sand', name: '熔岩紅砂', quantity: 42 }, { id: 'mat_central_iron', name: '高山鐵礦', quantity: 38 }, { id: 'item_magic_gem', name: '魔力寶石', quantity: 10 }], goldCost: 36000 },
+    { id: 'forge_flame_boots', targetEquipmentId: 'eq_flame_boots', cityId: 'town_tnn', materials: [{ id: 'mat_lava_sand', name: '熔岩紅砂', quantity: 75 }, { id: 'item_dragon_scale', name: '龍鱗碎片', quantity: 22 }, { id: 'mat_south_sand', name: '炎漠紅砂', quantity: 80 }, { id: 'item_magic_gem', name: '魔力寶石', quantity: 25 }], goldCost: 172000 },
 
     // 花蓮城 (town_hun) - 飾品 Accessory
-    { id: 'forge_wood_amulet', targetEquipmentId: 'eq_wood_amulet', cityId: 'town_hun', materials: [{ id: 'item_iron_ore', name: '鐵礦石', quantity: 2 }, { id: 'item_herb', name: '藥草', quantity: 2 }], goldCost: 60 },
-    { id: 'forge_iron_ring', targetEquipmentId: 'eq_iron_ring', cityId: 'town_hun', materials: [{ id: 'item_iron_ore', name: '鐵礦石', quantity: 6 }], goldCost: 250 },
-    { id: 'forge_ruby_ring', targetEquipmentId: 'eq_ruby_ring', cityId: 'town_hun', materials: [{ id: 'item_iron_ore', name: '鐵礦石', quantity: 8 }, { id: 'mat_east_crystal', name: '花東水晶', quantity: 2 }], goldCost: 900 },
-    { id: 'forge_crystal_necklace', targetEquipmentId: 'eq_crystal_necklace', cityId: 'town_hun', materials: [{ id: 'mat_east_crystal', name: '花東水晶', quantity: 5 }, { id: 'item_magic_gem', name: '魔力寶石', quantity: 2 }], goldCost: 2400 },
-    { id: 'forge_star_hourglass', targetEquipmentId: 'eq_star_hourglass', cityId: 'town_hun', materials: [{ id: 'mat_east_crystal', name: '花東水晶', quantity: 8 }, { id: 'item_magic_gem', name: '魔力寶石', quantity: 5 }, { id: 'item_dragon_scale', name: '龍鱗碎片', quantity: 2 }], goldCost: 6000 }
+    { id: 'forge_wood_amulet', targetEquipmentId: 'eq_wood_amulet', cityId: 'town_hun', materials: [{ id: 'item_iron_ore', name: '鐵礦石', quantity: 15 }, { id: 'item_herb', name: '藥草', quantity: 10 }], goldCost: 250 },
+    { id: 'forge_iron_ring', targetEquipmentId: 'eq_iron_ring', cityId: 'town_hun', materials: [{ id: 'item_iron_ore', name: '鐵礦石', quantity: 48 }, { id: 'item_magic_gem', name: '魔力寶石', quantity: 2 }], goldCost: 1800 },
+    { id: 'forge_ruby_ring', targetEquipmentId: 'eq_ruby_ring', cityId: 'town_hun', materials: [{ id: 'item_iron_ore', name: '鐵礦石', quantity: 90 }, { id: 'mat_east_crystal', name: '花東水晶', quantity: 32 }, { id: 'item_magic_gem', name: '魔力寶石', quantity: 8 }], goldCost: 9500 },
+    { id: 'forge_crystal_necklace', targetEquipmentId: 'eq_crystal_necklace', cityId: 'town_hun', materials: [{ id: 'mat_east_crystal', name: '花東水晶', quantity: 55 }, { id: 'item_magic_gem', name: '魔力寶石', quantity: 20 }], goldCost: 38000 },
+    { id: 'forge_star_hourglass', targetEquipmentId: 'eq_star_hourglass', cityId: 'town_hun', materials: [{ id: 'mat_east_crystal', name: '花東水晶', quantity: 95 }, { id: 'item_magic_gem', name: '魔力寶石', quantity: 45 }, { id: 'item_dragon_scale', name: '龍鱗碎片', quantity: 25 }], goldCost: 210000 },
+
+    // 台中城 (town_txg)
+    { id: 'forge_central_blade', targetEquipmentId: 'eq_central_blade', cityId: 'town_txg', materials: [{ id: 'mat_central_iron', name: '高山鐵礦', quantity: 38 }, { id: 'item_iron_ore', name: '鐵礦石', quantity: 80 }, { id: 'item_magic_gem', name: '魔力寶石', quantity: 6 }], goldCost: 9800 },
+    { id: 'forge_sacred_wood_armor', targetEquipmentId: 'eq_sacred_wood_armor', cityId: 'town_txg', materials: [{ id: 'mat_ancient_wood', name: '太古神木', quantity: 45 }, { id: 'mat_central_wood', name: '神木枝枒', quantity: 110 }, { id: 'item_magic_gem', name: '魔力寶石', quantity: 12 }], goldCost: 45000 },
+    { id: 'forge_sun_moon_ring', targetEquipmentId: 'eq_sun_moon_ring', cityId: 'town_txg', materials: [{ id: 'mat_east_crystal', name: '花東水晶', quantity: 85 }, { id: 'mat_south_pearl', name: '海淵珍珠', quantity: 85 }, { id: 'mat_ancient_wood', name: '太古神木', quantity: 30 }, { id: 'item_magic_gem', name: '魔力寶石', quantity: 35 }], goldCost: 198000 }
 ];
 
 // Alchemy Recipes

@@ -9,6 +9,7 @@ interface TownScreenProps {
     onLeave: () => void;
     onCraftAlchemy: (recipe: AlchemyRecipe) => void;
     onCraftEquipment: (recipe: BlacksmithRecipe) => void;
+    forgingRecipeId?: string | null;
     onTravel: (destination: Town) => void;
     onSellEquipment: (equipment: Equipment) => void;
 }
@@ -23,7 +24,7 @@ const FACILITY_NPCS = {
     dock: { name: '老船長 傑克', avatar: '⚓', dialogue: '起風了！只要你有一艘好船，大海就是你的地圖。隨時準備出航！' },
 };
 
-export const TownScreen: React.FC<TownScreenProps> = ({ town, player, onLeave, onCraftAlchemy, onCraftEquipment, onTravel, onSellEquipment }) => {
+export const TownScreen: React.FC<TownScreenProps> = ({ town, player, onLeave, onCraftAlchemy, onCraftEquipment, onTravel, onSellEquipment, forgingRecipeId }) => {
     const [activeFacility, setActiveFacility] = useState<string | null>(null);
 
     return (
@@ -327,10 +328,15 @@ export const TownScreen: React.FC<TownScreenProps> = ({ town, player, onLeave, o
                                                     <div className="mt-2 md:mt-0 flex-shrink-0 w-full md:w-auto">
                                                         <button
                                                             onClick={() => onCraftEquipment(recipe)}
-                                                            disabled={!canCraft}
-                                                            className={`w-full md:w-auto px-6 py-2.5 rounded-xl font-bold transition-all active:scale-95 ${canCraft ? 'bg-orange-600 hover:bg-orange-500 text-white shadow-[0_0_15px_rgba(249,115,22,0.3)]' : 'bg-gray-800 text-gray-500 cursor-not-allowed border border-gray-700'}`}
+                                                            disabled={!canCraft || forgingRecipeId !== null}
+                                                            className={`w-full md:w-auto px-6 py-2.5 rounded-xl font-bold transition-all active:scale-95 ${canCraft && forgingRecipeId === null ? 'bg-orange-600 hover:bg-orange-500 text-white shadow-[0_0_15px_rgba(249,115,22,0.3)]' : 'bg-gray-800 text-gray-500 cursor-not-allowed border border-gray-700'}`}
                                                         >
-                                                            鍛造
+                                                            {forgingRecipeId === recipe.id ? (
+                                                                <span className="flex items-center gap-2">
+                                                                    <div className="w-4 h-4 border-2 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
+                                                                    鍛造中...
+                                                                </span>
+                                                            ) : '鍛造'}
                                                         </button>
                                                     </div>
                                                 </div>

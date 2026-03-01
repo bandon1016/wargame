@@ -384,13 +384,15 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({ player, enemy, onWin
 
     const win = (_finalEHp: number, finalPHp: number, finalPMp: number) => {
         setEnded(true); setAuto(false); setResult('win');
-        log(`🎉 戰鬥勝利！獲得 ${enemy.expReward} EXP、${enemy.goldReward} G`);
+        const er = enemy.expReward || 0;
+        const gr = enemy.goldReward || 0;
+        log(`🎉 戰鬥勝利！獲得 ${er} EXP、${gr} G`);
         let sk: Skill | undefined;
         if (enemy.skillReward && Math.random() < 0.3) {
             sk = enemy.skillReward;
             log(`✨ 領悟新技能【${sk.icon} ${sk.name}】！`);
         }
-        setTimeout(() => onWin(enemy.expReward, enemy.goldReward, sk, enemy.lootTable, (enemy as any).equipmentDrop, finalPHp, finalPMp), autoExplore ? 5000 : 3000);
+        setTimeout(() => onWin(er, gr, sk, enemy.lootTable, (enemy as any).equipmentDrop, finalPHp, finalPMp), autoExplore ? 2500 : 1500);
     };
 
     const lose = (finalPHp: number, finalPMp: number) => {

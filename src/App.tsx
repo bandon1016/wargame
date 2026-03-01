@@ -267,7 +267,7 @@ const App: React.FC = () => {
   const walkStartRef = React.useRef<[number, number] | null>(null);
   const walkStartedAtRef = React.useRef<Date | null>(null);
   const lastSafePositionRef = React.useRef<[number, number]>([25.0330, 121.5654]); // 紀錄最後在陸地的安全座標
-  const [lootMessage, setLootMessage] = useState<{ title: string; items: { name: string; quantity: number; icon: string }[] } | null>(null);
+  const [lootMessage, setLootMessage] = useState<{ title: string; items: { name: string; quantity: number; icon: string }[]; gold?: number; exp?: number } | null>(null);
 
   const [activePoiCombat, setActivePoiCombat] = useState<string | null>(null);
   const [pendingTarget, setPendingTarget] = useState<{ lat: number, lng: number, label: string } | null>(null);
@@ -286,6 +286,7 @@ const App: React.FC = () => {
   useEffect(() => { activePoiRef.current = activePoiCombat; }, [activePoiCombat]);
   const [eliteCooldowns, setEliteCooldowns] = useState<Record<string, number>>({});
   const [combatLogs, setCombatLogs] = useState<CombatLog[]>([]);
+  const [forgingRecipeId, setForgingRecipeId] = useState<string | null>(null);
   const [logOpacity, setLogOpacity] = useState(1);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [isEditingNickname, setIsEditingNickname] = useState(false);
@@ -326,10 +327,9 @@ const App: React.FC = () => {
   useEffect(() => { travelDepartedAtRef.current = travelDepartedAt; }, [travelDepartedAt]);
   useEffect(() => { travelDurationSecRef.current = travelDurationSec; }, [travelDurationSec]);
 
-  // Sync ref structure
-  useEffect(() => {
-    playerRef.current = player;
-  }, [player]);
+  useEffect(() => { positionRef.current = position; }, [position]);
+  useEffect(() => { playerRef.current = player; }, [player]);
+  useEffect(() => { weatherRef.current = weather; }, [weather]);
 
   // Ref to saveProfile - avoids forward-reference issues since saveProfile is declared later via useCallback
   const saveProfileRef = React.useRef<((newState?: CharacterStats, forceLocation?: [number, number]) => Promise<void>) | null>(null);
@@ -997,6 +997,22 @@ const App: React.FC = () => {
     moveDirRef.current = null;
   };
 
+  const activeGod = useMemo(() => {
+    if (!player || !player.activeGodId) return null;
+    return player.gods.find(g => g.id === player.activeGodId) || null;
+  }, [player?.activeGodId, player?.gods]);
+
+  // Memoize Icons to prevent shaking (re-creation of DIV icons kills performance)
+  const playerIcon = useMemo(() => {
+    const avatar = isTraveling ? '🚂' : isWalking ? '🏃‍♂️' : '🧙‍♂️';
+    return createPlayerIcon(avatar, activeGod?.avatar);
+  }, [isTraveling, isWalking, activeGod?.avatar]);
+
+  const hasWeatherResistance = useCallback((type: WeatherType) => {
+    if (!activeGod) return false;
+    return activeGod.resistanceType === type || activeGod.resistanceType === 'all';
+  }, [activeGod]);
+
   // Click-to-Move Walking Animation (Time-based for persistence)
   useEffect(() => {
     if (!targetPosition || isTraveling) {
@@ -1089,9 +1105,16 @@ const App: React.FC = () => {
   };
 
   const startHunt = useCallback((isElite = false) => {
-    if (isTravelingRef.current) return; // (If in train, cannot hunt)
+    if (isTravelingRef.current) {
+      console.log('Cannot hunt: Traveling');
+      return;
+    }
     const p = playerRef.current;
-    if (!p) return;
+    if (!p) {
+      console.log('Cannot hunt: Player data missing');
+      return;
+    }
+    console.log('Starting hunt check...', p.level);
     const lv = p.level;
     const pool = MONSTER_DATABASE.filter(m => lv >= m.minLv && lv <= m.maxLv + 5);
     const template = pool.length > 0 ? pool[Math.floor(Math.random() * pool.length)] : MONSTER_DATABASE[0];
@@ -1129,89 +1152,36 @@ const App: React.FC = () => {
       eDef = Math.floor((template.baseDef + Math.floor(lv * 0.8)) * statMultiplier);
     }
 
-    const sk = SKILL_DATABASE[Math.floor(Math.random() * SKILL_DATABASE.length)];
-    const lootCount = isElite ? 3 : (Math.random() > 0.6 ? 1 : 0);
-    const loots: GameItem[] = [];
-
-    // General loots (Exclude regional materials from general pool)
-    const generalLootPool = ITEM_DATABASE.filter(i => !i.id.startsWith('mat_'));
-    for (let i = 0; i < lootCount; i++) {
-      const it = generalLootPool[Math.floor(Math.random() * generalLootPool.length)];
-      const existing = loots.find(l => l.id === it.id);
-      if (existing) existing.quantity++;
-      else loots.push({ ...it, quantity: 1 } as GameItem);
-    }
-
-    // Equipment Drop Logic (Normal 1%, Elite 5%, Boss 10%)
-    let eqDropChance = 0.01;
-    if (isBoss) eqDropChance = 0.10;
-    else if (isElite) eqDropChance = 0.05;
-
-    let droppedEquip: Equipment | undefined = undefined;
-    if (Math.random() < eqDropChance) {
-      // Pick a random equipment appropriate for level
-      const availableEqs = EQUIPMENT_DATABASE.filter(e => e.rarity <= (isBoss ? 5 : isElite ? 4 : 2));
-      if (availableEqs.length > 0) {
-        droppedEquip = { ...availableEqs[Math.floor(Math.random() * availableEqs.length)], id: `eq_${Date.now()}_${Math.random().toString(36).substring(2, 9)} ` };
-      }
-    }
-
-    // Regional drops (Boss 100%, Elite 30%, Normal 10%)
-    let regionalDropChance = 0.10;
-    if (isBoss) regionalDropChance = 1.00;
-    else if (isElite) regionalDropChance = 0.30;
-
-    if (Math.random() < regionalDropChance) {
-      // Combined Region Check: Coordinates (primary) + City Name (secondary)
-      let region = getRegionByCoordinates(positionRef.current[0], positionRef.current[1]);
-      if (region === 'unknown') {
-        region = getRegionByCityName(areaName);
-      }
-
-      const matIds = getRegionalMaterials(region);
-      if (matIds.length > 0) {
-        const matId = matIds[Math.floor(Math.random() * matIds.length)];
-        const regionalMat = ITEM_DATABASE.find(i => i.id === matId);
-        if (regionalMat) {
-          // check if already in loots
-          const existing = loots.find(l => l.id === matId);
-          if (existing) existing.quantity++;
-          else loots.push({ ...regionalMat, quantity: 1 } as GameItem);
-        }
-      }
-    }
-
-    // Weather Effects on Stats (simplified)
-    if (weatherRef.current === 'rainy') {
-      eDef += 2; // monsters slightly tougher in rain
-    } else if (weatherRef.current === 'foggy') {
-      eAtk += 3; // monsters hit harder in fog
-    }
-
     const enemy = {
       id: Math.random().toString(),
-      name: (isBoss ? '【首領】' : isElite ? '【菁英】' : '') + template.name, avatar: template.avatar,
+      name: (isBoss ? '【首領】' : isElite ? '【菁英】' : '') + template.name,
+      avatar: template.avatar,
       element: template.element,
       level: lv + Math.floor(Math.random() * 3) - 1 + (isBoss ? 5 : isElite ? 2 : 0),
       hp, maxHp: hp,
       attack: eAtk,
       defense: eDef,
-      expReward: Math.floor((18 + lv * 6) * statMultiplier),
-      goldReward: Math.floor((8 + lv * 3) * statMultiplier),
-      skillReward: (Math.random() < 0.25 || isElite) ? sk : undefined,
-      lootTable: loots,
-      equipmentDrop: droppedEquip,
+      expReward: Math.floor((18 + lv * 6) * (isElite ? 2.5 : 1)),
+      goldReward: Math.floor((8 + lv * 3) * (isElite ? 2.5 : 1)),
+      lootTable: [],
+      // Metadata for backend resolution
+      isElite,
+      isBoss,
+      baseLv: lv
     };
-    setCurrentEnemy(enemy as Enemy & { equipmentDrop?: Equipment });
+
+    setCurrentEnemy(enemy as any);
     setIsCombatAction(true);
   }, [player?.level]);
 
   // Auto Explore Logic
   useEffect(() => {
+    console.log('AutoExplore Effect Sync:', { autoExplore, isCombatAction, activeTab, isTraveling });
     if (!autoExplore || isCombatAction || activeTab !== 'explore' || isTraveling) return;
 
     // Movement & Encounter cycle
     const encounterMover = setInterval(() => {
+      console.log('AutoExplore Interval Tick...');
       if (isDoubleTabbedRef.current) return;
       // Pick random direction
       const dirs: ('n' | 's' | 'e' | 'w')[] = ['n', 's', 'e', 'w'];
@@ -1228,133 +1198,67 @@ const App: React.FC = () => {
     return () => clearInterval(encounterMover);
   }, [autoExplore, isCombatAction, activeTab, move, startHunt]);
 
-  const handleCombatWin = useCallback(async (expReward: number, goldReward: number, learnedSkill?: Skill, lootList?: GameItem[], droppedEq?: Equipment, finalHp?: number, finalMp?: number) => {
-    if (!player) return;
+  const handleCombatWin = useCallback(async (_expReward: number, _goldReward: number, _learnedSkill?: Skill, _lootList?: GameItem[], _droppedEq?: Equipment, finalHp?: number, finalMp?: number) => {
+    if (!player || !currentEnemy) return;
 
-    // Basic Exp & Gold
-    const newExp = player.exp + expReward;
-    const newGold = player.gold + goldReward;
-
-    // Handle Level Up
-    let nextLevel = player.level;
-    let nextExp = newExp;
-    let nextMaxExp = player.maxExp;
-    let nextMaxHp = player.maxHp;
-    let nextMaxMp = player.maxMp;
-    let nextAttack = player.attack;
-    let nextDefense = player.defense;
-
-    while (nextExp >= nextMaxExp) {
-      nextExp -= nextMaxExp;
-      nextLevel++;
-      nextMaxExp = Math.floor(nextMaxExp * 1.5);
-      nextMaxHp += 20;
-      nextMaxMp += 10;
-      nextAttack += 3;
-      nextDefense += 2;
-    }
-
-    // Partner EXP Sharing (20% of reward)
-    const partnerExpReward = Math.floor(expReward * 0.2);
-    const updatedPartners = player.partners.map(p => {
-      if (!p.isDeployed) return p;
-      let pNextExp = p.exp + partnerExpReward;
-      let pNextLevel = p.level;
-      let pNextMaxExp = p.maxExp;
-      let pNextPower = p.power;
-
-      while (pNextExp >= pNextMaxExp) {
-        pNextExp -= pNextMaxExp;
-        pNextLevel++;
-        pNextMaxExp = Math.floor(pNextMaxExp * 1.5);
-        if (p.rarity === 5) pNextPower += 5;
-        else if (p.rarity === 4) pNextPower += 3;
-        else pNextPower += 2;
-      }
-      return { ...p, exp: pNextExp, level: pNextLevel, maxExp: pNextMaxExp, power: pNextPower };
+    // Call Backend to resolve rewards securely
+    const { data: result, error } = await supabase.rpc('secure_resolve_combat', {
+      p_monster_name: currentEnemy.name,
+      p_is_elite: (currentEnemy as any).isElite || false,
+      p_is_boss: (currentEnemy as any).isBoss || false,
+      p_lv_at_combat: (currentEnemy as any).baseLv || player.level,
+      p_player_hp: finalHp ?? player.hp,
+      p_player_mp: finalMp ?? player.mp,
+      p_skill_reward_id: SKILL_DATABASE[Math.floor(Math.random() * SKILL_DATABASE.length)].id, // Pass a potential skill
+      p_lat: positionRef.current[0],
+      p_lng: positionRef.current[1]
     });
 
-    // Merge Items
-    const combinedItems = [...player.items];
-    const itemsToAward = [...(lootList || [])];
-
-    // Elite Monster: 15% chance to drop revive potion
-    if (currentEnemy?.name.includes('【菁英】') && Math.random() < 0.15) {
-      const potDef = ITEM_DATABASE.find(i => i.id === 'item_revive_pot');
-      if (potDef) itemsToAward.push({ ...potDef, quantity: 1 });
+    if (error) {
+      console.error('Loot Resolution Error:', error);
+      setIsCombatAction(false);
+      setCurrentEnemy(null);
+      return;
     }
 
-    itemsToAward.forEach(loot => {
-      const existing = combinedItems.find(i => i.id === loot.id);
-      if (existing) {
-        existing.quantity = (existing.quantity || 1) + (loot.quantity || 1);
-      } else {
-        combinedItems.push({ ...loot });
-      }
-    });
-
-    // Handle learned skill / fragments
-    const newSkills = [...player.skills];
-    let skillRewardLog = null;
-    if (learnedSkill) {
-      const existingSkillIdx = newSkills.findIndex(s => s.id === learnedSkill.id);
-      if (existingSkillIdx >= 0) {
-        // Gain fragments instead
-        newSkills[existingSkillIdx] = {
-          ...newSkills[existingSkillIdx],
-          fragments: (newSkills[existingSkillIdx].fragments || 0) + 1
-        };
-        skillRewardLog = { name: `${learnedSkill.name} 技能碎片`, quantity: 1, icon: '🧩' };
-      } else {
-        // Learn new skill
-        newSkills.push({ id: learnedSkill.id, level: 1, fragments: 0 });
-        skillRewardLog = { name: `領悟到新技能：${learnedSkill.name}！`, quantity: 1, icon: '✨' };
-      }
+    if (result.leveled_up) {
+      setCombatLogs(prev => [...prev, {
+        id: `lv_${Date.now()}`,
+        type: 'win',
+        enemyName: '系統',
+        message: `🎊 恭喜！等級提升至 Lv.${result.new_level}！`
+      } as CombatLog].slice(-6));
     }
 
-    // Equipment Drops
-    let newEquipment = [...player.equipment];
-    if (droppedEq) {
-      newEquipment.push(droppedEq);
-    }
+    // Process result for UI display
+    const sLoots = result.loots || [];
+    const sEquip = result.equipment;
 
+    const rewardItems = [...sLoots];
+    if (sEquip) rewardItems.push({ name: sEquip.name, quantity: 1, icon: sEquip.icon || '🛡️' });
+
+    /*
+    setLootMessage({
+      title: '戰鬥勝利獎勵',
+      items: rewardItems,
+      gold: result.gold,
+      exp: result.exp
+    } as any);
+    */
+
+    // Simple local log
     const newLog: CombatLog = {
-      id: Date.now().toString() + Math.random().toString(),
+      id: Date.now().toString(),
       type: 'win',
-      enemyName: currentEnemy?.name || '未知魔物',
-      exp: expReward,
-      gold: goldReward,
-      items: itemsToAward.map(i => ({ name: i.name, quantity: i.quantity || 1, icon: ITEM_DATABASE.find(itemDef => itemDef.id === i.id)?.icon ?? i.icon }))
-        .concat(droppedEq ? [{ name: droppedEq.name, quantity: 1, icon: EQUIPMENT_DATABASE.find(eqDef => eqDef.id === droppedEq.id)?.icon ?? droppedEq.icon }] : [])
-        .concat(skillRewardLog ? [skillRewardLog] : [])
+      enemyName: currentEnemy.name,
+      exp: result.exp,
+      gold: result.gold,
+      items: rewardItems.map(i => ({ name: i.name, quantity: i.quantity || 1, icon: i.icon || '📦' }))
     };
     setCombatLogs(prev => [...prev, newLog].slice(-6));
 
-    const recoveredMp = Math.floor(nextMaxMp * 0.1); // Recover 10% MP on win
-    const computedFinalMp = Math.min(nextMaxMp, (finalMp ?? player.mp) + recoveredMp);
-
-    const nextState = {
-      ...player,
-      level: nextLevel,
-      exp: nextExp,
-      maxExp: nextMaxExp,
-      hp: nextLevel > player.level ? nextMaxHp : (finalHp ?? player.hp), // Heal to full only on level up
-      maxHp: nextMaxHp,
-      mp: nextLevel > player.level ? nextMaxMp : computedFinalMp,
-      maxMp: nextMaxMp,
-      attack: nextAttack,
-      defense: nextDefense,
-      gold: newGold,
-      skills: newSkills,
-      items: combinedItems,
-      equipment: newEquipment,
-      partners: updatedPartners
-    };
-
-    setPlayer(nextState);
-    saveProfile(nextState);
-
     setIsCombatAction(false);
+    setCurrentEnemy(null);
 
     // Quest: kill progress tracking
     if (session?.user?.id && currentEnemy) {
@@ -1380,32 +1284,13 @@ const App: React.FC = () => {
     }
 
     if (activePoiRef.current) {
-      const techGain = Math.floor(Math.random() * 3) + 3; // 3-5 tech
-      const lingQiGain = Math.floor(Math.random() * 3) + 2; // 2-4 lingqi
-
-      const finalState = {
-        ...nextState,
-        techFragments: (nextState.techFragments ?? 0) + techGain,
-        lingQi: (nextState.lingQi ?? 0) + lingQiGain
-      };
-
-      setPlayer(finalState);
-      saveProfile(finalState);
-
-      setLootMessage({
-        title: '戰勝菁英！',
-        items: [
-          { name: '科技碎片', quantity: techGain, icon: '⚙️' },
-          { name: '靈氣', quantity: lingQiGain, icon: '🌿' }
-        ]
-      });
-
+      // For POI (Elite/Special) victories, we resolve the POI state on DB
       await supabase.rpc('resolve_poi_combat', { p_poi_id: activePoiRef.current, p_win: true });
       setPois(prev => prev.filter(p => p.id !== activePoiRef.current));
       setActivePoiCombat(null);
       fetchPois();
     }
-  }, [player, currentEnemy, saveProfile, fetchPois]);
+  }, [player, currentEnemy, fetchPois]);
 
   const handleCombatLose = useCallback(async (finalHp?: number, finalMp?: number) => {
     if (!player) return;
@@ -1424,6 +1309,7 @@ const App: React.FC = () => {
     setPlayer(nextState);
     saveProfile(nextState);
     setIsCombatAction(false);
+    setCurrentEnemy(null);
 
     if (activePoiRef.current) {
       const poiId = activePoiRef.current;
@@ -1580,37 +1466,58 @@ const App: React.FC = () => {
 
   const handleCraftEquipment = useCallback((recipe: BlacksmithRecipe) => {
     if (!player) return;
+    setForgingRecipeId(recipe.id);
 
-    // Deduct materials
-    const currentItems = [...player.items];
-    recipe.materials.forEach(req => {
-      const itemIdx = currentItems.findIndex(i => i.id === req.id);
-      if (itemIdx >= 0) {
-        const newQty = (currentItems[itemIdx].quantity ?? 1) - req.quantity;
-        if (newQty <= 0) currentItems.splice(itemIdx, 1);
-        else currentItems[itemIdx] = { ...currentItems[itemIdx], quantity: newQty };
+    setTimeout(() => {
+      // Deduct materials
+      const refreshedPlayer = playerRef.current;
+      if (!refreshedPlayer) {
+        setForgingRecipeId(null);
+        return;
       }
-    });
 
-    // Find target equipment definition
-    const targetDef = EQUIPMENT_DATABASE.find(e => e.id === recipe.targetEquipmentId);
-    if (!targetDef) return;
+      const currentItems = [...refreshedPlayer.items];
+      recipe.materials.forEach(req => {
+        const itemIdx = currentItems.findIndex(i => i.id === req.id);
+        if (itemIdx >= 0) {
+          const newQty = (currentItems[itemIdx].quantity ?? 1) - req.quantity;
+          if (newQty <= 0) currentItems.splice(itemIdx, 1);
+          else currentItems[itemIdx] = { ...currentItems[itemIdx], quantity: newQty };
+        }
+      });
 
-    // Add equipment with unique ID
-    const newEquip: Equipment = {
-      ...targetDef,
-      id: `eq_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
-    };
+      // Find target equipment definition
+      const targetDef = EQUIPMENT_DATABASE.find(e => e.id === recipe.targetEquipmentId);
+      if (!targetDef) {
+        setForgingRecipeId(null);
+        return;
+      }
 
-    const nextState = {
-      ...player,
-      gold: player.gold - recipe.goldCost,
-      items: currentItems,
-      equipment: [...player.equipment, newEquip]
-    };
+      // Add equipment with unique ID
+      const newEquip: Equipment = {
+        ...targetDef,
+        id: `eq_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
+      };
 
-    setPlayer(nextState);
-    saveProfile(nextState);
+      const nextState = {
+        ...refreshedPlayer,
+        gold: refreshedPlayer.gold - recipe.goldCost,
+        items: currentItems,
+        equipment: [...refreshedPlayer.equipment, newEquip]
+      };
+
+      setPlayer(nextState);
+      saveProfile(nextState);
+      setForgingRecipeId(null);
+
+      // Show completion popup
+      setLootMessage({
+        title: '製作完成',
+        items: [{ name: newEquip.name, quantity: 1, icon: newEquip.icon || '🛡️' }],
+        gold: 0,
+        exp: 0
+      } as any);
+    }, 3000);
   }, [player, saveProfile]);
 
   const handleSellItem = useCallback((item: GameItem) => {
@@ -1630,65 +1537,53 @@ const App: React.FC = () => {
     saveProfile(nextState);
   }, [player, saveProfile]);
 
-  const handleSellEquipment = useCallback((equipment: Equipment) => {
-    if (!player) return;
+  const handleSellEquipment = useCallback(async (equipment: Equipment) => {
+    if (!player || !session?.user?.id) return;
 
-    // Calculate sell price based on rarity power scale (must match UI display)
-    const sellPrice = Math.floor(100 * Math.pow(5, equipment.rarity - 1));
+    const { data: result, error } = await supabase.rpc('secure_sell_equipment', {
+      p_equipment_id: equipment.id
+    });
 
-    const updatedEquipment = player.equipment.filter(e => e.id !== equipment.id);
-    const nextState = {
-      ...player,
-      gold: player.gold + sellPrice,
-      equipment: updatedEquipment
-    };
+    if (error) {
+      alert(`交易失敗: ${error.message}`);
+      return;
+    }
 
-    setPlayer(nextState);
-    saveProfile(nextState);
-  }, [player, saveProfile]);
+    if (result && result.success) {
+      // We rely on the Supabase real-time subscription to update the local 'player' state
+      // but we can provide immediate feedback
+      console.log(`Successfully sold ${equipment.name} for ${result.gold_gained} gold`);
+    }
+  }, [player, session?.user?.id]);
 
-  const handleUpgradeSkill = useCallback((skillId: string) => {
-    if (!player) return;
+  const handleUpgradeSkill = useCallback(async (skillId: string) => {
+    if (!player || !session?.user?.id) return;
 
     const skillIdx = player.skills.findIndex(s => s.id === skillId);
     if (skillIdx < 0) return;
 
-    const pSkill = player.skills[skillIdx];
-    const upgradeInfo = getSkillUpgradeInfo(pSkill.level);
+    const { data: result, error } = await supabase.rpc('secure_upgrade_skill', {
+      p_skill_id: skillId
+    });
 
-    if (!upgradeInfo) {
-      alert('已達最大等級！');
+    if (error) {
+      alert(`升級請求失敗: ${error.message}`);
       return;
     }
 
-    if (player.gold < upgradeInfo.gold || pSkill.fragments < upgradeInfo.fragments) {
-      alert('資源不足！');
-      return;
-    }
-
-    // Deduct costs
-    let nextState = { ...player, gold: player.gold - upgradeInfo.gold };
-    const newSkills = [...nextState.skills];
-    newSkills[skillIdx] = { ...newSkills[skillIdx], fragments: newSkills[skillIdx].fragments - upgradeInfo.fragments };
-
-    // Roll success
-    const roll = Math.random() * 100;
-    if (roll <= upgradeInfo.successRate) {
-      // Success
-      newSkills[skillIdx].level += 1;
+    if (result && result.success) {
       setLootMessage({
-        title: '技能升級成功！',
-        items: [{ name: SKILL_DATABASE.find(s => s.id === skillId)?.name || '未知技能', quantity: newSkills[skillIdx].level, icon: '⬆️' }]
+        title: '✨ 技能升級成功！',
+        items: [{
+          name: SKILL_DATABASE.find(s => s.id === skillId)?.name || '技能',
+          quantity: result.new_level,
+          icon: '⬆️'
+        }]
       });
     } else {
-      // Fail
-      alert(`升級失敗... (機率: ${upgradeInfo.successRate}%)`);
+      alert(result?.message || '升級失敗，運氣不佳...');
     }
-
-    nextState.skills = newSkills;
-    setPlayer(nextState);
-    saveProfile(nextState);
-  }, [player, saveProfile]);
+  }, [player, session?.user?.id]);
 
   const handleTravel = useCallback(async (destinationTown: Town) => {
     if (!player || !inTown) return;
@@ -1733,16 +1628,6 @@ const App: React.FC = () => {
     }).eq('id', session!.user.id);
   }, [player, inTown, position, session]);
 
-  const activeGod = useMemo(() => {
-    if (!player || !player.activeGodId) return null;
-    return player.gods.find(g => g.id === player.activeGodId) || null;
-  }, [player?.activeGodId, player?.gods]);
-
-  // Memoize Icons to prevent shaking (re-creation of DIV icons kills performance)
-  const playerIcon = useMemo(() => {
-    const avatar = isTraveling ? '🚂' : isWalking ? '🏃‍♂️' : '🧙‍♂️';
-    return createPlayerIcon(avatar, activeGod?.avatar);
-  }, [isTraveling, isWalking, activeGod?.avatar]);
 
   const poiIconsMapping = useMemo(() => ({
     chest: createPoiIcon('chest'),
@@ -1752,10 +1637,6 @@ const App: React.FC = () => {
   }), []);
 
 
-  const hasWeatherResistance = (type: WeatherType) => {
-    if (!activeGod) return false;
-    return activeGod.resistanceType === type || activeGod.resistanceType === 'all';
-  };
 
   const effectiveAtk = player ? player.attack + totalEquipAtk(player) + totalPartnerAtk(player) : 0;
   const effectiveDef = player ? player.defense + totalEquipDef(player) + totalPartnerDef(player) : 0;
@@ -2506,6 +2387,26 @@ const App: React.FC = () => {
                 </button>
               </div>
               <div className="space-y-3">
+                {/* Exp & Gold Rewards */}
+                {(lootMessage.exp && lootMessage.exp > 0) && (
+                  <div className="flex items-center gap-4 bg-indigo-500/10 p-3 rounded-2xl border border-indigo-500/20">
+                    <div className="text-3xl drop-shadow-md">✨</div>
+                    <div className="flex-1">
+                      <div className="font-bold text-lg text-indigo-300">經驗值</div>
+                      <div className="text-sm text-gray-400">獲得: <span className="text-white font-bold">+{lootMessage.exp}</span></div>
+                    </div>
+                  </div>
+                )}
+                {(lootMessage.gold && lootMessage.gold > 0) && (
+                  <div className="flex items-center gap-4 bg-amber-500/10 p-3 rounded-2xl border border-amber-500/20">
+                    <div className="text-3xl drop-shadow-md">💰</div>
+                    <div className="flex-1">
+                      <div className="font-bold text-lg text-amber-300">金幣</div>
+                      <div className="text-sm text-gray-400">獲得: <span className="text-white font-bold">+{lootMessage.gold}</span></div>
+                    </div>
+                  </div>
+                )}
+
                 {lootMessage.items.map((item, idx) => (
                   <div key={idx} className="flex items-center gap-4 bg-white/5 p-3 rounded-2xl border border-white/10">
                     <div className="text-3xl drop-shadow-md">{item.icon}</div>
@@ -2940,6 +2841,7 @@ const App: React.FC = () => {
             onCraftEquipment={handleCraftEquipment}
             onTravel={handleTravel}
             onSellEquipment={handleSellEquipment}
+            forgingRecipeId={forgingRecipeId}
           />
         )}
       </div>
@@ -3039,6 +2941,6 @@ const App: React.FC = () => {
       )}
     </div>
   );
-}
+};
 
 export default App;
