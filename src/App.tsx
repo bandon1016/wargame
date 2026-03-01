@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap, Circle, Polyline, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Compass, Sword, Home, Users, Package, Settings as SettingsIcon, Book, Heart, Shield, Zap, ChevronRight, MapPin, Loader2, X, PlusCircle, ShieldAlert, TrainFront, Coins, Sparkles, Cpu, Flame, Waves, Diamond, Trophy, Copy, Check } from 'lucide-react';
+import { Compass, Sword, Home, Users, Package, Settings as SettingsIcon, Book, Heart, Shield, Zap, ChevronRight, MapPin, Loader2, X, PlusCircle, ShieldAlert, TrainFront, Coins, Sparkles, Cpu, Flame, Waves, Diamond, Trophy, Copy, Check, ScrollText } from 'lucide-react';
 import type { CharacterStats, Equipment, GameItem, Skill, MapPOI, Town, WeatherType, Enemy, AlchemyRecipe, BlacksmithRecipe, ElementType } from './types/game';
 import { MONSTER_DATABASE, SKILL_DATABASE, ITEM_DATABASE, EQUIPMENT_DATABASE, RARITY_COLORS, WEATHER_TYPES, getRegionByCityName, getRegionalMaterials, getRegionByCoordinates, TOWN_DATABASE, getPartnerAvatar, getRailwayPath, POI_NAMES, ELEMENT_META, DAILY_QUEST_POOL, WEEKLY_QUEST_POOL } from './types/game';
 import { CombatScreen } from './components/CombatScreen';
@@ -24,15 +24,16 @@ L.Marker.prototype.options.icon = L.icon({ iconUrl: iconImg, shadowUrl: iconShad
 // Custom Player Icon (Avatar Emoji)
 const createPlayerIcon = (emoji: string, godAvatar: string | null = null) => L.divIcon({
   html: `
-    <div class="relative flex items-center justify-center">
-      ${godAvatar ? `
+  <div class="relative flex items-center justify-center">
+    ${godAvatar ? `
         <div class="absolute -top-3 -right-3 w-7 h-7 bg-amber-400 rounded-full flex items-center justify-center border-2 border-black shadow-[0_0_10px_rgba(251,191,36,0.5)] z-20 anim-god-glow">
           <span class="text-sm">${godAvatar}</span>
         </div>
         <div class="absolute inset-0 w-12 h-12 -m-1 bg-amber-400/20 rounded-full anim-god-aura blur-[2px] border border-amber-500/30"></div>
-      ` : ''}
-      <div class="relative text-3xl drop-shadow-lg ${godAvatar ? 'anim-god-glow' : ''}">${emoji}</div>
-    </div>
+      ` : ''
+    }
+<div class="relative text-3xl drop-shadow-lg ${godAvatar ? 'anim-god-glow' : ''}">${emoji}</div>
+    </div >
   `,
   className: 'player-div-icon',
   iconSize: [40, 40],
@@ -54,11 +55,11 @@ const createPoiIcon = (type: keyof typeof POI_ICONS) => L.divIcon({
 
 const createCityLabelIcon = (name: string) => L.divIcon({
   html: `
-    <div class="flex flex-col items-center">
-      <div class="px-2 py-0.5 bg-black/60 backdrop-blur-md border border-white/20 rounded-full text-[10px] font-black text-white shadow-xl shadow-black/50 whitespace-nowrap">
-        ${name}
-      </div>
+  <div class="flex flex-col items-center">
+    <div class="px-2 py-0.5 bg-black/60 backdrop-blur-md border border-white/20 rounded-full text-[10px] font-black text-white shadow-xl shadow-black/50 whitespace-nowrap">
+      ${name}
     </div>
+    </div >
   `,
   className: 'city-label-icon',
   iconSize: [60, 20],
@@ -67,8 +68,8 @@ const createCityLabelIcon = (name: string) => L.divIcon({
 
 const createConfirmIcon = (label: string) => L.divIcon({
   html: `
-    <div class="relative flex flex-col items-center group pointer-events-auto">
-      <!-- Floating Card Confirm UI (Mainstream Design) -->
+  <div class="relative flex flex-col items-center group pointer-events-auto">
+      <!-- Floating Card Confirm UI -->
       <div class="absolute bottom-10 flex flex-col items-center anim-fade-in-up">
         <div class="bg-black/95 backdrop-blur-2xl border border-game-accent/50 rounded-2xl p-2 shadow-[0_15px_40px_rgba(0,0,0,0.8)] flex flex-col items-center gap-2 min-w-[150px]">
           <div class="text-[9px] font-black text-game-accent uppercase tracking-[0.2em] mb-0.5 opacity-80">${label}</div>
@@ -84,9 +85,9 @@ const createConfirmIcon = (label: string) => L.divIcon({
         <!-- Arrow -->
         <div class="w-3.5 h-3.5 bg-black/95 rotate-45 border-r border-b border-game-accent/50 -mt-2"></div>
       </div>
-      <!-- Pin -->
-      <div class="text-3xl drop-shadow-[0_4px_10px_rgba(0,0,0,0.5)] anim-pulse-slow">📍</div>
-    </div>
+      <!--Pin -->
+  <div class="text-3xl drop-shadow-[0_4px_10px_rgba(0,0,0,0.5)] anim-pulse-slow">📍</div>
+    </div >
   `,
   className: 'target-confirm-icon pointer-events-auto',
   iconSize: [40, 40],
@@ -274,7 +275,6 @@ const App: React.FC = () => {
   const [isMerchantOpen, setIsMerchantOpen] = useState(false);
   const [isWeatherPanelOpen, setIsWeatherPanelOpen] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
-  const [isQuestPanelOpen, setIsQuestPanelOpen] = useState(false);
   const [copiedUid, setCopiedUid] = useState(false);
   const [isDoubleTabbed, setIsDoubleTabbed] = useState(false);
   const isDoubleTabbedRef = React.useRef(isDoubleTabbed);
@@ -479,53 +479,67 @@ const App: React.FC = () => {
     const lastPos = lastFetchedPosRef.current;
     const dist = lastPos ? Math.hypot(position[0] - lastPos[0], position[1] - lastPos[1]) : 999;
 
+    // Distance-based quest progress (approx 1 unit = 111km, so 0.0001 = 11.1m)
+    if (dist > 0.00001 && session?.user?.id) {
+      const meters = Math.floor(dist * 111000);
+      if (meters > 0) {
+        supabase.rpc('increment_walk_quests', {
+          p_user_id: session.user.id,
+          p_increment_meters: meters
+        }).then();
+      }
+    }
+
     if (dist > 0.01) { // Approx 1km movement
       fetchPois();
       lastFetchedPosRef.current = position;
     }
-  }, [position, isTraveling, isWalking, fetchPois]);
+  }, [position, isTraveling, isWalking, fetchPois, session]);
 
 
 
-  // Weather cycle logic (Unified Server Scaling)
+  // Weather Logic: Deterministic Global Sync (Changes every 10 mins)
+  const [weatherCountdown, setWeatherCountdown] = useState<string>('');
+  const [nextWeather, setNextWeather] = useState<WeatherType | null>(null);
+
   useEffect(() => {
-    const fetchWeather = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('game_config')
-          .select('value')
-          .eq('key', 'weather')
-          .maybeSingle();
+    const syncWeather = () => {
+      const WEATHER_CYCLE_MS = 10 * 60 * 1000;
+      const now = Date.now();
+      const slot = Math.floor(now / WEATHER_CYCLE_MS);
 
-        if (data && !error) {
-          setWeather(data.value as WeatherType);
+      const pool: WeatherType[] = [
+        'sunny', 'sunny', 'sunny', 'sunny', // 4/8 Sunny
+        'rainy', 'rainy',                   // 2/8 Rainy
+        'foggy',                             // 1/8 Foggy
+        'stormy'                             // 1/8 Stormy
+      ];
+
+      const index = (slot * 31337) % pool.length;
+      const newWeather = pool[index] as WeatherType;
+
+      const nextSlot = slot + 1;
+      const nextIndex = (nextSlot * 31337) % pool.length;
+      const computedNextWeather = pool[nextIndex] as WeatherType;
+
+      setWeather(prev => {
+        if (prev !== newWeather) {
+          console.log(`Weather Changing: ${prev} -> ${newWeather}`);
         }
-      } catch (e) {
-        console.error('Weather sync error:', e);
-      }
+        return newWeather;
+      });
+      setNextWeather(computedNextWeather);
+
+      // Calculate countdown
+      const msLeft = WEATHER_CYCLE_MS - (now % WEATHER_CYCLE_MS);
+      const mins = Math.floor(msLeft / 60000);
+      const secs = Math.floor((msLeft % 60000) / 1000);
+      setWeatherCountdown(`${mins}分 ${secs}秒`);
     };
 
-    // Sub to changes
-    const channel = supabase.channel('global_weather')
-      .on('postgres_changes', {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'game_config',
-        filter: 'key=eq.weather'
-      }, (payload) => {
-        if (payload.new && payload.new.value) {
-          setWeather(payload.new.value as WeatherType);
-        }
-      })
-      .subscribe();
-
-    fetchWeather();
-    const interval = setInterval(fetchWeather, 60000); // 1-minute fallback polling
-
-    return () => {
-      supabase.removeChannel(channel);
-      clearInterval(interval);
-    };
+    syncWeather();
+    const timer = setInterval(syncWeather, 1000); // Update countdown every second
+    return () => clearInterval(timer);
   }, []);
 
   // Auth flow
@@ -1268,19 +1282,22 @@ const App: React.FC = () => {
         q => q.type === 'kill' && q.targetId && enemyName.includes(q.targetId)
       );
       if (matchingKillQuests.length > 0) {
-        const today = new Date().toISOString().split('T')[0];
-        const weekStart = new Date();
-        weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));
-        const weekStartStr = weekStart.toISOString().split('T')[0];
         matchingKillQuests.forEach(q => {
           supabase.rpc('update_quest_progress', {
             p_user_id: session.user!.id,
             p_quest_id: q.id,
-            p_assigned_date: q.isWeekly ? weekStartStr : today,
             p_increment: 1,
           }).then();
         });
       }
+    }
+
+    // Quest: collect progress tracking
+    if (session?.user?.id && rewardItems.length > 0) {
+      supabase.rpc('increment_collect_quests', {
+        p_user_id: session.user.id,
+        p_increment: rewardItems.length
+      }).then();
     }
 
     if (activePoiRef.current) {
@@ -1290,7 +1307,7 @@ const App: React.FC = () => {
       setActivePoiCombat(null);
       fetchPois();
     }
-  }, [player, currentEnemy, fetchPois]);
+  }, [player, currentEnemy, fetchPois, session]);
 
   const handleCombatLose = useCallback(async (finalHp?: number, finalMp?: number) => {
     if (!player) return;
@@ -1318,7 +1335,7 @@ const App: React.FC = () => {
       setActivePoiCombat(null);
       fetchPois();
     }
-  }, [player, saveProfile, fetchPois]);
+  }, [player, saveProfile, fetchPois, currentEnemy]);
 
   const equipItem = useCallback((eq: Equipment) => {
     if (!player) return;
@@ -1450,7 +1467,7 @@ const App: React.FC = () => {
     } else {
       const itemDef = ITEM_DATABASE.find(i => i.id === recipe.targetItemId);
       if (itemDef) {
-        currentItems.push({ ...itemDef, quantity: 1 });
+        currentItems.push({ ...itemDef, quantity: 1 } as GameItem);
       }
     }
 
@@ -1462,7 +1479,15 @@ const App: React.FC = () => {
 
     setPlayer(nextState);
     saveProfile(nextState);
-  }, [player, saveProfile]);
+
+    // Quest: craft progress tracking
+    if (session?.user?.id) {
+      supabase.rpc('increment_craft_quests', {
+        p_user_id: session.user.id,
+        p_increment: 1
+      }).then();
+    }
+  }, [player, saveProfile, session]);
 
   const handleCraftEquipment = useCallback((recipe: BlacksmithRecipe) => {
     if (!player) return;
@@ -1517,8 +1542,16 @@ const App: React.FC = () => {
         gold: 0,
         exp: 0
       } as any);
+
+      // Quest: craft progress tracking
+      if (session?.user?.id) {
+        supabase.rpc('increment_craft_quests', {
+          p_user_id: session.user.id,
+          p_increment: 1
+        }).then();
+      }
     }, 3000);
-  }, [player, saveProfile]);
+  }, [player, saveProfile, session]);
 
   const handleSellItem = useCallback((item: GameItem) => {
     if (!player) return;
@@ -1626,6 +1659,14 @@ const App: React.FC = () => {
       travel_duration_seconds: totalDurationSec,
       updated_at: new Date().toISOString()
     }).eq('id', session!.user.id);
+
+    // Quest: travel progress tracking
+    if (session?.user?.id) {
+      supabase.rpc('increment_travel_quests', {
+        p_user_id: session.user.id,
+        p_increment: 1
+      }).then();
+    }
   }, [player, inTown, position, session]);
 
 
@@ -1757,6 +1798,14 @@ const App: React.FC = () => {
       };
       setPlayer(nextState);
       saveProfile(nextState);
+
+      // Quest: collect progress tracking
+      if (session?.user?.id) {
+        supabase.rpc('increment_collect_quests', {
+          p_user_id: session.user.id,
+          p_increment: 1
+        }).then();
+      }
     } else if (poi.type === 'altar') {
       // Heal both HP and MP to full, and gain Incense
       const currentMaxHp = player.maxHp + totalEquipHp(player) + totalPartnerHp(player);
@@ -1773,12 +1822,17 @@ const App: React.FC = () => {
       });
       setPlayer(nextState);
       saveProfile(nextState);
+
+      // Quest: Explore progress
+      if (session?.user?.id) {
+        supabase.rpc('increment_explore_quests', { p_user_id: session.user.id }).then();
+      }
     }
 
     if (poi.type === 'elite') {
       startHunt(true);
     }
-  }, [startHunt, session, fetchPois, player, saveProfile]);
+  }, [startHunt, session, fetchPois, player, saveProfile, areaName]);
 
   const nearestTown = TOWN_DATABASE.find(t => getDistance(position[0], position[1], t.lat, t.lng) <= t.radius);
   const nearestPoi = pois.find(p => getDistance(position[0], position[1], p.lat, p.lng) <= 200);
@@ -2254,42 +2308,18 @@ const App: React.FC = () => {
                           </div>
                         </div>
                       )}
+
+                      {/* Weather Sync Info */}
+                      <div className="mt-4 pt-4 border-t border-white/15">
+                        <div className="bg-white/5 p-2.5 rounded-xl border border-white/5">
+                          <p className="text-[11px] text-gray-400 font-bold leading-relaxed text-center italic">
+                            根據天氣預報顯示：<br />
+                            <span className="text-white not-italic">{weatherCountdown} 後</span>，將轉為 <span className="text-game-accent not-italic">【{nextWeather ? WEATHER_TYPES[nextWeather].label : '---'}】</span> 天氣
+                          </p>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                </>
-              )}
-            </div>
-
-            {/* Quest Button */}
-            <div className="absolute top-4 right-[160px] z-[1000] flex flex-col items-end gap-2">
-              <button
-                onClick={() => setIsQuestPanelOpen(!isQuestPanelOpen)}
-                className={`flex items-center gap-2 bg-black/60 backdrop-blur-md px-4 py-2 rounded-full border shadow-lg transition-all hover:bg-black/80 pointer-events-auto ${isQuestPanelOpen ? 'border-amber-400 ring-1 ring-amber-400/50' : 'border-white/20'}`}
-              >
-                <span className="text-xl drop-shadow-md">📜</span>
-                <span className="text-sm font-bold text-white drop-shadow-md">任務</span>
-              </button>
-
-              {isQuestPanelOpen && session?.user?.id && (
-                <>
-                  <div className="fixed inset-0 z-[-1] pointer-events-auto" onClick={() => setIsQuestPanelOpen(false)} />
-                  <DailyQuestPanel
-                    userId={session.user.id}
-                    onClose={() => setIsQuestPanelOpen(false)}
-                    onReward={(gold, exp, currency) => {
-                      setPlayer(prev => {
-                        if (!prev) return prev;
-                        const updated = {
-                          ...prev,
-                          gold: prev.gold + gold,
-                          exp: prev.exp + exp,
-                          ...(currency ? { [currency.type]: (prev[currency.type as keyof typeof prev] as number || 0) + currency.amount } : {})
-                        };
-                        saveProfile(updated);
-                        return updated;
-                      });
-                    }}
-                  />
                 </>
               )}
             </div>
@@ -2431,6 +2461,31 @@ const App: React.FC = () => {
 
         {/* ─── RANKING (排行) ─── */}
         {activeTab === 'ranking' && <RankingTab player={player!} />}
+
+        {/* ─── QUESTS (任務) ─── */}
+        {activeTab === 'quests' && (
+          <div className="p-4 h-full overflow-y-auto w-full flex flex-col items-center bg-slate-950/40">
+            <div className="w-full max-w-6xl">
+              <DailyQuestPanel
+                userId={session.user.id}
+                onClose={() => setActiveTab('explore')}
+                onReward={(gold, exp, currency) => {
+                  setPlayer(prev => {
+                    if (!prev) return null;
+                    const updated = {
+                      ...prev,
+                      gold: prev.gold + gold,
+                      exp: prev.exp + exp,
+                      ...(currency ? { [currency.type]: (prev[currency.type as keyof typeof prev] as number || 0) + currency.amount } : {})
+                    };
+                    saveProfile(updated);
+                    return updated;
+                  });
+                }}
+              />
+            </div>
+          </div>
+        )}
 
         {/* ─── STATS (勇者) ─── */}
         {activeTab === 'stats' && (
@@ -2850,7 +2905,8 @@ const App: React.FC = () => {
       <div className="glass-panel px-2 py-2 flex justify-around items-center z-[1100]">
         {[
           { key: 'explore', icon: <Compass size={22} />, label: '探索' },
-          { key: 'partners', icon: <Users size={22} />, label: '夺伴' },
+          { key: 'quests', icon: <ScrollText size={22} />, label: '任務' },
+          { key: 'partners', icon: <Users size={22} />, label: '夥伴' },
           { key: 'home', icon: <Home size={22} />, label: '家園' },
           { key: 'bag', icon: <Package size={22} />, label: '行囊' },
         ].map(tab => (
