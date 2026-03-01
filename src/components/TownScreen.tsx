@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Map as MapIcon, ChevronRight, TrainFront, ClipboardList, Anchor, Ship } from 'lucide-react';
-import type { Town, CharacterStats, AlchemyRecipe, BlacksmithRecipe } from '../types/game';
+import { Map as MapIcon, ChevronRight, TrainFront, ClipboardList, Anchor, Ship, Coins, ShoppingBag, Trash2 } from 'lucide-react';
+import type { Town, CharacterStats, AlchemyRecipe, BlacksmithRecipe, Equipment } from '../types/game';
 import { ALCHEMY_RECIPES, BLACKSMITH_RECIPES, ITEM_DATABASE, EQUIPMENT_DATABASE, RARITY_COLORS, TOWN_DATABASE, getRailwayPath } from '../types/game';
 
 interface TownScreenProps {
@@ -10,9 +10,20 @@ interface TownScreenProps {
     onCraftAlchemy: (recipe: AlchemyRecipe) => void;
     onCraftEquipment: (recipe: BlacksmithRecipe) => void;
     onTravel: (destination: Town) => void;
+    onSellEquipment: (equipment: Equipment) => void;
 }
 
-export const TownScreen: React.FC<TownScreenProps> = ({ town, player, onLeave, onCraftAlchemy, onCraftEquipment, onTravel }) => {
+const FACILITY_NPCS = {
+    market: { name: '商人 阿財', avatar: '👨‍💼', dialogue: '嘿！勇者，我這有些剛進的好料，或是你想處理掉背包裡的破銅爛鐵？' },
+    blacksmith: { name: '老鐵匠 魯恩', avatar: '🧔', dialogue: '爐火正旺，這塊鐵看起來能打造成不錯的兵器。有興趣強化你的裝備嗎？' },
+    alchemy: { name: '鍊金術師 艾拉', avatar: '🧙‍♀️', dialogue: '藥草的比例是門學問。只要素材足夠，我能幫你調配出恢復生命甚至更強大的秘藥。' },
+    station: { name: '站務員 李大叔', avatar: '👨‍✈️', dialogue: '歡迎來到本站！火車非常準時，請確定目的地後再購票入站。' },
+    quest_board: { name: '衛兵 小謝', avatar: '💂', dialogue: '大家都在忙，佈告欄上面都是這陣子的委託，挑一個適合你的吧。' },
+    shipyard: { name: '船匠 豪哥', avatar: '🧑‍🔧', dialogue: '想去海那邊瞧瞧？船隻可是很講究材料質地的，先準備好木頭再來。' },
+    dock: { name: '老船長 傑克', avatar: '⚓', dialogue: '起風了！只要你有一艘好船，大海就是你的地圖。隨時準備出航！' },
+};
+
+export const TownScreen: React.FC<TownScreenProps> = ({ town, player, onLeave, onCraftAlchemy, onCraftEquipment, onTravel, onSellEquipment }) => {
     const [activeFacility, setActiveFacility] = useState<string | null>(null);
 
     return (
@@ -148,9 +159,27 @@ export const TownScreen: React.FC<TownScreenProps> = ({ town, player, onLeave, o
                             </h2>
                         </div>
 
+                        {/* NPC Section */}
+                        {activeFacility && (
+                            <div className="mb-6 flex items-start gap-4 animate-fade-in shrink-0">
+                                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-white/20 flex items-center justify-center text-4xl shadow-lg shrink-0">
+                                    {FACILITY_NPCS[activeFacility as keyof typeof FACILITY_NPCS]?.avatar || '👤'}
+                                </div>
+                                <div className="relative bg-white/5 border border-white/10 p-4 rounded-2xl rounded-tl-none flex-1 backdrop-blur-md">
+                                    <div className="absolute -left-2 top-0 w-2 h-2 bg-white/5 border-t border-l border-white/10 -rotate-45" />
+                                    <div className="text-xs font-black text-game-accent mb-1 uppercase tracking-wider">
+                                        {FACILITY_NPCS[activeFacility as keyof typeof FACILITY_NPCS]?.name || '神秘人物'}
+                                    </div>
+                                    <p className="text-sm text-gray-200 leading-relaxed italic">
+                                        「{FACILITY_NPCS[activeFacility as keyof typeof FACILITY_NPCS]?.dialogue || '歡迎來到此地，勇者。'}」
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+
                         {(activeFacility === 'alchemy' || activeFacility === 'blacksmith') ? (
-                            <div className="flex-1 w-full flex flex-col md:flex-row gap-6">
-                                {/* Left Side: Player Inventory for crafting materials */}
+                            <div className="flex-1 w-full flex flex-col md:flex-row-reverse gap-6">
+                                {/* Right Side: Player Inventory for crafting materials */}
                                 <div className="w-full md:w-1/3 glass-panel p-6 rounded-2xl flex flex-col h-full bg-[#0a0e1a]/80">
                                     <h3 className="text-emerald-400 font-bold mb-4 border-b border-emerald-500/20 pb-2 flex items-center gap-2">
                                         <div className="w-6 h-6 rounded-full bg-emerald-900/50 flex flex-col items-center justify-center text-xs">🎒</div>
@@ -179,7 +208,7 @@ export const TownScreen: React.FC<TownScreenProps> = ({ town, player, onLeave, o
                                     </div>
                                 </div>
 
-                                {/* Right Side: Recipes */}
+                                {/* Left Side: Recipes */}
                                 <div className="w-full md:w-2/3 glass-panel p-6 rounded-2xl flex flex-col h-full bg-[#0a0e1a]/80">
                                     <h3 className="text-emerald-400 font-bold mb-4 border-b border-emerald-500/20 pb-2">配方列表</h3>
                                     <div className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar">
@@ -387,15 +416,83 @@ export const TownScreen: React.FC<TownScreenProps> = ({ town, player, onLeave, o
                                 <h3 className="text-xl font-bold text-gray-300 mb-2">🚧 碼頭航運籌備中 🚧</h3>
                                 <p className="text-gray-500 max-w-md">通往未知海域與美麗離島的航線正在探勘中，當您擁有船隻後，便能從此處揚帆啟航！</p>
                             </div>
-                        ) : (
-                            <div className="flex-1 glass-panel rounded-3xl border border-white/10 p-8 flex flex-col items-center justify-center text-center">
-                                <div className="text-6xl mb-6 opacity-50 animate-bounce">
-                                    {activeFacility === 'market' ? '💰' : '❓'}
+                        ) : activeFacility === 'market' ? (
+                            <div className="flex-1 flex flex-col gap-6 h-full min-h-0">
+                                <div className="glass-panel p-6 rounded-3xl border border-yellow-500/20 bg-yellow-900/10 flex flex-col h-full min-h-0">
+                                    <h3 className="text-yellow-400 font-bold mb-4 flex items-center justify-between text-lg">
+                                        <div className="flex items-center gap-2">
+                                            <ShoppingBag size={20} /> 裝備收購回扣
+                                        </div>
+                                        <div className="text-xs font-normal text-gray-400 italic">「品相不限，只要是寶貝我都要！」</div>
+                                    </h3>
+
+                                    {/* Un-equipped Equipment List */}
+                                    <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-3">
+                                        {(() => {
+                                            const equippedIds = [
+                                                player.equippedWeapon?.id,
+                                                player.equippedArmor?.id,
+                                                player.equippedHelmet?.id,
+                                                player.equippedBoots?.id,
+                                                player.equippedAccessory?.id
+                                            ].filter(Boolean);
+
+                                            const sellable = player.equipment.filter(e => !equippedIds.includes(e.id));
+
+                                            if (sellable.length === 0) {
+                                                return (
+                                                    <div className="flex flex-col items-center justify-center py-12 text-gray-500">
+                                                        <Trash2 size={48} className="opacity-20 mb-3" />
+                                                        <p>背包中目前沒有多餘的裝備可供收購</p>
+                                                    </div>
+                                                );
+                                            }
+
+                                            return sellable.map(eq => {
+                                                const rarityColors = RARITY_COLORS[eq.rarity as keyof typeof RARITY_COLORS];
+                                                const sellPrice = Math.floor(100 * Math.pow(5, eq.rarity - 1));
+
+                                                return (
+                                                    <div key={eq.id} className={`p-4 rounded-2xl bg-white/5 border ${rarityColors.border} flex items-center gap-4 transition-all hover:bg-white/10 group`}>
+                                                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl shrink-0 ${rarityColors.bg} ${rarityColors.glow}`}>
+                                                            {eq.icon}
+                                                        </div>
+                                                        <div className="flex-1 overflow-hidden">
+                                                            <div className={`font-bold truncate ${rarityColors.text}`}>{eq.name}</div>
+                                                            <div className="text-[10px] text-gray-400 flex gap-2 mt-1">
+                                                                {eq.attack > 0 && <span>ATK +{eq.attack}</span>}
+                                                                {eq.defense > 0 && <span>DEF +{eq.defense}</span>}
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex flex-col items-end gap-2 shrink-0">
+                                                            <div className="flex items-center gap-1 text-game-gold font-black">
+                                                                <Coins size={14} /> {sellPrice.toLocaleString()}
+                                                            </div>
+                                                            <button
+                                                                onClick={() => {
+                                                                    if (window.confirm(`確定要以 ${sellPrice} 金幣賣出【${eq.name}】嗎？`)) {
+                                                                        onSellEquipment(eq);
+                                                                    }
+                                                                }}
+                                                                className="px-4 py-1.5 rounded-lg bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-black hover:bg-red-500 hover:text-white transition-all active:scale-95"
+                                                            >
+                                                                賣出
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            });
+                                        })()}
+                                    </div>
                                 </div>
-                                <h3 className="text-xl font-bold mb-2">設施功能尚未開放</h3>
-                                <p className="text-gray-400 max-w-sm">
-                                    工匠們仍在努力建設中，敬請期待未來的更新內容！
-                                </p>
+                                <div className="text-center text-gray-500 text-[10px] italic">
+                                    ※ 現正熱售：公道收購，童叟無欺。未裝備之物品方可出售。
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="flex-1 w-full flex flex-col items-center justify-center text-center">
+                                <span className="text-4xl mb-4">❓</span>
+                                <h3 className="text-xl font-bold text-gray-300">功能開發中</h3>
                             </div>
                         )}
                     </div>

@@ -3,7 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup, useMap, Circle, Polyline, useMa
 import 'leaflet/dist/leaflet.css';
 import { Compass, Sword, Home, Users, Package, Settings as SettingsIcon, Book, Heart, Shield, Zap, ChevronRight, MapPin, Loader2, X, PlusCircle, ShieldAlert, TrainFront, Coins, Sparkles, Cpu, Flame, Waves, Diamond, Trophy, Copy, Check } from 'lucide-react';
 import type { CharacterStats, Equipment, GameItem, Skill, MapPOI, Town, WeatherType, Enemy, AlchemyRecipe, BlacksmithRecipe, ElementType } from './types/game';
-import { MONSTER_DATABASE, SKILL_DATABASE, ITEM_DATABASE, EQUIPMENT_DATABASE, RARITY_COLORS, WEATHER_TYPES, getRegionByCityName, getRegionalMaterials, getRegionByCoordinates, TOWN_DATABASE, getPartnerAvatar, getRailwayPath, POI_NAMES, ELEMENT_META } from './types/game';
+import { MONSTER_DATABASE, SKILL_DATABASE, ITEM_DATABASE, EQUIPMENT_DATABASE, RARITY_COLORS, WEATHER_TYPES, getRegionByCityName, getRegionalMaterials, getRegionByCoordinates, TOWN_DATABASE, getPartnerAvatar, getRailwayPath, POI_NAMES, ELEMENT_META, DAILY_QUEST_POOL, WEEKLY_QUEST_POOL } from './types/game';
 import { CombatScreen } from './components/CombatScreen';
 import { PartnersTab } from './components/PartnersTab';
 import { HomeTab } from './components/HomeTab';
@@ -12,6 +12,7 @@ import { TownScreen } from './components/TownScreen';
 import { GuideModal } from './components/GuideModal';
 import RankingTab from './components/RankingTab';
 import { WeatherRain } from './components/WeatherRain';
+import { DailyQuestPanel } from './components/DailyQuestPanel';
 import { supabase } from './lib/supabase';
 
 // Fix leaflet default icon paths in React
@@ -99,17 +100,33 @@ const TARGET_ICON_SIMPLE = L.divIcon({
   iconAnchor: [15, 30]
 });
 
-function MapUpdater({ center, isTraveling }: { center: [number, number], isTraveling: boolean }) {
+function MapUpdater({ center, isTraveling, weather }: { center: [number, number], isTraveling: boolean, weather: WeatherType }) {
   const map = useMap();
   const lastCenterRef = React.useRef<[number, number] | null>(null);
 
   useEffect(() => {
-    if (isTraveling) {
-      map.setZoom(11); // County level zoom
+    if (weather === 'foggy') {
+      map.setZoom(16); // Foggy fixed zoom
+      map.dragging.disable();
+      map.touchZoom.disable();
+      map.doubleClickZoom.disable();
+      map.scrollWheelZoom.disable();
+      if (map.zoomControl) {
+        // map.zoomControl.remove(); // This is harder to toggle, better just rely on CSS or props
+      }
     } else {
-      map.setZoom(15); // Street/City level zoom
+      map.dragging.enable();
+      map.touchZoom.enable();
+      map.doubleClickZoom.enable();
+      map.scrollWheelZoom.enable();
+
+      if (isTraveling) {
+        map.setZoom(11); // County level zoom
+      } else {
+        map.setZoom(15); // Street/City level zoom
+      }
     }
-  }, [isTraveling, map]);
+  }, [isTraveling, weather, map]);
 
   useEffect(() => {
     // Only setView if center changed significantly or is first run
@@ -119,10 +136,14 @@ function MapUpdater({ center, isTraveling }: { center: [number, number], isTrave
     const lngDiff = lastCenterRef.current ? Math.abs(center[1] - lastCenterRef.current[1]) : 1;
 
     if (latDiff > threshold || lngDiff > threshold) {
-      map.setView(center, map.getZoom(), { animate: false });
+      if (weather === 'foggy') {
+        map.setView(center, 16, { animate: true });
+      } else {
+        map.setView(center, map.getZoom(), { animate: false });
+      }
       lastCenterRef.current = center;
     }
-  }, [center, map]);
+  }, [center, weather, map]);
   return null;
 }
 
@@ -252,6 +273,8 @@ const App: React.FC = () => {
   const [pendingTarget, setPendingTarget] = useState<{ lat: number, lng: number, label: string } | null>(null);
   const [isMerchantOpen, setIsMerchantOpen] = useState(false);
   const [isWeatherPanelOpen, setIsWeatherPanelOpen] = useState(false);
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const [isQuestPanelOpen, setIsQuestPanelOpen] = useState(false);
   const [copiedUid, setCopiedUid] = useState(false);
   const [isDoubleTabbed, setIsDoubleTabbed] = useState(false);
   const isDoubleTabbedRef = React.useRef(isDoubleTabbed);
@@ -464,15 +487,45 @@ const App: React.FC = () => {
 
 
 
-  // Weather cycle logic
+  // Weather cycle logic (Unified Server Scaling)
   useEffect(() => {
-    const rollWeather = () => {
-      const types: WeatherType[] = ['sunny', 'sunny', 'sunny', 'rainy', 'rainy', 'foggy', 'stormy'];
-      setWeather(types[Math.floor(Math.random() * types.length)]);
+    const fetchWeather = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('game_config')
+          .select('value')
+          .eq('key', 'weather')
+          .maybeSingle();
+
+        if (data && !error) {
+          setWeather(data.value as WeatherType);
+        }
+      } catch (e) {
+        console.error('Weather sync error:', e);
+      }
     };
-    const weatherTimer = setInterval(rollWeather, 180000); // 3 minutes
-    rollWeather();
-    return () => clearInterval(weatherTimer);
+
+    // Sub to changes
+    const channel = supabase.channel('global_weather')
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'game_config',
+        filter: 'key=eq.weather'
+      }, (payload) => {
+        if (payload.new && payload.new.value) {
+          setWeather(payload.new.value as WeatherType);
+        }
+      })
+      .subscribe();
+
+    fetchWeather();
+    const interval = setInterval(fetchWeather, 60000); // 1-minute fallback polling
+
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(interval);
+    };
   }, []);
 
   // Auth flow
@@ -752,6 +805,22 @@ const App: React.FC = () => {
       p_hp: p.hp,
       p_mp: p.mp,
       p_exp: p.exp,
+      p_gold: p.gold,
+      p_base_materials: p.baseMaterials,
+      p_buildings: p.buildings,
+      p_items: p.items,
+      p_partners: p.partners,
+      p_equipment: p.equipment,
+      p_equipped_weapon: p.equippedWeapon,
+      p_equipped_armor: p.equippedArmor,
+      p_equipped_helmet: p.equippedHelmet,
+      p_equipped_boots: p.equippedBoots,
+      p_equipped_accessory: p.equippedAccessory,
+      p_ling_qi: p.lingQi,
+      p_tech_fragments: p.techFragments,
+      p_incense: p.incense,
+      p_salt_crystals: p.saltCrystals,
+      p_premium_gems: p.premiumGems,
       p_travel_data: {
         path: travelSaveData.travel_path,
         started_at: travelSaveData.travel_started_at,
@@ -1235,11 +1304,11 @@ const App: React.FC = () => {
           ...newSkills[existingSkillIdx],
           fragments: (newSkills[existingSkillIdx].fragments || 0) + 1
         };
-        skillRewardLog = { name: `${learnedSkill.name}碎片`, quantity: 1, icon: '🧩' };
+        skillRewardLog = { name: `${learnedSkill.name} 技能碎片`, quantity: 1, icon: '🧩' };
       } else {
         // Learn new skill
         newSkills.push({ id: learnedSkill.id, level: 1, fragments: 0 });
-        skillRewardLog = { name: `技能:${learnedSkill.name}`, quantity: 1, icon: '✨' };
+        skillRewardLog = { name: `領悟到新技能：${learnedSkill.name}！`, quantity: 1, icon: '✨' };
       }
     }
 
@@ -1286,6 +1355,29 @@ const App: React.FC = () => {
     saveProfile(nextState);
 
     setIsCombatAction(false);
+
+    // Quest: kill progress tracking
+    if (session?.user?.id && currentEnemy) {
+      const enemyName = currentEnemy.name;
+      const allPool = [...DAILY_QUEST_POOL, ...WEEKLY_QUEST_POOL];
+      const matchingKillQuests = allPool.filter(
+        q => q.type === 'kill' && q.targetId && enemyName.includes(q.targetId)
+      );
+      if (matchingKillQuests.length > 0) {
+        const today = new Date().toISOString().split('T')[0];
+        const weekStart = new Date();
+        weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));
+        const weekStartStr = weekStart.toISOString().split('T')[0];
+        matchingKillQuests.forEach(q => {
+          supabase.rpc('update_quest_progress', {
+            p_user_id: session.user!.id,
+            p_quest_id: q.id,
+            p_assigned_date: q.isWeekly ? weekStartStr : today,
+            p_increment: 1,
+          }).then();
+        });
+      }
+    }
 
     if (activePoiRef.current) {
       const techGain = Math.floor(Math.random() * 3) + 3; // 3-5 tech
@@ -1533,6 +1625,23 @@ const App: React.FC = () => {
 
     const newItems = player.items.map(i => i.id === item.id ? { ...i, quantity: (i.quantity ?? 1) - 1 } : i).filter(i => (i.quantity ?? 1) > 0);
     const nextState = { ...player, gold: player.gold + sellPrice, items: newItems };
+
+    setPlayer(nextState);
+    saveProfile(nextState);
+  }, [player, saveProfile]);
+
+  const handleSellEquipment = useCallback((equipment: Equipment) => {
+    if (!player) return;
+
+    // Calculate sell price based on rarity power scale (must match UI display)
+    const sellPrice = Math.floor(100 * Math.pow(5, equipment.rarity - 1));
+
+    const updatedEquipment = player.equipment.filter(e => e.id !== equipment.id);
+    const nextState = {
+      ...player,
+      gold: player.gold + sellPrice,
+      equipment: updatedEquipment
+    };
 
     setPlayer(nextState);
     saveProfile(nextState);
@@ -1965,8 +2074,8 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        {/* Right: Weather & Config */}
-        <div className="flex items-center gap-3">
+        {/* Right: Guide + Profile Menu */}
+        <div className="flex items-center gap-2 relative">
           <button
             onClick={() => setShowGuide(true)}
             className="flex items-center gap-1.5 bg-game-accent/20 hover:bg-game-accent/40 text-game-accent px-3 py-1.5 rounded-full border border-game-accent/30 transition shadow-[0_0_10px_rgba(99,102,241,0.2)]"
@@ -1976,19 +2085,61 @@ const App: React.FC = () => {
             <span className="text-xs font-bold hidden sm:inline">指南</span>
           </button>
 
-          {/* 財庫按鈕 (新) */}
+          {/* Profile / Menu Button */}
           <button
-            onClick={() => setShowTreasury(true)}
-            className="flex items-center gap-1.5 bg-amber-500/20 hover:bg-amber-500/40 text-amber-500 px-3 py-1.5 rounded-full border border-amber-500/30 transition shadow-[0_0_10px_rgba(245,158,11,0.2)]"
-            title="查看所有財產"
+            onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border transition shadow-lg ${isProfileMenuOpen ? 'bg-white/15 border-white/40 text-white' : 'bg-white/5 border-white/15 text-gray-300 hover:bg-white/10'}`}
           >
-            <Coins size={14} />
-            <span className="text-xs font-bold hidden sm:inline">財庫</span>
+            <SettingsIcon size={14} />
+            <span className="text-xs font-bold hidden sm:inline">選單</span>
           </button>
 
-          <button onClick={() => supabase.auth.signOut()} className="p-2 hover:bg-white/10 rounded-xl transition-colors text-gray-400 hover:text-white" title="登出">
-            <SettingsIcon size={20} />
-          </button>
+          {/* Profile Dropdown */}
+          {isProfileMenuOpen && (
+            <>
+              <div className="fixed inset-0 z-[1099]" onClick={() => setIsProfileMenuOpen(false)} />
+              <div className="absolute top-full right-0 mt-2 z-[1100] bg-black/90 backdrop-blur-xl border border-white/15 rounded-2xl shadow-2xl overflow-hidden w-52 anim-scale-in">
+                {/* Header */}
+                <div className="px-4 py-3 border-b border-white/10 flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-game-accent to-indigo-700 flex items-center justify-center text-lg">🧙‍♂️</div>
+                  <div>
+                    <div className="text-xs font-black text-white">{player.nickname || '勇者'}</div>
+                    <div className="text-[10px] text-gray-500">Lv.{player.level}</div>
+                  </div>
+                </div>
+
+                {/* Menu Items */}
+                <div className="py-1">
+                  <button
+                    onClick={() => { setActiveTab('stats'); setIsProfileMenuOpen(false); }}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm text-gray-300 hover:bg-white/8 hover:text-white transition-colors"
+                  >
+                    <span>🧙</span> 角色狀態
+                  </button>
+                  <button
+                    onClick={() => { setActiveTab('ranking'); setIsProfileMenuOpen(false); }}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm text-gray-300 hover:bg-white/8 hover:text-white transition-colors"
+                  >
+                    <Trophy size={14} /> 排行榜
+                  </button>
+                  <button
+                    onClick={() => { setShowTreasury(true); setIsProfileMenuOpen(false); }}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm text-gray-300 hover:bg-white/8 hover:text-white transition-colors"
+                  >
+                    <Coins size={14} /> 財庫
+                  </button>
+                  <div className="border-t border-white/10 mt-1 pt-1">
+                    <button
+                      onClick={() => supabase.auth.signOut()}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm text-red-400 hover:bg-red-500/10 transition-colors"
+                    >
+                      <X size={14} /> 登出
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -2070,7 +2221,7 @@ const App: React.FC = () => {
                 <Popup>你的位置</Popup>
               </Marker>
               <MapClickHandler />
-              <MapUpdater center={position} isTraveling={isTraveling} />
+              <MapUpdater center={position} isTraveling={isTraveling} weather={weather} />
 
               {/* Target Confirmation UI (Marker Overlay to prevent jitter) */}
               {pendingTarget && pendingConfirmIcon && !isWalking && !isTraveling && (
@@ -2228,6 +2379,39 @@ const App: React.FC = () => {
               )}
             </div>
 
+            {/* Quest Button */}
+            <div className="absolute top-4 right-[160px] z-[1000] flex flex-col items-end gap-2">
+              <button
+                onClick={() => setIsQuestPanelOpen(!isQuestPanelOpen)}
+                className={`flex items-center gap-2 bg-black/60 backdrop-blur-md px-4 py-2 rounded-full border shadow-lg transition-all hover:bg-black/80 pointer-events-auto ${isQuestPanelOpen ? 'border-amber-400 ring-1 ring-amber-400/50' : 'border-white/20'}`}
+              >
+                <span className="text-xl drop-shadow-md">📜</span>
+                <span className="text-sm font-bold text-white drop-shadow-md">任務</span>
+              </button>
+
+              {isQuestPanelOpen && session?.user?.id && (
+                <>
+                  <div className="fixed inset-0 z-[-1] pointer-events-auto" onClick={() => setIsQuestPanelOpen(false)} />
+                  <DailyQuestPanel
+                    userId={session.user.id}
+                    onClose={() => setIsQuestPanelOpen(false)}
+                    onReward={(gold, exp, currency) => {
+                      setPlayer(prev => {
+                        if (!prev) return prev;
+                        const updated = {
+                          ...prev,
+                          gold: prev.gold + gold,
+                          exp: prev.exp + exp,
+                          ...(currency ? { [currency.type]: (prev[currency.type as keyof typeof prev] as number || 0) + currency.amount } : {})
+                        };
+                        saveProfile(updated);
+                        return updated;
+                      });
+                    }}
+                  />
+                </>
+              )}
+            </div>
 
             {/* Bottom Left Area - Logs & Area Card */}
             <div className="absolute bottom-8 left-6 z-[1000] flex flex-col gap-3 pointer-events-none items-start">
@@ -2755,6 +2939,7 @@ const App: React.FC = () => {
             onCraftAlchemy={handleCraftAlchemy}
             onCraftEquipment={handleCraftEquipment}
             onTravel={handleTravel}
+            onSellEquipment={handleSellEquipment}
           />
         )}
       </div>
@@ -2763,10 +2948,9 @@ const App: React.FC = () => {
       <div className="glass-panel px-2 py-2 flex justify-around items-center z-[1100]">
         {[
           { key: 'explore', icon: <Compass size={22} />, label: '探索' },
-          { key: 'partners', icon: <Users size={22} />, label: '夥伴' },
+          { key: 'partners', icon: <Users size={22} />, label: '夺伴' },
           { key: 'home', icon: <Home size={22} />, label: '家園' },
           { key: 'bag', icon: <Package size={22} />, label: '行囊' },
-          { key: 'ranking', icon: <Trophy size={22} />, label: '排行' }
         ].map(tab => (
           <button key={tab.key}
             onClick={() => {

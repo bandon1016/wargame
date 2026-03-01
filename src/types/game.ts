@@ -112,6 +112,105 @@ export interface Quest {
     rewardItems?: { id: string, quantity: number }[];
 }
 
+// ── 每日/每週任務系統 ──────────────────────────────────────────────
+export interface DailyQuest {
+    id: string;
+    title: string;
+    description: string;
+    type: 'kill' | 'walk' | 'explore' | 'collect';
+    targetId?: string;     // 怪物名片段 or 道具 ID (用於 kill/collect)
+    required: number;
+    unit: string;          // 顯示單位，例如 '隻' '公尺' '次' '個'
+    reward: {
+        gold: number;
+        exp: number;
+        currency?: { type: 'lingQi' | 'techFragments' | 'incense' | 'saltCrystals' | 'premiumGems'; amount: number };
+    };
+    isWeekly?: boolean;
+}
+
+export const DAILY_QUEST_POOL: DailyQuest[] = [
+    {
+        id: 'dq_kill_slime',
+        title: '清掃史萊姆',
+        description: '幫忙消滅附近的史萊姆族群。',
+        type: 'kill', targetId: '史萊姆',
+        required: 5, unit: '隻',
+        reward: { gold: 200, exp: 80, currency: { type: 'lingQi', amount: 3 } },
+    },
+    {
+        id: 'dq_kill_goblin',
+        title: '驅逐哥布林',
+        description: '哥布林四處搗亂，請將牠們趕走。',
+        type: 'kill', targetId: '哥布林',
+        required: 3, unit: '隻',
+        reward: { gold: 250, exp: 100, currency: { type: 'techFragments', amount: 5 } },
+    },
+    {
+        id: 'dq_walk_500',
+        title: '晨間漫步',
+        description: '在地圖上步行 500 公尺，感受清晨的空氣。',
+        type: 'walk',
+        required: 500, unit: '公尺',
+        reward: { gold: 150, exp: 60, currency: { type: 'incense', amount: 2 } },
+    },
+    {
+        id: 'dq_walk_1000',
+        title: '長途跋涉',
+        description: '在地圖上步行超過 1000 公尺。',
+        type: 'walk',
+        required: 1000, unit: '公尺',
+        reward: { gold: 300, exp: 120, currency: { type: 'incense', amount: 5 } },
+    },
+    {
+        id: 'dq_explore_poi',
+        title: '探索聖地',
+        description: '造訪地圖上的特殊聖地 2 次。',
+        type: 'explore',
+        required: 2, unit: '次',
+        reward: { gold: 200, exp: 100, currency: { type: 'lingQi', amount: 5 } },
+    },
+    {
+        id: 'dq_collect_mat',
+        title: '採集材料',
+        description: '從戰鬥中收集 3 個任意材料道具。',
+        type: 'collect',
+        required: 3, unit: '個',
+        reward: { gold: 180, exp: 70, currency: { type: 'saltCrystals', amount: 3 } },
+    },
+];
+
+export const WEEKLY_QUEST_POOL: DailyQuest[] = [
+    {
+        id: 'wq_kill_boss',
+        title: '討伐精英怪',
+        description: '挑戰並擊敗 3 隻菁英級魔物。',
+        type: 'kill', targetId: '【菁英】',
+        required: 3, unit: '隻',
+        reward: { gold: 1500, exp: 600, currency: { type: 'premiumGems', amount: 10 } },
+        isWeekly: true,
+    },
+    {
+        id: 'wq_walk_5000',
+        title: '穿越島嶼',
+        description: '在地圖上累計步行 5000 公尺。',
+        type: 'walk',
+        required: 5000, unit: '公尺',
+        reward: { gold: 1200, exp: 500, currency: { type: 'premiumGems', amount: 8 } },
+        isWeekly: true,
+    },
+    {
+        id: 'wq_collect_rare',
+        title: '稀有素材蒐集',
+        description: '收集 5 個稀有材料道具。',
+        type: 'collect',
+        required: 5, unit: '個',
+        reward: { gold: 1000, exp: 400, currency: { type: 'premiumGems', amount: 6 } },
+        isWeekly: true,
+    },
+];
+
+
 export interface CharacterStats {
     nickname?: string;
     level: number;
