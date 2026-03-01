@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { CheckCircle, Circle, Loader2, RefreshCw, Star, Calendar, Zap, Gift, ChevronRight } from 'lucide-react';
+import { CheckCircle, Loader2, RefreshCw, Star, Calendar, Zap, Gift, ChevronRight } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { DAILY_QUEST_POOL, WEEKLY_QUEST_POOL } from '../types/game';
 import type { DailyQuest } from '../types/game';
@@ -27,10 +27,6 @@ const CURRENCY_ICONS: Record<string, string> = {
     premiumGems: '💎',
 };
 
-const CATEGORY_ICONS: Record<string, string> = {
-    daily: '🌅',
-    weekly: '📅',
-};
 
 export const DailyQuestPanel: React.FC<DailyQuestPanelProps> = ({ userId, onReward }) => {
     const [quests, setQuests] = useState<QuestRow[]>([]);
@@ -228,7 +224,7 @@ const QuestCard: React.FC<{
 
     return (
         <div className={`group glass-panel relative rounded-[2rem] border transition-all duration-300 overflow-hidden flex flex-col h-full ${row.claimed ? 'opacity-40 border-white/5 grayscale-[0.8]' :
-                isDone ? 'border-emerald-500/50 bg-emerald-500/5 shadow-2xl shadow-emerald-500/5' : 'border-white/10 hover:border-white/30 bg-white/2 hover:transform hover:-translate-y-1'
+            isDone ? 'border-emerald-500/50 bg-emerald-500/5 shadow-2xl shadow-emerald-500/5' : 'border-white/10 hover:border-white/30 bg-white/2 hover:transform hover:-translate-y-1'
             }`}>
             {/* 上半部：標題與詳情 */}
             <div className="p-7 flex-1">
@@ -279,8 +275,8 @@ const QuestCard: React.FC<{
                 <div className="h-3 bg-white/5 rounded-full overflow-hidden border border-white/5 mb-6">
                     <div
                         className={`h-full rounded-full transition-all duration-1000 ease-out shadow-lg ${row.claimed ? 'bg-slate-700' :
-                                isDone ? 'bg-gradient-to-r from-emerald-600 to-teal-400 shadow-emerald-500/20' :
-                                    'bg-gradient-to-r from-game-accent to-orange-500 shadow-orange-500/10'
+                            isDone ? 'bg-gradient-to-r from-emerald-600 to-teal-400 shadow-emerald-500/20' :
+                                'bg-gradient-to-r from-game-accent to-orange-500 shadow-orange-500/10'
                             }`}
                         style={{ width: `${pct}%` }}
                     >
