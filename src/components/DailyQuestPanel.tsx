@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { CheckCircle, Loader2, RefreshCw, Star, Calendar, Zap, Gift, ChevronRight } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { DAILY_QUEST_POOL, WEEKLY_QUEST_POOL } from '../types/game';
+import { DAILY_QUEST_POOL, WEEKLY_QUEST_POOL, CITY_QUEST_POOL } from '../types/game';
 import type { DailyQuest } from '../types/game';
 
 interface QuestRow {
@@ -17,6 +17,7 @@ interface DailyQuestPanelProps {
     userId: string;
     onClose: () => void; // 保留 prop 接口以防萬一
     onReward: (gold: number, exp: number, currency?: { type: string; amount: number }) => void;
+    cityId?: string | null;
 }
 
 const CURRENCY_ICONS: Record<string, string> = {
@@ -28,7 +29,7 @@ const CURRENCY_ICONS: Record<string, string> = {
 };
 
 
-export const DailyQuestPanel: React.FC<DailyQuestPanelProps> = ({ userId, onReward }) => {
+export const DailyQuestPanel: React.FC<DailyQuestPanelProps> = ({ userId, onReward, cityId }) => {
     const [quests, setQuests] = useState<QuestRow[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -37,14 +38,17 @@ export const DailyQuestPanel: React.FC<DailyQuestPanelProps> = ({ userId, onRewa
     const [activeCategory, setActiveCategory] = useState<'all' | 'daily' | 'weekly'>('all');
 
     const getQuestDef = (id: string): DailyQuest | undefined =>
-        [...DAILY_QUEST_POOL, ...WEEKLY_QUEST_POOL].find(q => q.id === id);
+        [...DAILY_QUEST_POOL, ...WEEKLY_QUEST_POOL, ...(CITY_QUEST_POOL || [])].find(q => q.id === id);
 
     const fetchQuests = useCallback(async (isRefresh = false) => {
         if (isRefresh) setRefreshing(true);
         else setLoading(true);
         setError(null);
         try {
-            const { data, error: rpcError } = await supabase.rpc('get_or_reset_daily_quests', { p_user_id: userId });
+            const { data, error: rpcError } = await supabase.rpc('get_or_reset_daily_quests', {
+                p_user_id: userId,
+                p_city_id: cityId
+            });
             if (rpcError) {
                 setError(rpcError.message);
             } else if (data) {

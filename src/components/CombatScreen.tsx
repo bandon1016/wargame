@@ -15,9 +15,15 @@ interface CombatScreenProps {
     onRevive?: () => void;
     onUseItem?: (item: any) => void;
     hasWeatherResistance: (type: WeatherType) => boolean;
+    isMinimized?: boolean;
+    onMaximize?: () => void;
 }
 
-export const CombatScreen: React.FC<CombatScreenProps> = ({ player, enemy, onWin, onLose, onFlee, autoExplore, weather, onAutoHeal, onRevive, onUseItem, hasWeatherResistance }) => {
+export const CombatScreen: React.FC<CombatScreenProps> = ({
+    player, enemy, onWin, onLose, onFlee, autoExplore, weather,
+    onAutoHeal, onRevive, onUseItem, hasWeatherResistance,
+    isMinimized, onMaximize
+}) => {
     const [combatStats] = useState({
         attack: player.attack,
         defense: player.defense,
@@ -93,7 +99,21 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({ player, enemy, onWin
 
         const atkBuff = activeBuffs.filter(b => b.type === 'atk').reduce((sum, b) => sum + b.power, 0);
 
-        // 天氣屬性傷害修飾
+        // 天氣/神明 命中率修飾
+        let hitRate = 1.0;
+        if (weather) {
+            const wConf = WEATHER_TYPES[weather];
+            if (!hasWeatherResistance(weather)) {
+                hitRate = (wConf.hitMod ?? 1.0) / (wConf.evadeMod ?? 1.0);
+            }
+        }
+
+        if (Math.random() > hitRate) {
+            log(`💨 ${enemy.name} 閃開了你的攻擊！`);
+            setTimeout(() => executeMonsterTurn(eHp, pHp, pMp), 800);
+            return;
+        }
+
         const weatherMod = weather ? (WEATHER_TYPES[weather].elementMods?.[enemy.element] ?? 1.0) : 1.0;
         const pDmg = Math.max(1, Math.round(((combatStats.attack + atkBuff) - enemy.defense + Math.floor(Math.random() * 6)) * weatherMod));
         const newEHp = Math.max(0, eHp - pDmg);
@@ -129,6 +149,21 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({ player, enemy, onWin
 
         if (skillDef.type === 'attack') {
             const atkBuff = activeBuffs.filter(b => b.type === 'atk').reduce((sum, b) => sum + b.power, 0);
+
+            // 天氣/神明 命中率修飾
+            let skillHitRate = 1.0;
+            if (weather) {
+                const wConf = WEATHER_TYPES[weather];
+                if (!hasWeatherResistance(weather)) {
+                    skillHitRate = (wConf.hitMod ?? 1.0) / (wConf.evadeMod ?? 1.0);
+                }
+            }
+
+            if (Math.random() > skillHitRate) {
+                log(`${skillDef.icon} 糟糕！${skillDef.name} 打空了！`);
+                setTimeout(() => executeMonsterTurn(eHp, pHp, nextMp), 800);
+                return;
+            }
             // 雙重屬性連動：
             // 1. 技能本身的屬性受天氣加成（如：雷暴時「雷擊」傷害 ×1.2）
             // 2. 敵人弱點受天氣加成（如：雨天對水系怪物傷害 ×1.2）
@@ -280,7 +315,20 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({ player, enemy, onWin
             return;
         }
 
-        // Enemy attacks
+        // 魔物 命中率修飾
+        let monsterHitRate = 1.0;
+        if (weather) {
+            const wConf = WEATHER_TYPES[weather];
+            // 魔物目前沒有神明護衛，固定受天氣影響 (命中率降低/閃避率提升)
+            monsterHitRate = (wConf.hitMod ?? 1.0) / (wConf.evadeMod ?? 1.0);
+        }
+
+        if (Math.random() > monsterHitRate) {
+            log(`💨 ${enemy.name} 的攻擊揮空了！你靈巧地躲開了。`);
+            processBuffsAndTurnEnd();
+            return;
+        }
+
         const eDmg = Math.max(1, enemy.attack - combatStats.defense + Math.floor(Math.random() * 4));
         const reflectBuff = activeBuffs.find(b => b.type === 'reflect');
         let reflectDmg = 0;
@@ -403,9 +451,50 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({ player, enemy, onWin
 
     const hpPct = (cur: number, max: number) => Math.max(0, (cur / max) * 100);
 
+    if (isMinimized) {
+        return (
+            <div className="fixed bottom-24 right-4 z-[2500] pointer-events-auto">
+                <button
+                    onClick={onMaximize}
+                    className="glass-panel p-3 rounded-2xl border border-white/20 shadow-2xl flex items-center gap-3 anim-scale-in hover:bg-white/5 transition-all active:scale-95 group w-48"
+                >
+                    <div className="relative">
+                        <div className="text-3xl filter drop-shadow-sm group-hover:scale-110 transition-transform">
+                            {enemy.avatar}
+                        </div>
+                        {/* Mini Enemy HP */}
+                        <div className="absolute -bottom-1 left-0 right-0 h-1 bg-black/40 rounded-full overflow-hidden border border-white/10">
+                            <div
+                                className="h-full bg-red-500 transition-all duration-300"
+                                style={{ width: `${hpPct(eHp, enemy.maxHp)}%` }}
+                            />
+                        </div>
+                    </div>
+
+                    <div className="flex-1 text-left">
+                        <div className="text-[10px] font-black text-game-accent uppercase tracking-wider mb-0.5">戰鬥進行中...</div>
+                        <div className="h-1.5 w-full bg-black/40 rounded-full overflow-hidden border border-white/10 mb-1">
+                            <div
+                                className="h-full bg-emerald-500 transition-all duration-300"
+                                style={{ width: `${hpPct(pHp, combatStats.maxHp)}%` }}
+                            />
+                        </div>
+                        <div className="flex justify-between items-center text-[9px] font-bold">
+                            <span className="text-white/70">Lv.{enemy.level} {enemy.name}</span>
+                        </div>
+                    </div>
+
+                    <div className="p-1.5 bg-game-accent/20 rounded-lg text-game-accent">
+                        <ChevronRight size={16} />
+                    </div>
+                </button>
+            </div>
+        );
+    }
+
     return (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-md z-[2000] flex items-center justify-center p-4 md:p-6">
-            <div className="w-full max-w-2xl h-full max-h-[850px] bg-[#0a0e1a]/95 rounded-3xl border border-white/10 shadow-2xl flex flex-col p-4 md:p-6 anim-fade-in-up overflow-hidden relative">
+        <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4 md:p-6 pointer-events-none">
+            <div className="w-full max-w-xl h-[85vh] max-h-[780px] bg-[#0a0e1a]/90 backdrop-blur-md rounded-[2.5rem] border border-white/20 shadow-[0_0_50px_rgba(0,0,0,0.8)] flex flex-col p-5 md:p-8 anim-fade-in-up overflow-hidden relative pointer-events-auto">
 
                 {/* Header */}
                 <div className="flex justify-between items-center mb-4">

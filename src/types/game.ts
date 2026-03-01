@@ -127,6 +127,7 @@ export interface DailyQuest {
         currency?: { type: 'lingQi' | 'techFragments' | 'incense' | 'saltCrystals' | 'premiumGems'; amount: number };
     };
     isWeekly?: boolean;
+    cityId?: string; // 所屬城市 ID (選填)
 }
 
 export const DAILY_QUEST_POOL: DailyQuest[] = [
@@ -207,6 +208,132 @@ export const WEEKLY_QUEST_POOL: DailyQuest[] = [
         required: 5, unit: '個',
         reward: { gold: 1000, exp: 400, currency: { type: 'premiumGems', amount: 6 } },
         isWeekly: true,
+    },
+];
+
+export const CITY_QUEST_POOL: DailyQuest[] = [
+    // 台北城
+    {
+        id: 'cq_tpe_101', title: '101 安全防護', description: '擊敗台北區域的「哥布林」5 隻。',
+        type: 'kill', targetId: '哥布林', cityId: 'town_tpe',
+        required: 5, unit: '隻', reward: { gold: 300, exp: 120, currency: { type: 'techFragments', amount: 5 } }
+    },
+    {
+        id: 'cq_tpe_walk', title: '捷運軌道漫步', description: '在台北區域移動 1500 公尺。',
+        type: 'walk', cityId: 'town_tpe',
+        required: 1500, unit: '公尺', reward: { gold: 250, exp: 100, currency: { type: 'lingQi', amount: 5 } }
+    },
+    {
+        id: 'cq_tpe_weekly', title: '矽島之光蒐羅', description: '從戰鬥中收集 10 個北部特產「科技廢料」。',
+        type: 'collect', targetId: '科技廢料', cityId: 'town_tpe', isWeekly: true,
+        required: 10, unit: '個', reward: { gold: 1500, exp: 600, currency: { type: 'techFragments', amount: 15 } }
+    },
+    // 新北城
+    {
+        id: 'cq_ntpc_kill', title: '山海防線守護', description: '擊敗新北山區的「野豬」5 隻。',
+        type: 'kill', targetId: '野豬', cityId: 'town_ntpc',
+        required: 5, unit: '隻', reward: { gold: 350, exp: 150, currency: { type: 'lingQi', amount: 8 } }
+    },
+    {
+        id: 'cq_ntpc_collect', title: '廢棄鋼構蒐集', description: '收集 3 個「鐵礦石」。',
+        type: 'collect', targetId: '鐵礦石', cityId: 'town_ntpc',
+        required: 3, unit: '個', reward: { gold: 200, exp: 80, currency: { type: 'techFragments', amount: 4 } }
+    },
+    {
+        id: 'cq_ntpc_weekly', title: '沿海長征', description: '在新北海岸線累計移動 3000 公尺。',
+        type: 'walk', cityId: 'town_ntpc', isWeekly: true,
+        required: 3000, unit: '公尺', reward: { gold: 1200, exp: 500, currency: { type: 'lingQi', amount: 20 } }
+    },
+    // 桃園城
+    {
+        id: 'cq_tyn_train', title: '航空郵件護送', description: '搭乘鐵路移動 1 次。',
+        type: 'explore', cityId: 'town_tyn', // 這裡用 explore 模擬
+        required: 1, unit: '次', reward: { gold: 500, exp: 100, currency: { type: 'techFragments', amount: 3 } }
+    },
+    {
+        id: 'cq_tyn_slime', title: '埤塘黏稠汙染清理', description: '擊敗 5 隻「史萊姆」。',
+        type: 'kill', targetId: '史萊姆', cityId: 'town_tyn',
+        required: 5, unit: '隻', reward: { gold: 250, exp: 100, currency: { type: 'techFragments', amount: 5 } }
+    },
+    // 台中城
+    {
+        id: 'cq_txg_iron', title: '中央山脈脈動', description: '收集 5 個「高山鐵礦」。',
+        type: 'collect', targetId: '高山鐵礦', cityId: 'town_txg',
+        required: 5, unit: '個', reward: { gold: 400, exp: 180, currency: { type: 'lingQi', amount: 10 } }
+    },
+    {
+        id: 'cq_txg_altar', title: '谷關仙水採集', description: '訪問「神秘祭壇」1 次。',
+        type: 'explore', cityId: 'town_txg',
+        required: 1, unit: '次', reward: { gold: 200, exp: 100, currency: { type: 'lingQi', amount: 5 } }
+    },
+    {
+        id: 'cq_txg_weekly', title: '森之守護者', description: '在台中區域步行累計 5000 公尺。',
+        type: 'walk', cityId: 'town_txg', isWeekly: true,
+        required: 5000, unit: '公尺', reward: { gold: 1800, exp: 800, currency: { type: 'lingQi', amount: 20 } }
+    },
+    // 台南城
+    {
+        id: 'cq_tnn_altar', title: '百年廟宇巡禮', description: '造訪「神秘祭壇」2 次。',
+        type: 'explore', cityId: 'town_tnn',
+        required: 2, unit: '次', reward: { gold: 300, exp: 150, currency: { type: 'incense', amount: 8 } }
+    },
+    {
+        id: 'cq_tnn_ghost', title: '古城牆清掃', description: '擊敗 3 隻「骷髏兵」。',
+        type: 'kill', targetId: '骷髏兵', cityId: 'town_tnn',
+        required: 3, unit: '隻', reward: { gold: 350, exp: 150, currency: { type: 'incense', amount: 6 } }
+    },
+    {
+        id: 'cq_tnn_weekly', title: '萬家燈火祈福', description: '造訪台南區域 5 個不同的特殊聖地。',
+        type: 'explore', cityId: 'town_tnn', isWeekly: true,
+        required: 5, unit: '次', reward: { gold: 1500, exp: 700, currency: { type: 'incense', amount: 25 } }
+    },
+    // 高雄城
+    {
+        id: 'cq_khh_kill', title: '港區安全巡查', description: '擊敗高雄區域的魔物 5 隻。',
+        type: 'kill', targetId: '', cityId: 'town_khh', // 空代表區域內任一
+        required: 5, unit: '隻', reward: { gold: 400, exp: 180, currency: { type: 'saltCrystals', amount: 6 } }
+    },
+    {
+        id: 'cq_khh_collect', title: '深海饋贈', description: '收集 3 個「海淵珍珠」。',
+        type: 'collect', targetId: '海淵珍珠', cityId: 'town_khh',
+        required: 3, unit: '個', reward: { gold: 300, exp: 120, currency: { type: 'techFragments', amount: 5 } }
+    },
+    {
+        id: 'cq_khh_weekly', title: '鐵鏽地帶淨化', description: '挑戰並擊敗 2 隻「菁英魔物」。',
+        type: 'kill', targetId: '【菁英】', cityId: 'town_khh', isWeekly: true,
+        required: 2, unit: '隻', reward: { gold: 2000, exp: 1000, currency: { type: 'saltCrystals', amount: 15 } }
+    },
+    // 屏東城
+    {
+        id: 'cq_pif_slime', title: '珊瑚礁守衛', description: '擊敗 5 隻威脅海域的「史萊姆」。',
+        type: 'kill', targetId: '史萊姆', cityId: 'town_pif',
+        required: 5, unit: '隻', reward: { gold: 250, exp: 100, currency: { type: 'saltCrystals', amount: 5 } }
+    },
+    {
+        id: 'cq_pif_walk', title: '南國烈日洗禮', description: '在屏東區域移動 2000 公尺。',
+        type: 'walk', cityId: 'town_pif',
+        required: 2000, unit: '公尺', reward: { gold: 350, exp: 150, currency: { type: 'incense', amount: 8 } }
+    },
+    // 台東 & 花蓮 (共用)
+    {
+        id: 'cq_hun_crystal', title: '靈脈尋蹤', description: '收集 3 個「花東水晶」。',
+        type: 'collect', targetId: '花東水晶', cityId: 'town_hun',
+        required: 3, unit: '個', reward: { gold: 300, exp: 150, currency: { type: 'lingQi', amount: 10 } }
+    },
+    {
+        id: 'cq_ttu_crystal', title: '靈脈尋蹤', description: '收集 3 個「花東水晶」。',
+        type: 'collect', targetId: '花東水晶', cityId: 'town_ttu',
+        required: 3, unit: '個', reward: { gold: 300, exp: 150, currency: { type: 'lingQi', amount: 10 } }
+    },
+    {
+        id: 'cq_hun_walk', title: '太平洋長路', description: '沿著花東海岸移動 2000 公尺。',
+        type: 'walk', cityId: 'town_hun',
+        required: 2000, unit: '公尺', reward: { gold: 400, exp: 200, currency: { type: 'premiumGems', amount: 2 } }
+    },
+    {
+        id: 'cq_hun_weekly', title: '菁英獵人', description: '挑戰並擊敗 3 隻「菁英魔物」。',
+        type: 'kill', targetId: '【菁英】', cityId: 'town_hun', isWeekly: true,
+        required: 3, unit: '隻', reward: { gold: 2500, exp: 1200, currency: { type: 'premiumGems', amount: 10 } }
     },
 ];
 

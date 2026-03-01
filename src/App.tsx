@@ -3,7 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup, useMap, Circle, Polyline, useMa
 import 'leaflet/dist/leaflet.css';
 import { Compass, Sword, Home, Users, Package, Settings as SettingsIcon, Book, Heart, Shield, Zap, ChevronRight, MapPin, Loader2, X, PlusCircle, ShieldAlert, TrainFront, Coins, Sparkles, Cpu, Flame, Waves, Diamond, Trophy, Copy, Check, ScrollText } from 'lucide-react';
 import type { CharacterStats, Equipment, GameItem, Skill, MapPOI, Town, WeatherType, Enemy, AlchemyRecipe, BlacksmithRecipe, ElementType } from './types/game';
-import { MONSTER_DATABASE, SKILL_DATABASE, ITEM_DATABASE, EQUIPMENT_DATABASE, RARITY_COLORS, WEATHER_TYPES, getRegionByCityName, getRegionalMaterials, getRegionByCoordinates, TOWN_DATABASE, getPartnerAvatar, getRailwayPath, POI_NAMES, ELEMENT_META, DAILY_QUEST_POOL, WEEKLY_QUEST_POOL } from './types/game';
+import { MONSTER_DATABASE, SKILL_DATABASE, ITEM_DATABASE, EQUIPMENT_DATABASE, RARITY_COLORS, WEATHER_TYPES, getRegionByCityName, getRegionalMaterials, getRegionByCoordinates, TOWN_DATABASE, getPartnerAvatar, getRailwayPath, POI_NAMES, ELEMENT_META } from './types/game';
 import { CombatScreen } from './components/CombatScreen';
 import { PartnersTab } from './components/PartnersTab';
 import { HomeTab } from './components/HomeTab';
@@ -192,7 +192,7 @@ export const getSkillUpgradeInfo = (currentLevel: number) => {
 
 interface CombatLog {
   id: string;
-  type: 'win' | 'lose';
+  type: 'win' | 'lose' | 'info';
   enemyName: string;
   exp?: number;
   gold?: number;
@@ -247,6 +247,7 @@ const App: React.FC = () => {
   const [position, setPosition] = useState<[number, number]>([25.0330, 121.5654]);
   const positionRef = React.useRef<[number, number]>(position);
   const [activeTab, setActiveTab] = useState('explore');
+  const [isCombatMinimized, setIsCombatMinimized] = useState(false);
 
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -843,6 +844,8 @@ const App: React.FC = () => {
       p_incense: p.incense,
       p_salt_crystals: p.saltCrystals,
       p_premium_gems: p.premiumGems,
+      p_gods: p.gods,
+      p_active_god_id: p.activeGodId,
       p_travel_data: {
         path: travelSaveData.travel_path,
         started_at: travelSaveData.travel_started_at,
@@ -940,6 +943,15 @@ const App: React.FC = () => {
   const [isCombatAction, setIsCombatAction] = useState(false);
   const [currentEnemy, setCurrentEnemy] = useState<Enemy | null>(null);
   const [autoExplore, setAutoExplore] = useState(false);
+
+  // Auto-minimize combat when switching tabs
+  useEffect(() => {
+    if (isCombatAction && activeTab !== 'explore') {
+      setIsCombatMinimized(true);
+    } else if (isCombatAction && activeTab === 'explore') {
+      setIsCombatMinimized(false);
+    }
+  }, [activeTab, isCombatAction]);
 
   const move = useCallback((d: 'n' | 's' | 'e' | 'w') => {
     const s = 0.00025;
@@ -1199,7 +1211,7 @@ const App: React.FC = () => {
   // Auto Explore Logic
   useEffect(() => {
     console.log('AutoExplore Effect Sync:', { autoExplore, isCombatAction, activeTab, isTraveling });
-    if (!autoExplore || isCombatAction || activeTab !== 'explore' || isTraveling) return;
+    if (!autoExplore || isCombatAction || isTraveling || inTown) return;
 
     // Movement & Encounter cycle
     const encounterMover = setInterval(() => {
@@ -1268,45 +1280,30 @@ const App: React.FC = () => {
     } as any);
     */
 
-    // Simple local log
+    // Simple local log with fallback to prevent '+ EXP' (missing numbers)
+    // The RPC should return these, but if it fails or returns undefined, we fallback to local estimates
+    const finalExp = (result?.exp !== undefined && result?.exp !== null) ? result.exp : _expReward;
+    const finalGold = (result?.gold !== undefined && result?.gold !== null) ? result.gold : _goldReward;
+
     const newLog: CombatLog = {
       id: Date.now().toString(),
       type: 'win',
       enemyName: currentEnemy.name,
-      exp: result.exp,
-      gold: result.gold,
+      exp: finalExp,
+      gold: finalGold,
       items: rewardItems.map(i => ({ name: i.name, quantity: i.quantity || 1, icon: i.icon || '📦' }))
     };
-    setCombatLogs(prev => [...prev, newLog].slice(-6));
+    setCombatLogs(prev => [newLog, ...prev].slice(0, 6));
+
+    console.log('Combat Resolved:', { result, finalExp, finalGold });
 
     setIsCombatAction(false);
     setCurrentEnemy(null);
 
-    // Quest: kill progress tracking
-    if (session?.user?.id && currentEnemy) {
-      const enemyName = currentEnemy.name;
-      const allPool = [...DAILY_QUEST_POOL, ...WEEKLY_QUEST_POOL];
-      const matchingKillQuests = allPool.filter(
-        q => q.type === 'kill' && q.targetId && enemyName.includes(q.targetId)
-      );
-      if (matchingKillQuests.length > 0) {
-        matchingKillQuests.forEach(q => {
-          supabase.rpc('update_quest_progress', {
-            p_user_id: session.user!.id,
-            p_quest_id: q.id,
-            p_increment: 1,
-          }).then();
-        });
-      }
-    }
+    // Quest: Kill and collection progress is now handled within server-side secure_resolve_combat
+    // to prevent front-end spoofing. No further manual rpc calls needed here.
 
-    // Quest: collect progress tracking
-    if (session?.user?.id && rewardItems.length > 0) {
-      supabase.rpc('increment_collect_quests', {
-        p_user_id: session.user.id,
-        p_increment: rewardItems.length
-      }).then();
-    }
+    // Collection progress is also integrated into secure_resolve_combat's loot logic.
 
     if (activePoiRef.current) {
       // For POI (Elite/Special) victories, we resolve the POI state on DB
@@ -1315,7 +1312,44 @@ const App: React.FC = () => {
       setActivePoiCombat(null);
       fetchPois();
     }
-  }, [player, currentEnemy, fetchPois, session]);
+  }, [player, currentEnemy, fetchPois, session, saveProfile]);
+
+  // ─── Weather Effects Tick (Every 10 seconds) ───
+  useEffect(() => {
+    if (!session?.user?.id || !player || isCombatAction || isTraveling || inTown) return;
+
+    const tickInterval = 10000;
+    const weatherTicker = setInterval(() => {
+      const wConf = WEATHER_TYPES[weather];
+      // Only apply damage if weather has envHpTickDmg and player has no resistance
+      if (wConf.envHpTickDmg > 0 && !hasWeatherResistance(weather)) {
+        const dmg = Math.floor(player.maxHp * wConf.envHpTickDmg);
+        if (dmg > 0) {
+          const newHp = Math.max(1, player.hp - dmg);
+          if (newHp < player.hp) {
+            setPlayer(p => p ? { ...p, hp: newHp } : null);
+            setCombatLogs(prev => [
+              {
+                id: `env_${Date.now()}`,
+                type: 'info',
+                enemyName: '環境',
+                message: `⚠️ 【${wConf.label}】環境嚴苛，體力流失了 ${dmg} 點！`
+              } as CombatLog,
+              ...prev
+            ].slice(0, 6));
+
+            // Inform server occasionally or let next auto-save handle it
+            // We force a save if HP is critically low
+            if (newHp < player.maxHp * 0.2) {
+              saveProfile({ ...player, hp: newHp });
+            }
+          }
+        }
+      }
+    }, tickInterval);
+
+    return () => clearInterval(weatherTicker);
+  }, [weather, hasWeatherResistance, player?.hp, player?.maxHp, session, isCombatAction, isTraveling, inTown, saveProfile]);
 
   const handleCombatLose = useCallback(async (finalHp?: number, finalMp?: number) => {
     if (!player) return;
@@ -1899,21 +1933,28 @@ const App: React.FC = () => {
     />
   ]), [handleMarkClick]);
 
-  const poiLayers = useMemo(() => pois.map(p => {
-    return (
-      <Marker
-        key={p.id}
-        position={[p.lat, p.lng]}
-        icon={poiIconsMapping[p.type]}
-        eventHandlers={{
-          click: (e) => {
-            L.DomEvent.stopPropagation(e as any);
-            handleMarkClick(p.id, p.lat, p.lng);
-          }
-        }}
-      />
-    );
-  }), [pois, poiIconsMapping, handleMarkClick]);
+  const poiLayers = useMemo(() => {
+    // 基礎可視半徑 3000 公尺 (約 0.03 度)
+    const baseRadius = 3000;
+    const radiusMod = (weather && !hasWeatherResistance(weather)) ? WEATHER_TYPES[weather].poiRadiusMod : 1.0;
+    const visibilityRadius = baseRadius * radiusMod;
+
+    return pois
+      .filter(p => getDistance(position[0], position[1], p.lat, p.lng) <= visibilityRadius)
+      .map(p => (
+        <Marker
+          key={p.id}
+          position={[p.lat, p.lng]}
+          icon={poiIconsMapping[p.type]}
+          eventHandlers={{
+            click: (e) => {
+              L.DomEvent.stopPropagation(e as any);
+              handleMarkClick(p.id, p.lat, p.lng);
+            }
+          }}
+        />
+      ));
+  }, [pois, poiIconsMapping, handleMarkClick, weather, hasWeatherResistance, position]);
 
   if (loading) {
     return <div className="flex items-center justify-center min-h-screen bg-[#0a0e1a] text-game-accent"><Loader2 className="animate-spin w-12 h-12" /></div>;
@@ -2245,7 +2286,7 @@ const App: React.FC = () => {
 
 
             {/* ─── Weather Visual Overlays ─── */}
-            {weather === 'foggy' && (
+            {weather === 'foggy' && !hasWeatherResistance('foggy') && (
               <div className="weather-fog-overlay" />
             )}
             {(weather === 'rainy' || weather === 'stormy') && (
@@ -2259,8 +2300,9 @@ const App: React.FC = () => {
             <div className="absolute top-4 right-4 z-[1000] flex flex-col items-end gap-2">
               <button
                 onClick={() => setIsWeatherPanelOpen(!isWeatherPanelOpen)}
-                className={`flex items-center gap-2 bg-black/60 backdrop-blur-md px-4 py-2 rounded-full border shadow-lg transition-all hover:bg-black/80 pointer-events-auto ${isWeatherPanelOpen ? 'border-game-gold ring-1 ring-game-gold/50' : 'border-white/20'}`}
+                className={`flex items-center gap-2 bg-black/60 backdrop-blur-md px-4 py-2 rounded-full border shadow-lg transition-all hover:bg-black/80 pointer-events-auto ${hasWeatherResistance(weather) ? 'border-emerald-500/50 ring-1 ring-emerald-500/30' : (isWeatherPanelOpen ? 'border-game-gold ring-1 ring-game-gold/50' : 'border-white/20')}`}
               >
+                {hasWeatherResistance(weather) && <Shield size={14} className="text-emerald-400" />}
                 <span className="text-2xl drop-shadow-md">{WEATHER_TYPES[weather].icon}</span>
                 <span className="text-sm font-bold text-white drop-shadow-md">{WEATHER_TYPES[weather].label}</span>
               </button>
@@ -2282,20 +2324,32 @@ const App: React.FC = () => {
                     <div className="space-y-2 border-t border-white/10 pt-3">
                       <div className="flex justify-between items-center text-xs">
                         <span className="text-gray-400">移動速度</span>
-                        <span className={`font-bold ${WEATHER_TYPES[weather].walkSpeedMod > 1 ? 'text-emerald-400' : WEATHER_TYPES[weather].walkSpeedMod < 1 ? 'text-red-400' : 'text-white'}`}>
-                          {WEATHER_TYPES[weather].walkSpeedMod > 1 ? '+' : ''}{Math.round((WEATHER_TYPES[weather].walkSpeedMod - 1) * 100)}%
-                        </span>
+                        {hasWeatherResistance(weather) ? (
+                          <span className="font-bold text-emerald-400 bg-emerald-400/10 px-1.5 py-0.5 rounded text-[10px]">已抵消</span>
+                        ) : (
+                          <span className={`font-bold ${WEATHER_TYPES[weather].walkSpeedMod > 1 ? 'text-emerald-400' : WEATHER_TYPES[weather].walkSpeedMod < 1 ? 'text-red-400' : 'text-white'}`}>
+                            {WEATHER_TYPES[weather].walkSpeedMod > 1 ? '+' : ''}{Math.round((WEATHER_TYPES[weather].walkSpeedMod - 1) * 100)}%
+                          </span>
+                        )}
                       </div>
                       <div className="flex justify-between items-center text-xs">
                         <span className="text-gray-400">感應半徑</span>
-                        <span className={`font-bold ${WEATHER_TYPES[weather].poiRadiusMod > 1 ? 'text-emerald-400' : WEATHER_TYPES[weather].poiRadiusMod < 1 ? 'text-red-400' : 'text-white'}`}>
-                          {WEATHER_TYPES[weather].poiRadiusMod > 1 ? '+' : ''}{Math.round((WEATHER_TYPES[weather].poiRadiusMod - 1) * 100)}%
-                        </span>
+                        {hasWeatherResistance(weather) ? (
+                          <span className="font-bold text-emerald-400 bg-emerald-400/10 px-1.5 py-0.5 rounded text-[10px]">已抵消</span>
+                        ) : (
+                          <span className={`font-bold ${WEATHER_TYPES[weather].poiRadiusMod > 1 ? 'text-emerald-400' : WEATHER_TYPES[weather].poiRadiusMod < 1 ? 'text-red-400' : 'text-white'}`}>
+                            {WEATHER_TYPES[weather].poiRadiusMod > 1 ? '+' : ''}{Math.round((WEATHER_TYPES[weather].poiRadiusMod - 1) * 100)}%
+                          </span>
+                        )}
                       </div>
                       {WEATHER_TYPES[weather].envHpTickDmg > 0 && (
                         <div className="flex justify-between items-center text-xs">
                           <span className="text-gray-400">環境傷害</span>
-                          <span className="font-bold text-red-500">每10秒 -{Math.round(WEATHER_TYPES[weather].envHpTickDmg * 100)}%</span>
+                          {hasWeatherResistance(weather) ? (
+                            <span className="font-bold text-emerald-400 bg-emerald-400/10 px-1.5 py-0.5 rounded text-[10px]">已抵消</span>
+                          ) : (
+                            <span className="font-bold text-red-500">每10秒 -{Math.round(WEATHER_TYPES[weather].envHpTickDmg * 100)}%</span>
+                          )}
                         </div>
                       )}
 
@@ -2332,41 +2386,45 @@ const App: React.FC = () => {
               )}
             </div>
 
-            {/* Bottom Left Area - Logs & Area Card */}
-            <div className="absolute bottom-8 left-6 z-[1000] flex flex-col gap-3 pointer-events-none items-start">
+            {/* Bottom Right Area - Combat Logs */}
+            {combatLogs.length > 0 && logOpacity > 0 && (
+              <div className="absolute bottom-8 right-6 z-[1000] flex flex-col-reverse gap-1.5 transition-opacity duration-300 pointer-events-none max-w-[calc(100vw-3rem)] md:max-w-[400px] items-end" style={{ opacity: logOpacity }}>
+                {combatLogs.map(log => (
+                  <div key={log.id} className="text-[11px] md:text-[12px] font-bold px-3 py-2 bg-black/60 backdrop-blur-md rounded-xl border border-white/10 text-white shadow-sm flex flex-wrap items-center gap-x-2 gap-y-1 anim-fade-in-up pointer-events-auto w-fit max-w-full">
+                    {log.type === 'win' ? (
+                      <>
+                        <span className="whitespace-nowrap">⚔️ 擊敗 {log.enemyName}</span>
+                        <span className="text-gray-400">|</span>
+                        <span className="text-sky-300 whitespace-nowrap">+{log.exp} EXP</span>
+                        <span className="text-gray-400">|</span>
+                        <span className="text-game-gold whitespace-nowrap">+{log.gold} 金幣</span>
+                        {log.items && log.items.length > 0 && (
+                          <>
+                            <span className="text-gray-400">|</span>
+                            <span className="text-emerald-300">
+                              {log.items.map(i => `${i.icon}${i.name}x${i.quantity}`).join(', ')}
+                            </span>
+                          </>
+                        )}
+                      </>
+                    ) : log.type === 'lose' ? (
+                      <>
+                        <span className="whitespace-nowrap">💀 挑戰 {log.enemyName} 失敗</span>
+                        <span className="text-gray-400">|</span>
+                        <span className="text-red-400">{log.message}</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="whitespace-nowrap">{log.message}</span>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
 
-              {/* Combat Logs */}
-              {combatLogs.length > 0 && logOpacity > 0 && (
-                <div className="flex flex-col gap-1.5 transition-opacity duration-300 pointer-events-none max-w-[calc(100vw-3rem)] md:max-w-[400px]" style={{ opacity: logOpacity }}>
-                  {combatLogs.map(log => (
-                    <div key={log.id} className="text-[11px] md:text-[12px] font-bold px-3 py-2 bg-black/60 backdrop-blur-md rounded-xl border border-white/10 text-white shadow-sm flex flex-wrap items-center gap-x-2 gap-y-1 anim-fade-in-up pointer-events-auto w-fit max-w-full">
-                      {log.type === 'win' ? (
-                        <>
-                          <span className="whitespace-nowrap">⚔️ 擊敗 {log.enemyName}</span>
-                          <span className="text-gray-400">|</span>
-                          <span className="text-sky-300 whitespace-nowrap">+{log.exp} EXP</span>
-                          <span className="text-gray-400">|</span>
-                          <span className="text-game-gold whitespace-nowrap">+{log.gold} 金幣</span>
-                          {log.items && log.items.length > 0 && (
-                            <>
-                              <span className="text-gray-400">|</span>
-                              <span className="text-emerald-300">
-                                {log.items.map(i => `${i.icon}${i.name}x${i.quantity}`).join(', ')}
-                              </span>
-                            </>
-                          )}
-                        </>
-                      ) : (
-                        <>
-                          <span className="whitespace-nowrap">💀 挑戰 {log.enemyName} 失敗</span>
-                          <span className="text-gray-400">|</span>
-                          <span className="text-red-400">{log.message}</span>
-                        </>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
+            {/* Bottom Left Area - Area Card */}
+            <div className="absolute bottom-8 left-6 z-[1000] flex flex-col gap-3 pointer-events-none items-start">
 
               {/* Area Card */}
               <div className="max-w-[calc(100vw-3rem)] sm:w-72 glass-panel p-4 rounded-2xl anim-fade-in-up pointer-events-auto border-t-2 border-t-game-accent/50 shadow-2xl">
@@ -2477,7 +2535,30 @@ const App: React.FC = () => {
               <DailyQuestPanel
                 userId={session.user.id}
                 onClose={() => setActiveTab('explore')}
+                cityId={inTown?.id}
                 onReward={(gold, exp, currency) => {
+                  const CURR_MAP: any = {
+                    lingQi: { name: '仙草靈氣', icon: '🌿' },
+                    techFragments: { name: '科技碎片', icon: '⚙️' },
+                    incense: { name: '香火', icon: '🏮' },
+                    saltCrystals: { name: '海鹽結晶', icon: '🌊' },
+                    premiumGems: { name: '台灣藍寶靈石', icon: '💎' }
+                  };
+
+                  const rewardItems = [];
+                  if (currency) {
+                    const info = CURR_MAP[currency.type] || { name: currency.type, icon: '💎' };
+                    rewardItems.push({ name: info.name, quantity: currency.amount, icon: info.icon });
+                  }
+
+                  // 彈出獲取獎勵視窗
+                  setLootMessage({
+                    title: '📜 任務委託達成！',
+                    gold: gold,
+                    exp: exp,
+                    items: rewardItems
+                  });
+
                   setPlayer(prev => {
                     if (!prev) return null;
                     const updated = {
@@ -2795,6 +2876,8 @@ const App: React.FC = () => {
             enemy={currentEnemy}
             weather={weather}
             hasWeatherResistance={hasWeatherResistance}
+            isMinimized={isCombatMinimized}
+            onMaximize={() => setActiveTab('explore')}
             onWin={(exp: number, gold: number, skill?: Skill, loot?: GameItem[], eq?: Equipment, finalHp?: number, finalMp?: number) => {
               handleCombatWin(exp, gold, skill, loot, eq, finalHp, finalMp);
             }}
@@ -2899,6 +2982,7 @@ const App: React.FC = () => {
           <TownScreen
             town={inTown}
             player={player!}
+            userId={session.user.id}
             onLeave={() => setInTown(null)}
             onCraftAlchemy={handleCraftAlchemy}
             onCraftEquipment={handleCraftEquipment}

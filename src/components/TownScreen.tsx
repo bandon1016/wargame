@@ -1,21 +1,33 @@
-import React, { useState } from 'react';
-import { Map as MapIcon, ChevronRight, TrainFront, ClipboardList, Anchor, Ship, Coins, ShoppingBag, Trash2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Map as MapIcon, ChevronRight, TrainFront, ClipboardList, Anchor, Ship, Coins, ShoppingBag, Trash2, Loader2, PlusCircle, CheckCircle, RefreshCw } from 'lucide-react';
 import type { Town, CharacterStats, AlchemyRecipe, BlacksmithRecipe, Equipment } from '../types/game';
-import { ALCHEMY_RECIPES, BLACKSMITH_RECIPES, ITEM_DATABASE, EQUIPMENT_DATABASE, RARITY_COLORS, TOWN_DATABASE, getRailwayPath } from '../types/game';
+import { ALCHEMY_RECIPES, BLACKSMITH_RECIPES, ITEM_DATABASE, EQUIPMENT_DATABASE, RARITY_COLORS, TOWN_DATABASE, CITY_QUEST_POOL, getRailwayPath } from '../types/game';
+import { supabase } from '../lib/supabase';
+
+const CURRENCY_ICONS: Record<string, string> = {
+    lingQi: '🌿',
+    techFragments: '⚙️',
+    incense: '🏮',
+    saltCrystals: '🌊',
+    premiumGems: '💎',
+};
 
 interface TownScreenProps {
     town: Town;
     player: CharacterStats;
+    userId: string;
     onLeave: () => void;
     onCraftAlchemy: (recipe: AlchemyRecipe) => void;
     onCraftEquipment: (recipe: BlacksmithRecipe) => void;
     forgingRecipeId?: string | null;
     onTravel: (destination: Town) => void;
     onSellEquipment: (equipment: Equipment) => void;
+    quests?: any[];
+    onRefreshQuests?: () => void;
 }
 
 const FACILITY_NPCS = {
-    market: { name: '商人 阿財', avatar: '👨‍💼', dialogue: '嘿！勇者，我這有些剛進的好料，或是你想處理掉背包裡的破銅爛鐵？' },
+    market: { name: '商人 阿財', avatar: '👨‍💼', dialogue: '嘿！勇者，我這有些剛進的好料，或是你想處理掉背包裡的破銅難鐵？' },
     blacksmith: { name: '老鐵匠 魯恩', avatar: '🧔', dialogue: '爐火正旺，這塊鐵看起來能打造成不錯的兵器。有興趣強化你的裝備嗎？' },
     alchemy: { name: '鍊金術師 艾拉', avatar: '🧙‍♀️', dialogue: '藥草的比例是門學問。只要素材足夠，我能幫你調配出恢復生命甚至更強大的秘藥。' },
     station: { name: '站務員 李大叔', avatar: '👨‍✈️', dialogue: '歡迎來到本站！火車非常準時，請確定目的地後再購票入站。' },
@@ -24,8 +36,51 @@ const FACILITY_NPCS = {
     dock: { name: '老船長 傑克', avatar: '⚓', dialogue: '起風了！只要你有一艘好船，大海就是你的地圖。隨時準備出航！' },
 };
 
-export const TownScreen: React.FC<TownScreenProps> = ({ town, player, onLeave, onCraftAlchemy, onCraftEquipment, onTravel, onSellEquipment, forgingRecipeId }) => {
-    const [activeFacility, setActiveFacility] = useState<string | null>(null);
+export const TownScreen: React.FC<TownScreenProps> = ({ town, player, userId, onLeave, onCraftAlchemy, onCraftEquipment, onTravel, onSellEquipment, forgingRecipeId, quests, onRefreshQuests }) => {
+    const [activeFacility, setActiveFacility] = useState<'inn' | 'market' | 'alchemy' | 'blacksmith' | 'station' | 'quest_board' | 'shipyard' | 'dock' | null>(null);
+    const [localQuests, setLocalQuests] = useState<any[]>(quests || []);
+    const [accepting, setAccepting] = useState<string | null>(null);
+
+    // Sync or Fetch quests when entering quest board
+    useEffect(() => {
+        if (activeFacility === 'quest_board') {
+            fetchCurrentQuests();
+        }
+    }, [activeFacility]);
+
+    const fetchCurrentQuests = async () => {
+        const { data, error } = await supabase.rpc('get_or_reset_daily_quests', {
+            p_user_id: userId,
+            p_city_id: town.id
+        });
+        if (!error && data) {
+            setLocalQuests(data);
+            if (onRefreshQuests) onRefreshQuests();
+        }
+    };
+
+    const handleAcceptQuest = async (questId: string) => {
+        setAccepting(questId);
+        try {
+            const { data, error } = await supabase.rpc('accept_city_quest', {
+                p_quest_id: questId,
+                p_city_id: town.id
+            });
+
+            if (error) {
+                alert(`接取失敗: ${error.message}`);
+            } else if (data && data.success) {
+                alert(data.message);
+                fetchCurrentQuests(); // Refresh to show accepted status
+            } else {
+                alert(data?.message || '接取失敗');
+            }
+        } catch (err: any) {
+            alert(`連線錯誤: ${err.message}`);
+        } finally {
+            setAccepting(null);
+        }
+    };
 
     return (
         <div className="fixed inset-0 bg-[#0a0e1a] z-[2000] flex flex-col text-white pb-20 sm:pb-0 overflow-y-auto">
@@ -405,10 +460,102 @@ export const TownScreen: React.FC<TownScreenProps> = ({ town, player, onLeave, o
                                 </div>
                             </div>
                         ) : activeFacility === 'quest_board' ? (
-                            <div className="flex-1 w-full flex flex-col items-center justify-center text-center">
-                                <ClipboardList size={64} className="text-yellow-500/50 mb-4" />
-                                <h3 className="text-xl font-bold text-gray-300 mb-2">🚧 任務系統建置中 🚧</h3>
-                                <p className="text-gray-500 max-w-md">公會目前正在整理各地的委託任務，預計很快就會開放勇者接取，敬請期待未來更新！</p>
+                            <div className="flex-1 flex flex-col gap-6 h-full min-h-0">
+                                <div className="glass-panel p-6 rounded-3xl border border-yellow-500/20 bg-yellow-900/10 flex flex-col h-full min-h-0">
+                                    <h3 className="text-yellow-400 font-bold mb-6 flex items-center justify-between text-lg">
+                                        <div className="flex items-center gap-2">
+                                            <ClipboardList size={20} />在地委託佈告欄
+                                        </div>
+                                        <div className="text-xs font-normal text-gray-400 italic">「守護{town.name}並非口號，而是實際的行動。」</div>
+                                    </h3>
+
+                                    <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-4">
+                                        {(() => {
+                                            const cityQuests = (CITY_QUEST_POOL || []).filter(q => q.cityId === town.id);
+
+                                            if (cityQuests.length === 0) {
+                                                return (
+                                                    <div className="flex flex-col items-center justify-center py-12 text-gray-500">
+                                                        <span className="text-4xl mb-4">📭</span>
+                                                        <p>此地暫無特殊委託，請前往其他城市看看吧！</p>
+                                                    </div>
+                                                );
+                                            }
+
+                                            return cityQuests.map(q => {
+                                                const isWeekly = q.isWeekly;
+                                                const activeQuest = localQuests.find(lq => lq.quest_id === q.id);
+                                                const isAccepted = !!activeQuest;
+                                                const isClaimed = activeQuest?.claimed;
+                                                const progress = activeQuest?.progress || 0;
+                                                const isComplete = progress >= q.required;
+
+                                                return (
+                                                    <div key={q.id} className={`p-6 rounded-[2rem] bg-white/5 border ${isClaimed ? 'border-emerald-500/20 opacity-60' : isComplete ? 'border-emerald-400 shadow-[0_0_20px_rgba(52,211,153,0.1)]' : isWeekly ? 'border-amber-500/30' : 'border-white/10'} flex flex-col gap-5 hover:bg-white/10 transition-all group`}>
+                                                        <div className="flex justify-between items-start">
+                                                            <div className="flex gap-4">
+                                                                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-3xl shrink-0 bg-white/5 border border-white/5`}>
+                                                                    {isClaimed ? '✅' : isWeekly ? '💎' : '📜'}
+                                                                </div>
+                                                                <div>
+                                                                    <div className={`text-[10px] font-black uppercase tracking-widest mb-1 ${isClaimed ? 'text-emerald-400' : isWeekly ? 'text-amber-400' : 'text-game-accent'}`}>
+                                                                        {isClaimed ? '委託已完成' : isWeekly ? '本週精選委託' : '在地日常委託'}
+                                                                    </div>
+                                                                    <div className="font-black text-xl text-white group-hover:text-game-accent transition-colors">{q.title}</div>
+                                                                    <div className="text-xs text-gray-400 mt-1 max-w-[400px] leading-relaxed line-clamp-2 italic">「{q.description}」</div>
+                                                                </div>
+                                                            </div>
+
+                                                            {!isAccepted ? (
+                                                                <button
+                                                                    onClick={() => handleAcceptQuest(q.id)}
+                                                                    disabled={!!accepting}
+                                                                    className="px-6 py-3 bg-game-accent hover:bg-sky-400 text-white font-black rounded-2xl shadow-lg shadow-sky-900/40 transition-all active:scale-90 flex items-center gap-2 group/btn"
+                                                                >
+                                                                    {accepting === q.id ? <Loader2 className="animate-spin" size={18} /> : <PlusCircle size={18} className="group-hover/btn:rotate-90 transition-transform" />}
+                                                                    接取委託
+                                                                </button>
+                                                            ) : isClaimed ? (
+                                                                <div className="px-5 py-2.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-2xl text-sm font-black flex items-center gap-2">
+                                                                    <CheckCircle size={16} /> 委託結案
+                                                                </div>
+                                                            ) : (
+                                                                <div className="flex flex-col items-end gap-1.5">
+                                                                    <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">委託進行中</div>
+                                                                    <div className="px-5 py-2.5 bg-sky-500/10 border border-sky-500/20 text-sky-400 rounded-2xl text-sm font-black flex items-center gap-2">
+                                                                        <RefreshCw size={16} className="animate-spin-slow" /> 進度 {progress} / {q.required}
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </div>
+
+                                                        {/* Reward visualization */}
+                                                        <div className="bg-black/20 rounded-2xl p-4 border border-white/5 flex flex-wrap gap-4 items-center">
+                                                            <div className="text-[10px] font-black text-gray-500 uppercase tracking-widest mr-2">報酬</div>
+                                                            <div className="flex items-center gap-2 bg-amber-400/5 px-3 py-1.5 rounded-xl border border-amber-400/10 group-hover:bg-amber-400/10 transition-colors">
+                                                                <span className="text-sm">💰</span>
+                                                                <span className="text-xs font-black text-amber-400">{q.reward.gold}G</span>
+                                                            </div>
+                                                            <div className="flex items-center gap-2 bg-indigo-400/5 px-3 py-1.5 rounded-xl border border-indigo-400/10 group-hover:bg-indigo-400/10 transition-colors">
+                                                                <span className="text-sm">✨</span>
+                                                                <span className="text-xs font-black text-indigo-300">{q.reward.exp} EXP</span>
+                                                            </div>
+                                                            {q.reward.currency && (
+                                                                <div className="flex items-center gap-2 bg-emerald-400/5 px-3 py-1.5 rounded-xl border border-emerald-400/10 group-hover:bg-emerald-400/10 transition-colors">
+                                                                    <span className="text-sm">{CURRENCY_ICONS[q.reward.currency.type] || '💎'}</span>
+                                                                    <span className="text-xs font-black text-emerald-400">{q.reward.currency.amount} {q.reward.currency.type === 'lingQi' ? '靈氣' : q.reward.currency.type === 'incense' ? '香火' : '素材'}</span>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            });
+                                        })()}
+                                    </div>
+                                </div>
+                                <div className="text-center text-gray-500 text-[10px] italic">
+                                    ※ 如果佈告欄內容未出現在【任務】選單，請確認任務庫是否已滿。
+                                </div>
                             </div>
                         ) : activeFacility === 'shipyard' ? (
                             <div className="flex-1 w-full flex flex-col items-center justify-center text-center">
