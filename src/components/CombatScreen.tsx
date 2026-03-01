@@ -11,6 +11,7 @@ interface CombatScreenProps {
     onFlee: () => void;
     autoExplore?: boolean;
     weather?: WeatherType;
+    onMinimize?: () => void;
     onAutoHeal?: () => void;
     onRevive?: () => void;
     onUseItem?: (item: any) => void;
@@ -22,7 +23,7 @@ interface CombatScreenProps {
 export const CombatScreen: React.FC<CombatScreenProps> = ({
     player, enemy, onWin, onLose, onFlee, autoExplore, weather,
     onAutoHeal, onRevive, onUseItem, hasWeatherResistance,
-    isMinimized, onMaximize
+    isMinimized, onMaximize, onMinimize
 }) => {
     const [combatStats] = useState({
         attack: player.attack,
@@ -499,7 +500,15 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({
                 {/* Header */}
                 <div className="flex justify-between items-center mb-4">
                     <h2 className="text-lg font-bold text-game-danger flex items-center gap-2"><Sword size={20} /> 戰鬥</h2>
-                    <button onClick={onFlee} disabled={ended} className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-sm font-bold transition disabled:opacity-30"><X size={14} /> 撤退</button>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={onMinimize}
+                            className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-sm font-bold transition text-gray-400 hover:text-white"
+                        >
+                            <ChevronRight size={14} className="rotate-90 md:rotate-0" /> 縮小
+                        </button>
+                        <button onClick={onFlee} disabled={ended} className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-sm font-bold transition disabled:opacity-30"><X size={14} /> 撤退</button>
+                    </div>
                 </div>
 
                 {/* Combatants */}

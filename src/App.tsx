@@ -2878,6 +2878,7 @@ const App: React.FC = () => {
             hasWeatherResistance={hasWeatherResistance}
             isMinimized={isCombatMinimized}
             onMaximize={() => setActiveTab('explore')}
+            onMinimize={() => setIsCombatMinimized(true)}
             onWin={(exp: number, gold: number, skill?: Skill, loot?: GameItem[], eq?: Equipment, finalHp?: number, finalMp?: number) => {
               handleCombatWin(exp, gold, skill, loot, eq, finalHp, finalMp);
             }}
