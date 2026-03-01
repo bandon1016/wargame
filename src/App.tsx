@@ -601,8 +601,11 @@ const App: React.FC = () => {
         },
         (payload) => {
           const data = payload.new;
+          console.log("DEBUG: Received Profile Update", { dbSession: data.session_id, mySession: mySessionId });
+
           // SERVER SIDE ANTI DOUBLE TAB: If session_id in DB is different from ours, block this tab.
           if (data.session_id && data.session_id !== mySessionId) {
+            console.warn("DOUBLE TAB DETECTED! Blocking access.");
             setIsDoubleTabbed(true);
             return;
           }
@@ -642,7 +645,7 @@ const App: React.FC = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [session?.user?.id]);
+  }, [session?.user?.id, mySessionId]); // Added mySessionId to deps to ensure listener uses correct ID
 
   const fetchProfile = async (userId: string) => {
     setLoading(true);
@@ -679,7 +682,12 @@ const App: React.FC = () => {
       });
 
       // NEW TAB WINS: Claim the session for ourself unconditionally
-      supabase.from('profiles').update({ session_id: mySessionId }).eq('id', userId).then();
+      const { error: sessionError } = await supabase.from('profiles').update({ session_id: mySessionId }).eq('id', userId);
+      if (sessionError) {
+        console.error("Failed to claim session:", sessionError);
+      } else {
+        console.log("Session claimed successfully:", mySessionId);
+      }
       // Load saved position
       if (data.current_location_lat === 25.0330 && data.current_location_lng === 121.5654 && data.level === 1) {
         // 新角色，嘗試使用 GPS
