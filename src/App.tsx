@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap, Circle, Polyline, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Compass, Sword, Home, Users, Package, Settings as SettingsIcon, Book, Heart, Shield, Zap, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, MapPin, Loader2, X, PlusCircle, ShieldAlert, TrainFront, Coins, Sparkles, Cpu, Flame, Waves, Diamond, Trophy } from 'lucide-react';
+import { Compass, Sword, Home, Users, Package, Settings as SettingsIcon, Book, Heart, Shield, Zap, ChevronRight, MapPin, Loader2, X, PlusCircle, ShieldAlert, TrainFront, Coins, Sparkles, Cpu, Flame, Waves, Diamond, Trophy, Copy, Check } from 'lucide-react';
 import type { CharacterStats, Equipment, GameItem, Skill, MapPOI, Town, WeatherType, Enemy, AlchemyRecipe, BlacksmithRecipe } from './types/game';
 import { MONSTER_DATABASE, SKILL_DATABASE, ITEM_DATABASE, EQUIPMENT_DATABASE, RARITY_COLORS, WEATHER_TYPES, getRegionByCityName, getRegionalMaterials, getRegionByCoordinates, TOWN_DATABASE, getPartnerAvatar, getRailwayPath, POI_NAMES } from './types/game';
 import { CombatScreen } from './components/CombatScreen';
@@ -50,8 +50,57 @@ const createPoiIcon = (type: keyof typeof POI_ICONS) => L.divIcon({
   iconAnchor: [15, 15],
 });
 
+const createCityLabelIcon = (name: string) => L.divIcon({
+  html: `
+    <div class="flex flex-col items-center">
+      <div class="px-2 py-0.5 bg-black/60 backdrop-blur-md border border-white/20 rounded-full text-[10px] font-black text-white shadow-xl shadow-black/50 whitespace-nowrap">
+        ${name}
+      </div>
+    </div>
+  `,
+  className: 'city-label-icon',
+  iconSize: [60, 20],
+  iconAnchor: [30, -5]
+});
+
+const createConfirmIcon = (label: string) => L.divIcon({
+  html: `
+    <div class="relative flex flex-col items-center group pointer-events-auto">
+      <!-- Floating Card Confirm UI (Mainstream Design) -->
+      <div class="absolute bottom-10 flex flex-col items-center anim-fade-in-up">
+        <div class="bg-black/95 backdrop-blur-2xl border border-game-accent/50 rounded-2xl p-2 shadow-[0_15px_40px_rgba(0,0,0,0.8)] flex flex-col items-center gap-2 min-w-[150px]">
+          <div class="text-[9px] font-black text-game-accent uppercase tracking-[0.2em] mb-0.5 opacity-80">${label}</div>
+          <div class="flex gap-1.5 w-full">
+            <button id="btn-confirm-move" class="flex-1 bg-game-accent hover:bg-white hover:text-game-accent text-white py-2 px-3 rounded-xl font-black text-[11px] transition-all active:scale-90 shadow-lg shadow-game-accent/30 flex items-center justify-center gap-1.5">
+              🚀 出發
+            </button>
+            <button id="btn-cancel-move" class="w-9 h-9 bg-white/10 hover:bg-white/20 text-gray-400 rounded-xl flex items-center justify-center transition-all active:scale-90 border border-white/5">
+              ✕
+            </button>
+          </div>
+        </div>
+        <!-- Arrow -->
+        <div class="w-3.5 h-3.5 bg-black/95 rotate-45 border-r border-b border-game-accent/50 -mt-2"></div>
+      </div>
+      <!-- Pin -->
+      <div class="text-3xl drop-shadow-[0_4px_10px_rgba(0,0,0,0.5)] anim-pulse-slow">📍</div>
+    </div>
+  `,
+  className: 'target-confirm-icon pointer-events-auto',
+  iconSize: [40, 40],
+  iconAnchor: [20, 30]
+});
+
+const TARGET_ICON_SIMPLE = L.divIcon({
+  html: '<div class="text-2xl anim-pulse">📍</div>',
+  className: 'reached-pin',
+  iconSize: [30, 30],
+  iconAnchor: [15, 30]
+});
+
 function MapUpdater({ center, isTraveling }: { center: [number, number], isTraveling: boolean }) {
   const map = useMap();
+  const lastCenterRef = React.useRef<[number, number] | null>(null);
 
   useEffect(() => {
     if (isTraveling) {
@@ -62,7 +111,16 @@ function MapUpdater({ center, isTraveling }: { center: [number, number], isTrave
   }, [isTraveling, map]);
 
   useEffect(() => {
-    map.setView(center, map.getZoom(), { animate: false });
+    // Only setView if center changed significantly or is first run
+    // This avoids sub-pixel jitter during smooth movement
+    const threshold = 0.000001;
+    const latDiff = lastCenterRef.current ? Math.abs(center[0] - lastCenterRef.current[0]) : 1;
+    const lngDiff = lastCenterRef.current ? Math.abs(center[1] - lastCenterRef.current[1]) : 1;
+
+    if (latDiff > threshold || lngDiff > threshold) {
+      map.setView(center, map.getZoom(), { animate: false });
+      lastCenterRef.current = center;
+    }
   }, [center, map]);
   return null;
 }
@@ -179,7 +237,6 @@ const App: React.FC = () => {
   const [inTown, setInTown] = useState<Town | null>(null);
   const [pois, setPois] = useState<MapPOI[]>([]);
   const [targetPosition, setTargetPosition] = useState<[number, number] | null>(null);
-  const [selectedMarkId, setSelectedMarkId] = useState<string | null>(null);
   const [isWalking, setIsWalking] = useState(false);
   const moveDirRef = React.useRef<'n' | 's' | 'e' | 'w' | null>(null);
 
@@ -191,7 +248,9 @@ const App: React.FC = () => {
   const [lootMessage, setLootMessage] = useState<{ title: string; items: { name: string; quantity: number; icon: string }[] } | null>(null);
 
   const [activePoiCombat, setActivePoiCombat] = useState<string | null>(null);
+  const [pendingTarget, setPendingTarget] = useState<{ lat: number, lng: number, label: string } | null>(null);
   const [isMerchantOpen, setIsMerchantOpen] = useState(false);
+  const [copiedUid, setCopiedUid] = useState(false);
   const [isDoubleTabbed, setIsDoubleTabbed] = useState(false);
   const isDoubleTabbedRef = React.useRef(isDoubleTabbed);
   useEffect(() => { isDoubleTabbedRef.current = isDoubleTabbed; }, [isDoubleTabbed]);
@@ -382,9 +441,24 @@ const App: React.FC = () => {
 
   useEffect(() => {
     fetchPois();
-    const poiGenerator = setInterval(fetchPois, 60000); // check 1 min
+    const poiGenerator = setInterval(fetchPois, 60000); // 1 min heart-beat
     return () => clearInterval(poiGenerator);
   }, [fetchPois]);
+
+  // Reactive POI fetching: update when movement ends or significant distance moved
+  const lastFetchedPosRef = React.useRef<[number, number] | null>(null);
+  useEffect(() => {
+    if (isTraveling || isWalking) return;
+
+    // Check distance from last fetch
+    const lastPos = lastFetchedPosRef.current;
+    const dist = lastPos ? Math.hypot(position[0] - lastPos[0], position[1] - lastPos[1]) : 999;
+
+    if (dist > 0.01) { // Approx 1km movement
+      fetchPois();
+      lastFetchedPosRef.current = position;
+    }
+  }, [position, isTraveling, isWalking, fetchPois]);
 
 
 
@@ -490,6 +564,7 @@ const App: React.FC = () => {
             partners: data.partners || [],
             gods: data.gods || [],
             activeGodId: data.active_god_id,
+            uid: data.uid,
           });
         }
       )
@@ -531,6 +606,7 @@ const App: React.FC = () => {
         partners: data.partners || [],
         gods: data.gods || [],
         activeGodId: data.active_god_id,
+        uid: data.uid,
       });
 
       // NEW TAB WINS: Claim the session for ourself unconditionally
@@ -557,6 +633,8 @@ const App: React.FC = () => {
       } else if (data.current_location_lat != null && data.current_location_lng != null) {
         setPosition([data.current_location_lat, data.current_location_lng]);
       }
+      // Immediate fetch after profile load
+      setTimeout(fetchPois, 100);
     } else if (error) {
       console.error('Fetch profile error:', error);
     }
@@ -1544,6 +1622,20 @@ const App: React.FC = () => {
     return player.gods.find(g => g.id === player.activeGodId) || null;
   }, [player?.activeGodId, player?.gods]);
 
+  // Memoize Icons to prevent shaking (re-creation of DIV icons kills performance)
+  const playerIcon = useMemo(() => {
+    const avatar = isTraveling ? '🚂' : isWalking ? '🏃‍♂️' : '🧙‍♂️';
+    return createPlayerIcon(avatar, activeGod?.avatar);
+  }, [isTraveling, isWalking, activeGod?.avatar]);
+
+  const poiIconsMapping = useMemo(() => ({
+    chest: createPoiIcon('chest'),
+    merchant: createPoiIcon('merchant'),
+    elite: createPoiIcon('elite'),
+    altar: createPoiIcon('altar')
+  }), []);
+
+
   const hasWeatherResistance = (type: WeatherType) => {
     if (!activeGod) return false;
     return activeGod.resistanceType === type || activeGod.resistanceType === 'all';
@@ -1694,6 +1786,76 @@ const App: React.FC = () => {
   const nearestTown = TOWN_DATABASE.find(t => getDistance(position[0], position[1], t.lat, t.lng) <= t.radius);
   const nearestPoi = pois.find(p => getDistance(position[0], position[1], p.lat, p.lng) <= 200);
 
+  // Handle clicking on POIs or Towns (require 2 clicks to move)
+  const handleMarkClick = useCallback((id: string, lat: number, lng: number) => {
+    if (isTraveling || inTown || activePoiCombat) return;
+
+    let label = '未知地點';
+    const town = TOWN_DATABASE.find(t => t.id === id);
+    if (town) {
+      label = town.name;
+    } else {
+      const poi = pois.find(p => p.id === id);
+      if (poi) label = POI_NAMES[poi.type] || '神秘地點';
+    }
+
+    if (!isInTaiwan(lat, lng)) {
+      alert('系統偵測前方為汪洋大海或境外區域，勇者無法前往該地！');
+      setPendingTarget(null);
+      return;
+    }
+
+    setPendingTarget({ lat, lng, label });
+  }, [isTraveling, inTown, activePoiCombat, pois]);
+
+  const pendingConfirmIcon = useMemo(() => {
+    if (!pendingTarget) return null;
+    return createConfirmIcon(pendingTarget.label);
+  }, [pendingTarget?.label]);
+
+  // Memoize Map Layers
+  const townLayers = useMemo(() => TOWN_DATABASE.flatMap(t => [
+    <Circle
+      key={`circle-${t.id}`}
+      center={[t.lat, t.lng]}
+      radius={t.radius}
+      pathOptions={{ color: t.color, fillColor: t.color, fillOpacity: 0.1, weight: 2, bubblingMouseEvents: false }}
+      eventHandlers={{
+        click: (e) => {
+          L.DomEvent.stopPropagation(e as any);
+          handleMarkClick(t.id, t.lat, t.lng);
+        }
+      }}
+    />,
+    <Marker
+      key={`label-${t.id}`}
+      position={[t.lat, t.lng]}
+      icon={createCityLabelIcon(t.name)}
+      eventHandlers={{
+        click: (e) => {
+          L.DomEvent.stopPropagation(e as any);
+          handleMarkClick(t.id, t.lat, t.lng);
+        }
+      }}
+    />
+  ]), [handleMarkClick]);
+
+  const poiLayers = useMemo(() => pois.map(p => {
+    return (
+      <Marker
+        key={p.id}
+        position={[p.lat, p.lng]}
+        icon={poiIconsMapping[p.type]}
+        eventHandlers={{
+          click: (e) => {
+            L.DomEvent.stopPropagation(e as any);
+            handleMarkClick(p.id, p.lat, p.lng);
+          }
+        }}
+      />
+    );
+  }), [pois, poiIconsMapping, handleMarkClick]);
+
   if (loading) {
     return <div className="flex items-center justify-center min-h-screen bg-[#0a0e1a] text-game-accent"><Loader2 className="animate-spin w-12 h-12" /></div>;
   }
@@ -1707,43 +1869,18 @@ const App: React.FC = () => {
     })} />;
   }
 
-  // Handle clicking on POIs or Towns (require 2 clicks to move)
-  const handleMarkClick = (id: string, lat: number, lng: number) => {
-    if (isTraveling || inTown || activePoiCombat) return;
-
-    if (selectedMarkId === id) {
-      if (!isInTaiwan(lat, lng)) {
-        alert('系統偵測前方為汪洋大海或境外區域，勇者無法前往該地！');
-        setTargetPosition(null);
-        setIsWalking(false);
-        walkTargetRef.current = null;
-        walkStartRef.current = null;
-        walkStartedAtRef.current = null;
-        return;
-      }
-      setTargetPosition([lat, lng]);
-      setSelectedMarkId(null);
-    } else {
-      setSelectedMarkId(id);
-    }
-  };
 
   // Map Component to handle clicks
   const MapClickHandler = () => {
     useMapEvents({
       click: (e) => {
         if (!isTraveling && !inTown && !activePoiCombat) {
-          setSelectedMarkId(null); // Clear selection on map click
           if (!isInTaiwan(e.latlng.lat, e.latlng.lng)) {
             alert('系統偵測前方為汪洋大海或境外區域，勇者無法前往該地！');
-            setTargetPosition(null);
-            setIsWalking(false);
-            walkTargetRef.current = null;
-            walkStartRef.current = null;
-            walkStartedAtRef.current = null;
+            setPendingTarget(null);
             return;
           }
-          setTargetPosition([e.latlng.lat, e.latlng.lng]);
+          setPendingTarget({ lat: e.latlng.lat, lng: e.latlng.lng, label: '指定座標' });
         }
       },
     });
@@ -1920,43 +2057,38 @@ const App: React.FC = () => {
                 url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
               />
-              {TOWN_DATABASE.map(t => (
-                <Circle
-                  key={t.id}
-                  center={[t.lat, t.lng]}
-                  radius={t.radius}
-                  pathOptions={{ color: t.color, fillColor: t.color, fillOpacity: 0.1, weight: 2 }}
-                  eventHandlers={{ click: () => handleMarkClick(t.id, t.lat, t.lng) }}
-                >
-                  <Popup>{t.name}</Popup>
-                </Circle>
-              ))}
-              {pois.map(p => {
-                let statusLabel = '';
-                // 菁英怪已被鎖定
-                if (p.type === 'elite' && p.lockedBy) {
-                  statusLabel = p.lockedBy === session?.user?.id ? ' (⚔️你的戰鬥)' : ' (⚔️戰鬥中)';
-                }
-                return (
-                  <Marker
-                    key={p.id}
-                    position={[p.lat, p.lng]}
-                    icon={createPoiIcon(p.type)}
-                    eventHandlers={{ click: () => handleMarkClick(p.id, p.lat, p.lng) }}
-                  >
-                    <Popup>{POI_NAMES[p.type]}{statusLabel}</Popup>
-                  </Marker>
-                );
-              })}
-              <Marker position={position} icon={createPlayerIcon(isTraveling ? '🚂' : isWalking ? '🏃‍♂️' : '🧙‍♂️', activeGod?.avatar)}>
+              {townLayers}
+              {poiLayers}
+              <Marker position={position} icon={playerIcon}>
                 <Popup>你的位置</Popup>
               </Marker>
               <MapClickHandler />
               <MapUpdater center={position} isTraveling={isTraveling} />
 
+              {/* Target Confirmation UI (Marker Overlay to prevent jitter) */}
+              {pendingTarget && pendingConfirmIcon && !isWalking && !isTraveling && (
+                <Marker
+                  position={[pendingTarget.lat, pendingTarget.lng]}
+                  icon={pendingConfirmIcon}
+                  eventHandlers={{
+                    click: (e) => {
+                      // Prevent map click behind the confirm card
+                      L.DomEvent.stopPropagation(e as any);
+                      const target = (e.originalEvent.target as HTMLElement);
+                      if (target.id === 'btn-confirm-move' || target.closest('#btn-confirm-move')) {
+                        setTargetPosition([pendingTarget.lat, pendingTarget.lng]);
+                        setPendingTarget(null);
+                      } else if (target.id === 'btn-cancel-move' || target.closest('#btn-cancel-move')) {
+                        setPendingTarget(null);
+                      }
+                    }
+                  }}
+                />
+              )}
+
               {/* Destination Marker */}
-              {targetPosition && (
-                <Marker position={targetPosition} icon={L.divIcon({ html: '<div class="animate-bounce text-2xl">📍</div>', className: 'target-marker', iconSize: [30, 30], iconAnchor: [15, 30] })} />
+              {targetPosition && !pendingTarget && (
+                <Marker position={targetPosition} icon={TARGET_ICON_SIMPLE} />
               )}
 
               {isTraveling && travelPath.length > 0 && (
@@ -2010,39 +2142,6 @@ const App: React.FC = () => {
               </div>
             )}
 
-            {/* D-Pad - Enhanced for Mobile */}
-            <div className="absolute bottom-8 right-6 z-[1000] flex flex-col items-center gap-1.5 touch-none">
-              <button
-                onMouseDown={() => startMove('n')} onMouseUp={stopMove} onMouseLeave={stopMove}
-                onTouchStart={(e) => { e.preventDefault(); startMove('n'); }} onTouchEnd={stopMove}
-                className="w-12 h-12 bg-black/60 backdrop-blur-xl rounded-2xl flex items-center justify-center border border-white/20 active:bg-game-accent/40 active:scale-95 transition-all shadow-xl"
-              >
-                <ChevronUp size={28} />
-              </button>
-              <div className="flex gap-1.5">
-                <button
-                  onMouseDown={() => startMove('w')} onMouseUp={stopMove} onMouseLeave={stopMove}
-                  onTouchStart={(e) => { e.preventDefault(); startMove('w'); }} onTouchEnd={stopMove}
-                  className="w-12 h-12 bg-black/60 backdrop-blur-xl rounded-2xl flex items-center justify-center border border-white/20 active:bg-game-accent/40 active:scale-95 transition-all shadow-xl"
-                >
-                  <ChevronLeft size={28} />
-                </button>
-                <button
-                  onMouseDown={() => startMove('s')} onMouseUp={stopMove} onMouseLeave={stopMove}
-                  onTouchStart={(e) => { e.preventDefault(); startMove('s'); }} onTouchEnd={stopMove}
-                  className="w-12 h-12 bg-black/60 backdrop-blur-xl rounded-2xl flex items-center justify-center border border-white/20 active:bg-game-accent/40 active:scale-95 transition-all shadow-xl"
-                >
-                  <ChevronDown size={28} />
-                </button>
-                <button
-                  onMouseDown={() => startMove('e')} onMouseUp={stopMove} onMouseLeave={stopMove}
-                  onTouchStart={(e) => { e.preventDefault(); startMove('e'); }} onTouchEnd={stopMove}
-                  className="w-12 h-12 bg-black/60 backdrop-blur-xl rounded-2xl flex items-center justify-center border border-white/20 active:bg-game-accent/40 active:scale-95 transition-all shadow-xl"
-                >
-                  <ChevronRight size={28} />
-                </button>
-              </div>
-            </div>
 
             {/* Weather Overlay - Moved to Map */}
             <div className="absolute top-4 right-4 z-[1000]">
@@ -2055,6 +2154,7 @@ const App: React.FC = () => {
                 </div>
               </div>
             </div>
+
 
             {/* Bottom Left Area - Logs & Area Card */}
             <div className="absolute bottom-8 left-6 z-[1000] flex flex-col gap-3 pointer-events-none items-start">
@@ -2185,39 +2285,59 @@ const App: React.FC = () => {
                 </div>
               </div>
               <div className="flex-1 text-center md:text-left">
-                <div className="flex items-center justify-center md:justify-start gap-3 mb-1">
-                  {isEditingNickname ? (
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="text"
-                        value={tempNickname}
-                        onChange={(e) => setTempNickname(e.target.value)}
-                        className="bg-black/40 border border-game-accent/50 rounded-lg px-3 py-1 text-white font-bold outline-none focus:border-game-accent w-40"
-                        autoFocus
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') handleSaveNickname();
-                          if (e.key === 'Escape') setIsEditingNickname(false);
-                        }}
-                      />
-                      <button onClick={handleSaveNickname} className="text-game-accent hover:text-white transition-colors">
-                        <PlusCircle size={20} />
-                      </button>
-                    </div>
-                  ) : (
-                    <h2 className="text-2xl font-black flex items-center gap-2">
-                      {player.nickname || '勇者'}
-                      <button
-                        onClick={() => {
-                          setTempNickname(player.nickname || '勇者');
-                          setIsEditingNickname(true);
-                        }}
-                        className="text-gray-500 hover:text-game-accent transition-colors p-1"
-                      >
-                        <SettingsIcon size={16} />
-                      </button>
-                    </h2>
-                  )}
-                  <span className="text-sm text-game-accent font-bold bg-game-accent/15 px-3 py-1 rounded-full border border-game-accent/30 tracking-tight">Lv.{player.level}</span>
+                <div className="flex flex-col items-center md:items-start">
+                  <div className="flex items-center gap-3">
+                    {isEditingNickname ? (
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={tempNickname}
+                          onChange={(e) => setTempNickname(e.target.value)}
+                          className="bg-black/40 border border-game-accent/50 rounded-lg px-3 py-1 text-white font-bold outline-none focus:border-game-accent w-40"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleSaveNickname();
+                            if (e.key === 'Escape') setIsEditingNickname(false);
+                          }}
+                        />
+                        <button onClick={handleSaveNickname} className="text-game-accent hover:text-white transition-colors">
+                          <PlusCircle size={20} />
+                        </button>
+                      </div>
+                    ) : (
+                      <h2 className="text-2xl font-black flex items-center gap-2">
+                        {player.nickname || '勇者'}
+                        <button
+                          onClick={() => {
+                            setTempNickname(player.nickname || '勇者');
+                            setIsEditingNickname(true);
+                          }}
+                          className="text-gray-500 hover:text-game-accent transition-colors p-1"
+                        >
+                          <SettingsIcon size={16} />
+                        </button>
+                      </h2>
+                    )}
+                    <span className="text-sm text-game-accent font-bold bg-game-accent/15 px-3 py-1 rounded-full border border-game-accent/30 tracking-tight">Lv.{player.level}</span>
+                  </div>
+                  {/* UID Display */}
+                  <div className="flex items-center gap-2 mt-1 px-1.5 py-0.5 bg-white/5 rounded-lg border border-white/5 group/uid">
+                    <span className="text-[11px] font-mono text-gray-500 uppercase tracking-tight">UID:</span>
+                    <span className="text-[11px] font-mono font-bold text-gray-300">{player.uid || '--------'}</span>
+                    <button
+                      onClick={() => {
+                        if (player.uid) {
+                          navigator.clipboard.writeText(player.uid);
+                          setCopiedUid(true);
+                          setTimeout(() => setCopiedUid(false), 2000);
+                        }
+                      }}
+                      className="p-1 text-gray-500 hover:text-game-accent transition-colors"
+                      title="複製 UID"
+                    >
+                      {copiedUid ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} className="group-hover/uid:scale-110" />}
+                    </button>
+                  </div>
                 </div>
                 <div className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-black/20">
                   <table className="w-full text-sm text-left">
@@ -2452,11 +2572,11 @@ const App: React.FC = () => {
               heal: effectiveHeal
             }}
             enemy={currentEnemy}
-            onWin={(exp: number, gold: number, skill?: Skill, loot?: GameItem[], eq?: Equipment, finalHp?: number) => {
-              handleCombatWin(exp, gold, skill, loot, eq, finalHp);
+            onWin={(exp: number, gold: number, skill?: Skill, loot?: GameItem[], eq?: Equipment, finalHp?: number, finalMp?: number) => {
+              handleCombatWin(exp, gold, skill, loot, eq, finalHp, finalMp);
             }}
-            onLose={(finalHp?: number) => {
-              handleCombatLose(finalHp);
+            onLose={(finalHp?: number, finalMp?: number) => {
+              handleCombatLose(finalHp, finalMp);
             }}
             onFlee={() => { setIsCombatAction(false); setAutoExplore(false); }}
             autoExplore={autoExplore}

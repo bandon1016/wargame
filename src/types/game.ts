@@ -143,6 +143,7 @@ export interface CharacterStats {
     items: GameItem[];
     activeQuests?: Quest[];
     completedQuests?: string[];
+    uid: string;
     // 神明系統 (新)
     gods: God[];
     activeGodId: string | null;

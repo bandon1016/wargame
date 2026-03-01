@@ -119,7 +119,7 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
     };
 
     const drawGod = () => {
-        if (player.incense < 1000) { alert('香火不足！招募神明需要 1000 香火'); return; }
+        if (player.incense < 100) { alert('香火不足！招募神明需要 100 香火'); return; }
         setGodDrawLoading(true); setDrawGodResult(null);
 
         setTimeout(() => {
@@ -148,7 +148,7 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
             onUpdatePlayer(prev => {
                 const nextState = {
                     ...prev,
-                    incense: prev.incense - 1000,
+                    incense: prev.incense - 100,
                     gods: newGod ? [...prev.gods, newGod] : prev.gods
                 };
                 saveProfile(nextState);
@@ -585,23 +585,23 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
                                     ) : (
                                         <div className="w-full">
                                             <div className="absolute top-4 right-4 bg-black/60 px-4 py-1.5 rounded-full border border-amber-500/30 text-xs font-black text-amber-500 whitespace-nowrap tracking-widest shadow-lg animate-pulse z-10 hidden md:block">10 PULLS</div>
-                                            <div className={`grid ${drawn.length > 5 ? 'grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4' : 'grid-cols-2 lg:grid-cols-3'} gap-4 md:gap-5 max-h-[65vh] md:max-h-[60vh] overflow-y-auto custom-scrollbar p-2 md:p-4`}>
+                                            <div className={`grid ${drawn.length > 5 ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4' : 'grid-cols-2 lg:grid-cols-3'} gap-2 sm:gap-4 md:gap-5 max-h-[65vh] md:max-h-[60vh] overflow-y-auto custom-scrollbar p-1 md:p-4`}>
                                                 {drawn.map((p, i) => (
                                                     <div
                                                         key={p.id}
-                                                        className={`p-4 md:p-5 rounded-[24px] border-2 flex flex-col items-center justify-center relative bg-black/40 hover:bg-black/60 transition-all ${RARITY_COLORS[p.rarity!].border} ${RARITY_COLORS[p.rarity!].glow} animate-in zoom-in fill-mode-both shadow-lg`}
+                                                        className={`p-3 sm:p-5 rounded-2xl sm:rounded-[24px] border-2 flex flex-col items-center justify-center relative bg-black/40 hover:bg-black/60 transition-all ${RARITY_COLORS[p.rarity!].border} ${RARITY_COLORS[p.rarity!].glow} animate-in zoom-in fill-mode-both shadow-lg`}
                                                         style={{ animationDelay: `${i * 100}ms` }}
                                                     >
                                                         {p.rarity! >= 4 && (
-                                                            <div className="absolute inset-0 bg-white/5 rounded-[24px] pointer-events-none animate-pulse" />
+                                                            <div className="absolute inset-0 bg-white/5 rounded-2xl sm:rounded-[24px] pointer-events-none animate-pulse" />
                                                         )}
                                                         {p.rarity! === 5 && (
-                                                            <div className="absolute -top-2 -right-2 bg-yellow-400 text-black text-[10px] font-black px-2 py-1 rounded shadow-lg transform rotate-12 animate-bounce z-10">SSR</div>
+                                                            <div className="absolute -top-1.5 -right-1.5 bg-yellow-400 text-black text-[8px] sm:text-[10px] font-black px-1.5 py-0.5 rounded shadow-lg transform rotate-12 animate-bounce z-10">SSR</div>
                                                         )}
-                                                        <div className={`text-4xl md:text-5xl mb-3 transform hover:scale-110 transition-transform drop-shadow-[0_0_10px_rgba(255,255,255,0.2)] ${p.rarity! >= 4 ? 'animate-bounce' : ''}`}>{getLatestAvatar(p.name, p.avatar)}</div>
-                                                        <div className="flex justify-center mb-2 h-3.5"><Stars n={p.rarity!} /></div>
-                                                        <div className="font-black text-xs md:text-sm text-white text-center w-full leading-tight drop-shadow-sm">{p.name}</div>
-                                                        <div className="mt-2 text-[9px] font-bold text-gray-400 bg-black/30 px-2 py-0.5 rounded-full border border-white/5 uppercase opacity-80">ATK {p.power}</div>
+                                                        <div className={`text-3xl sm:text-5xl mb-2 sm:mb-3 transform hover:scale-110 transition-transform drop-shadow-[0_0_10px_rgba(255,255,255,0.2)] ${p.rarity! >= 4 ? 'animate-bounce' : ''}`}>{getLatestAvatar(p.name, p.avatar)}</div>
+                                                        <div className="flex justify-center mb-1.5 h-3 scale-75 sm:scale-100"><Stars n={p.rarity!} /></div>
+                                                        <div className="font-black text-[10px] sm:text-sm text-white text-center w-full leading-tight drop-shadow-sm truncate px-1">{p.name}</div>
+                                                        <div className="mt-1.5 text-[8px] sm:text-[9px] font-bold text-gray-400 bg-black/30 px-1.5 py-0.5 rounded-full border border-white/5 uppercase opacity-80">ATK {p.power}</div>
                                                     </div>
                                                 ))}
                                             </div>
@@ -880,17 +880,34 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
                                     </div>
 
                                     <h3 className="text-lg sm:text-xl font-black text-white mb-1 sm:mb-2 italic">焚香請願</h3>
-                                    <p className="text-[10px] sm:text-xs text-gray-500 text-center mb-6 sm:mb-8 leading-relaxed font-bold">
-                                        消耗 1000 香火進行請願<br />
-                                        <span className="text-red-400">極低機率</span>獲得隨機本島神明
+                                    <p className="text-[10px] sm:text-xs text-gray-400 text-center mb-4 sm:mb-6 leading-relaxed font-bold">
+                                        消耗 100 香火進行請願<br />
+                                        <span className="text-red-400">誠心期盼神明降臨</span>
                                     </p>
+
+                                    {/* God Probability Display */}
+                                    <div className="w-full bg-black/40 rounded-2xl p-4 border border-white/5 mb-6 sm:mb-8">
+                                        <h4 className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-3 flex items-center justify-center gap-2">
+                                            <ShieldAlert size={12} className="text-red-400" /> 出現機率
+                                        </h4>
+                                        <div className="flex justify-around items-center">
+                                            <div className="flex flex-col items-center">
+                                                <span className="text-red-400 font-black text-base">2.0%</span>
+                                                <span className="text-[9px] text-gray-500 font-bold">神明降臨</span>
+                                            </div>
+                                            <div className="w-[1px] h-8 bg-white/5" />
+                                            <div className="flex flex-col items-center">
+                                                <span className="text-gray-400 font-black text-base">98.0%</span>
+                                                <span className="text-[9px] text-gray-500 font-bold">緣分未到</span>
+                                            </div>
+                                        </div>
+                                    </div>
 
                                     <button
                                         onClick={drawGod}
-                                        disabled={godDrawLoading || player.incense < 1000}
+                                        disabled={godDrawLoading || player.incense < 100}
                                         className="w-full py-3 sm:py-4 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-black rounded-2xl transition-all shadow-lg active:scale-95 disabled:opacity-30 disabled:grayscale mb-4 flex items-center justify-center gap-2 group relative overflow-hidden text-sm sm:text-base"
                                     >
-                                        <div className="absolute inset-0 bg-white/10 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
                                         {godDrawLoading ? '儀式進行中...' : <><Sparkles size={16} /> 開始招募</>}
                                     </button>
 
