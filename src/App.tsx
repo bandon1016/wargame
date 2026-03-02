@@ -895,7 +895,25 @@ const App: React.FC = () => {
         started_at: walkSaveData.walk_started_at,
         duration: walkDurationSecRef.current
       },
-      p_active_god_id: p.activeGodId
+      p_active_god_id: p.activeGodId,
+      p_partners: p.partners,
+      p_buildings: p.buildings,
+      p_gold: p.gold,
+      p_base_materials: p.baseMaterials,
+      p_equipment: p.equipment,
+      p_items: p.items,
+      p_skills: p.skills,
+      p_gods: p.gods,
+      p_equipped_weapon: p.equippedWeapon,
+      p_equipped_armor: p.equippedArmor,
+      p_equipped_helmet: p.equippedHelmet,
+      p_equipped_boots: p.equippedBoots,
+      p_equipped_accessory: p.equippedAccessory,
+      p_ling_qi: p.lingQi,
+      p_tech_fragments: p.techFragments,
+      p_incense: p.incense,
+      p_salt_crystals: p.saltCrystals,
+      p_premium_gems: p.premiumGems
     });
 
     if (syncError) {
