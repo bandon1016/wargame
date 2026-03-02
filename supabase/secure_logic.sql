@@ -346,12 +346,15 @@ BEGIN
     SELECT (elem->>'rarity')::integer INTO v_rarity
     FROM jsonb_array_elements(v_profile.partners) AS elem
     WHERE elem->>'id' = p_material_ids[1];
-
-    IF v_rarity IS NULL OR v_rarity > 4 THEN RAISE EXCEPTION 'Invalid material rarity'; END IF;
+    IF v_rarity IS NULL THEN 
+        RAISE EXCEPTION '找不到素材 (ID: %)，請重新整理', p_material_ids[1]; 
+    END IF;
+    
+    IF v_rarity > 4 THEN RAISE EXCEPTION 'Invalid material rarity: %', v_rarity; END IF;
 
     FOR i IN 1..v_count LOOP
         IF NOT EXISTS (SELECT 1 FROM jsonb_array_elements(v_profile.partners) AS elem WHERE elem->>'id' = p_material_ids[i] AND (elem->>'rarity')::integer = v_rarity) THEN
-            RAISE EXCEPTION 'Material % not found or rarity mismatch', p_material_ids[i];
+            RAISE EXCEPTION '素材 % 不存在或星級不符，請重新選擇', p_material_ids[i];
         END IF;
     END LOOP;
 

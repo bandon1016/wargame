@@ -85,14 +85,20 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
         setSynthAnim(true);
         setSynthResults(null);
         setSynthSuccessCount(0);
-        setSynthResults(null);
-        setSynthSuccessCount(0);
 
         setRpcPending?.(true);
         setTimeout(async () => {
             try {
+                // Pre-check: Ensure all selected materials still exist in current player state
+                const actualPartnersIds = new Set(player.partners.map(p => p.id));
+                const validSelection = selectedMaterials.slice(0, synthCount * 4).filter(id => actualPartnersIds.has(id));
+
+                if (validSelection.length < 4) {
+                    throw new Error('素材資料已過期或不存在，請重新選擇');
+                }
+
                 const { data, error } = await supabase.rpc('secure_synthesis', {
-                    p_material_ids: selectedMaterials.slice(0, synthCount * 4)
+                    p_material_ids: validSelection
                 });
 
                 if (error) throw error;
