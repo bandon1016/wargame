@@ -376,6 +376,7 @@ export interface CharacterStats {
     gods: God[];
     activeGodId: string | null;
     quests: DailyQuest[];
+    updatedAt?: number; // Unix timestamp (ms) for state versioning
 }
 
 export interface God {

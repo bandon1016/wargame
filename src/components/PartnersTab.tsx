@@ -10,6 +10,7 @@ interface Props {
     saveProfile: (p: CharacterStats) => void;
     isCombatAction: boolean;
     mapServerProfile: (data: any) => CharacterStats;
+    refreshProfile?: () => void;
     setRpcPending?: (val: boolean) => void;
 }
 
@@ -29,7 +30,7 @@ const Stars = ({ n }: { n: number }) => (
     <div className="flex">{Array.from({ length: n }).map((_, i) => <Star key={i} size={10} fill="#fbbf24" className="text-game-gold" />)}</div>
 );
 
-export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfile, isCombatAction, mapServerProfile, setRpcPending }) => {
+export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfile, isCombatAction, mapServerProfile, refreshProfile, setRpcPending }) => {
     const [anim, setAnim] = useState(false);
     const [drawn, setDrawn] = useState<Partner[] | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -66,16 +67,30 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
     };
 
     const handleQuickSelect = () => {
-        const available = player.partners.filter(p => p.rarity === synthRarity && !p.isDeployed && !player.buildings.some(b => b.assignedPartners?.includes(p.id)));
+        // Extra Guard: Filter out any selected materials that are no longer in player's partners
+        const currentIds = new Set(player.partners.map(p => p.id));
+        const stillValidSelections = selectedMaterials.filter(id => currentIds.has(id));
 
-        if (available.length < 4) {
+        const available = player.partners.filter(p =>
+            p.rarity === synthRarity &&
+            !p.isDeployed &&
+            !player.buildings.some(b => b.assignedPartners?.includes(p.id)) &&
+            !stillValidSelections.includes(p.id) // Don't re-pick what's already chosen
+        );
+
+        if (available.length < 4 && stillValidSelections.length < 4) {
             alert('符合條件的素材數量不足 4 張');
             return;
         }
 
-        const countToSelect = Math.floor(available.length / 4) * 4;
-        const toSelect = available.slice(0, countToSelect).map(p => p.id);
-        setSelectedMaterials(toSelect);
+        const moreNeeded = Math.floor((available.length + stillValidSelections.length) / 4) * 4 - stillValidSelections.length;
+        if (moreNeeded <= 0 && stillValidSelections.length < 4) {
+            alert('符合條件的素材數量不足 4 張');
+            return;
+        }
+
+        const toAdd = available.slice(0, Math.max(0, moreNeeded)).map(p => p.id);
+        setSelectedMaterials([...stillValidSelections, ...toAdd]);
     };
 
     const handleSynthesis = () => {
@@ -107,9 +122,14 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
                     onUpdatePlayer(mapServerProfile(data.updated_profile));
                 }
 
+                // Explicit Refetch to ensure state is absolutely fresh and in sync with DB
+                refreshProfile?.();
+
                 if (data) {
                     setSynthResults(data.results || []);
                     setSynthSuccessCount(data.success_count || 0);
+                    // Clear selection immediately after success so background cards list is clean
+                    setSelectedMaterials([]);
                 }
             } catch (err: any) {
                 alert('合成失敗: ' + (err.message || '未知錯誤'));

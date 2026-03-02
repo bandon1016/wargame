@@ -270,6 +270,8 @@ const App: React.FC = () => {
 
   const [player, setPlayer] = useState<CharacterStats | null>(null);
   const playerRef = React.useRef<CharacterStats | null>(player);
+  useEffect(() => { playerRef.current = player; }, [player]);
+
   const [weather, setWeather] = useState<WeatherType>('sunny');
   const weatherRef = React.useRef<WeatherType>(weather);
   const [areaName, setAreaName] = useState('載入中...');
@@ -606,68 +608,7 @@ const App: React.FC = () => {
     };
   }, [session?.user?.id, mySessionId]);
 
-  // Realtime Sync for multi-browser support
-  useEffect(() => {
-    if (!session?.user?.id) return;
 
-    const channel = supabase
-      .channel(`profile_realtime_${session.user.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'profiles',
-          filter: `id=eq.${session.user.id}`,
-        },
-        (payload) => {
-          const data = payload.new;
-          console.log("DEBUG: Received Profile Update", { dbSession: data.session_id, mySession: mySessionId });
-
-          // SERVER SIDE ANTI DOUBLE TAB: If session_id in DB is different from ours, block this tab.
-          if (data.session_id && data.session_id !== mySessionId) {
-            console.warn("DOUBLE TAB DETECTED! Blocking access.");
-            setIsDoubleTabbed(true);
-            return;
-          }
-          // Only update if it's not the current player state (basic check via updated_at or just update to be sure)
-          setPlayer({
-            nickname: data.nickname,
-            level: data.level, exp: data.exp, maxExp: data.max_exp,
-            hp: data.hp, maxHp: data.max_hp, mp: data.mp ?? 50, maxMp: data.max_mp ?? (40 + (data.level * 10)), attack: data.attack, defense: data.defense,
-            gold: data.gold, baseMaterials: data.base_materials,
-            lingQi: data.ling_qi ?? 0,
-            techFragments: data.tech_fragments ?? 0,
-            incense: data.incense ?? 0,
-            saltCrystals: data.salt_crystals ?? 0,
-            premiumGems: data.premium_gems ?? 0,
-            buildings: data.buildings || [],
-            equipment: data.equipment || [],
-            equippedWeapon: data.equipped_weapon,
-            equippedArmor: data.equipped_armor,
-            equippedHelmet: data.equipped_helmet,
-            equippedBoots: data.equipped_boots,
-            equippedAccessory: data.equipped_accessory,
-            items: data.items || [],
-            skills: (data.skills || []).map((s: any) => ({
-              id: s.id,
-              level: s.level ?? 1,
-              fragments: s.fragments ?? 0
-            })),
-            partners: data.partners || [],
-            gods: data.gods || [],
-            activeGodId: data.active_god_id,
-            quests: Array.isArray(data.quests) ? data.quests : [],
-            uid: data.uid || data.uid_12_code,
-          });
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [session?.user?.id, mySessionId]); // Added mySessionId to deps to ensure listener uses correct ID
 
   // Authoritative State Mapper: Maps DB profile fields to React state fields
   const mapServerProfile = useCallback((data: any): CharacterStats => {
@@ -712,9 +653,56 @@ const App: React.FC = () => {
       activeGodId: data.active_god_id,
       quests: Array.isArray(data.quests) ? data.quests : [], // Ensure Array
       uid: data.uid || data.uid_12_code || 'G-0000', // Try fallback
-      id: data.id
+      id: data.id,
+      updatedAt: data.updated_at ? new Date(data.updated_at).getTime() : Date.now()
     };
   }, []);
+
+  // Realtime Sync for multi-browser support
+  useEffect(() => {
+    if (!session?.user?.id) return;
+
+    const channel = supabase
+      .channel(`profile_realtime_${session.user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'profiles',
+          filter: `id=eq.${session.user.id}`,
+        },
+        (payload) => {
+          const data = payload.new;
+          console.log("DEBUG: Received Profile Update", { dbSession: data.session_id, mySession: mySessionId });
+
+          // SERVER SIDE ANTI DOUBLE TAB: If session_id in DB is different from ours, block this tab.
+          if (data.session_id && data.session_id !== mySessionId) {
+            console.warn("DOUBLE TAB DETECTED! Blocking access.");
+            setIsDoubleTabbed(true);
+            return;
+          }
+
+          // Authoritative Versioning: Only update state if server data is NEWER than current frontend state
+          const serverUpdatedAt = data.updated_at ? new Date(data.updated_at).getTime() : 0;
+          const currentUpdatedAt = playerRef.current?.updatedAt || 0;
+
+          if (serverUpdatedAt > currentUpdatedAt) {
+            console.log("DEBUG: Applying newer profile data from server", { serverUpdatedAt, currentUpdatedAt });
+            setPlayer(mapServerProfile(data));
+          } else {
+            console.log("DEBUG: Ignored stale/current profile update from realtime", { serverUpdatedAt, currentUpdatedAt });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [session?.user?.id, mySessionId, mapServerProfile]);
+
+
 
   const fetchProfile = async (userId: string) => {
     setLoading(true);
@@ -2577,7 +2565,7 @@ const App: React.FC = () => {
         )}
 
         {/* ─── PARTNERS ─── */}
-        {activeTab === 'partners' && <PartnersTab player={player!} onUpdatePlayer={setPlayer as any} saveProfile={saveProfile} isCombatAction={isCombatAction} mapServerProfile={mapServerProfile} setRpcPending={(val: boolean) => { isRpcPendingRef.current = val; }} />}
+        {activeTab === 'partners' && <PartnersTab player={player!} onUpdatePlayer={setPlayer as any} saveProfile={saveProfile} isCombatAction={isCombatAction} mapServerProfile={mapServerProfile} refreshProfile={() => fetchProfile(session.user.id)} setRpcPending={(val: boolean) => { isRpcPendingRef.current = val; }} />}
 
         {activeTab === 'home' && <HomeTab player={player!} onUpdatePlayer={setPlayer as any} saveProfile={saveProfile} />}
 
