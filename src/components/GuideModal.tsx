@@ -83,8 +83,26 @@ export const GuideModal: React.FC<GuideModalProps> = ({ onClose }) => {
                     <li><strong className="text-white">自動化領地建設：</strong>擁有專屬的發展領地，可自由興建並升級「資源工坊」與「淘金礦場」。即使主將出外征戰，領地依然能日夜不休地產出建材與財富。</li>
                     <li><strong className="text-white">招募菁英夥伴：</strong>透過資源招致各路雄才加入您的麾下。</li>
                     <li><strong className="text-white">指派打工：</strong>拔擢閒置夥伴前往工坊或礦場任職。憑藉各自的職業專長（例如擅長防禦的騎士極度適任礦場戍衛），將大幅催化領地的生產效率。</li>
-                    <li><strong className="text-white">溫暖助戰：</strong>將精銳夥伴編入戰鬥小隊，他們不僅會隨之吸取經驗、共同成長，更能在身側為主角提供巨額的戰力加成，甚至於激戰中定時施放「治癒光輝」逆轉乾坤。</li>
+                    <li><strong className="text-white">溫留助戰：</strong>將精銳夥伴編入戰鬥小隊，他們不僅會隨之吸取經驗、共同成長，更能在身側為主角提供巨額的戰力加成，甚至於激戰中定時施放「治癒光輝」逆轉乾坤。</li>
                 </ul>
+            )
+        },
+        {
+            id: 'gods',
+            title: '神明護駕與環境抗性',
+            icon: <Sparkles size={18} className="text-amber-300" />,
+            emoji: '🏮',
+            content: (
+                <div className="space-y-4 text-sm text-gray-300 leading-relaxed">
+                    <p>在充滿靈氣的島嶼上，諸神默默守護著每一位勇者。透過累積「香火」，您可以與台澎金馬的神明建立深厚的羈絆。</p>
+                    <div className="bg-amber-900/20 p-3 rounded-lg border border-amber-500/20 space-y-2">
+                        <ul className="space-y-2">
+                            <li><strong className="text-white">神社祈願：</strong>消耗香火進行祈願，有機會迎請「天上聖母」、「福德正神」等神明降臨護駕。</li>
+                            <li><strong className="text-white">無視天氣懲罰：</strong>惡劣天氣通常會大幅降低移動速度，但特定的神明具有專屬的<span className="text-amber-400 font-bold">環境抗性</span>（例如媽祖抗雨天、土地公抗濃霧），讓您在風雨中依然大步前行。</li>
+                            <li><strong className="text-white">神力升級：</strong>利用多餘的香火來提升神明等級，進一步強化其賦予您的屬性加成與守護屏障。</li>
+                        </ul>
+                    </div>
+                </div>
             )
         },
         {
@@ -98,7 +116,7 @@ export const GuideModal: React.FC<GuideModalProps> = ({ onClose }) => {
                     <div className="grid grid-cols-1 gap-2">
                         {[
                             { name: '金幣 / TWD', icon: '💰', desc: '商業重鎮的基礎貨幣。', color: 'text-amber-400' },
-                            { name: '香火 (Incense)', icon: <Flame size={14} className="text-red-400" />, desc: '祭壇產出，用於夥伴召喚與契約。', color: 'text-red-400' },
+                            { name: '香火 (Incense)', icon: <Flame size={14} className="text-red-400" />, desc: '獲取神明護駕、升級神力與契約夥伴的關鍵能量。', color: 'text-red-400' },
                             { name: '仙草靈氣 (LingQi)', icon: <Sparkles size={14} className="text-emerald-400" />, desc: '菁英掉落，提昇秘術技能級別。', color: 'text-emerald-400' },
                             { name: '科技碎片 (Tech)', icon: <Cpu size={14} className="text-sky-400" />, desc: '尖端產業精華，用於神兵打造。', color: 'text-sky-400' },
                             { name: '藍寶靈石 (Gems)', icon: <Diamond size={14} className="text-indigo-400" />, desc: '極其稀有，可瞬間加速設施建設。', color: 'text-indigo-400' },

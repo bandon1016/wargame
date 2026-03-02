@@ -6,6 +6,8 @@ create table public.profiles (
   max_exp integer default 100,
   hp integer default 100,
   max_hp integer default 100,
+  mp double precision default 50,
+  max_mp integer default 50,
   attack integer default 12,
   defense integer default 4,
   gold double precision default 500,
@@ -48,6 +50,7 @@ create table public.profiles (
   walk_start_lat double precision default null,
   walk_start_lng double precision default null,
   walk_started_at timestamp with time zone default null,
+  walk_duration_seconds double precision default null,
   
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null,
@@ -204,9 +207,9 @@ create or replace function public.secure_sync_profile(
   p_lng double precision,
   p_hp integer,
   p_mp double precision,
-  p_exp integer,
   p_travel_data jsonb default null,
-  p_walk_data jsonb default null
+  p_walk_data jsonb default null,
+  p_active_god_id text default null
 )
 returns public.profiles
 language plpgsql
@@ -231,8 +234,7 @@ begin
     current_location_lng = p_lng,
     hp = p_hp,
     mp = p_mp,
-    exp = p_exp,
-    travel_path = p_travel_data->'path',
+    travel_path = (p_travel_data->'path'),
     travel_started_at = (p_travel_data->>'started_at')::timestamp with time zone,
     travel_duration_seconds = (p_travel_data->>'duration')::double precision,
     walk_target_lat = (p_walk_data->>'target_lat')::double precision,
@@ -240,6 +242,8 @@ begin
     walk_start_lat = (p_walk_data->>'start_lat')::double precision,
     walk_start_lng = (p_walk_data->>'start_lng')::double precision,
     walk_started_at = (p_walk_data->>'started_at')::timestamp with time zone,
+    walk_duration_seconds = (p_walk_data->>'duration')::double precision,
+    active_god_id = p_active_god_id,
     updated_at = now()
   where id = auth.uid()
   returning * into v_profile;

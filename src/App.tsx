@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap, Circle, Polyline, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Compass, Sword, Home, Users, Package, Settings as SettingsIcon, Book, Heart, Shield, Zap, ChevronRight, MapPin, Loader2, X, PlusCircle, ShieldAlert, TrainFront, Coins, Sparkles, Cpu, Flame, Waves, Diamond, Trophy, Copy, Check, ScrollText } from 'lucide-react';
+import { Compass, Sword, Home, Users, Package, Settings as SettingsIcon, Book, Heart, Shield, Zap, ChevronRight, MapPin, Loader2, X, PlusCircle, ShieldAlert, TrainFront, Coins, Sparkles, Cpu, Flame, Waves, Diamond, Trophy, Copy, Check, ScrollText, TrendingUp } from 'lucide-react';
 import type { CharacterStats, Equipment, GameItem, Skill, MapPOI, Town, WeatherType, Enemy, AlchemyRecipe, BlacksmithRecipe, ElementType } from './types/game';
 import { MONSTER_DATABASE, SKILL_DATABASE, ITEM_DATABASE, EQUIPMENT_DATABASE, RARITY_COLORS, WEATHER_TYPES, getRegionByCityName, getRegionalMaterials, getRegionByCoordinates, TOWN_DATABASE, getPartnerAvatar, getRailwayPath, POI_NAMES, ELEMENT_META } from './types/game';
 import { CombatScreen } from './components/CombatScreen';
@@ -51,6 +51,21 @@ const createPoiIcon = (type: keyof typeof POI_ICONS) => L.divIcon({
   className: 'custom-poi-marker',
   iconSize: [30, 30],
   iconAnchor: [15, 15],
+});
+
+const FACILITY_ICONS: Record<string, string> = {
+  shipyard: '⛴️',
+  dock: '⚓',
+};
+const createFacilityIcon = (type: string, label: string) => L.divIcon({
+  html: `
+  <div style="display:flex; flex-direction:column; align-items:center; gap:2px;">
+    <div style="font-size:22px; filter:drop-shadow(0 2px 6px rgba(0,0,0,0.8));">${FACILITY_ICONS[type] || '🏛️'}</div>
+    <div style="font-size:9px; font-weight:900; color:#93c5fd; background:rgba(0,0,0,0.75); border:1px solid rgba(255,255,255,0.15); padding:1px 5px; border-radius:99px; white-space:nowrap; backdrop-filter:blur(4px);">${label}</div>
+  </div>`,
+  className: 'facility-static-marker',
+  iconSize: [50, 42],
+  iconAnchor: [25, 42],
 });
 
 const createCityLabelIcon = (name: string) => L.divIcon({
@@ -248,6 +263,7 @@ const App: React.FC = () => {
   const positionRef = React.useRef<[number, number]>(position);
   const [activeTab, setActiveTab] = useState('explore');
   const [isCombatMinimized, setIsCombatMinimized] = useState(false);
+  const [initialFacility, setInitialFacility] = useState<'shipyard' | 'dock' | null>(null);
 
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -268,10 +284,13 @@ const App: React.FC = () => {
   const walkTargetRef = React.useRef<[number, number] | null>(null);
   const walkStartRef = React.useRef<[number, number] | null>(null);
   const walkStartedAtRef = React.useRef<Date | null>(null);
+  const walkDurationSecRef = React.useRef<number>(0);
   const lastSafePositionRef = React.useRef<[number, number]>([25.0330, 121.5654]); // 紀錄最後在陸地的安全座標
   const [lootMessage, setLootMessage] = useState<{ title: string; items: { name: string; quantity: number; icon: string }[]; gold?: number; exp?: number } | null>(null);
 
   const [activePoiCombat, setActivePoiCombat] = useState<string | null>(null);
+  const [batchUseItem, setBatchUseItem] = useState<GameItem | null>(null);
+  const [batchAmount, setBatchAmount] = useState<number>(1);
   const [pendingTarget, setPendingTarget] = useState<{ lat: number, lng: number, label: string } | null>(null);
   const [isMerchantOpen, setIsMerchantOpen] = useState(false);
   const [isWeatherPanelOpen, setIsWeatherPanelOpen] = useState(false);
@@ -637,7 +656,8 @@ const App: React.FC = () => {
             partners: data.partners || [],
             gods: data.gods || [],
             activeGodId: data.active_god_id,
-            uid: data.uid,
+            quests: Array.isArray(data.quests) ? data.quests : [],
+            uid: data.uid || data.uid_12_code,
           });
         }
       )
@@ -648,39 +668,58 @@ const App: React.FC = () => {
     };
   }, [session?.user?.id, mySessionId]); // Added mySessionId to deps to ensure listener uses correct ID
 
+  // Authoritative State Mapper: Maps DB profile fields to React state fields
+  const mapServerProfile = useCallback((data: any): CharacterStats => {
+    return {
+      nickname: data.nickname,
+      level: data.level,
+      exp: data.exp,
+      maxExp: data.max_exp,
+      hp: data.hp,
+      maxHp: data.max_hp,
+      mp: data.mp ?? 50,
+      maxMp: data.max_mp ?? (40 + (data.level * 10)),
+      attack: data.attack,
+      defense: data.defense,
+      gold: data.gold,
+      baseMaterials: data.base_materials,
+      lingQi: data.ling_qi ?? 0,
+      techFragments: data.tech_fragments ?? 0,
+      incense: data.incense ?? 0,
+      saltCrystals: data.salt_crystals ?? 0,
+      premiumGems: data.premium_gems ?? 0,
+      buildings: data.buildings || [],
+      equipment: data.equipment || [],
+      equippedWeapon: data.equipped_weapon,
+      equippedArmor: data.equipped_armor,
+      equippedHelmet: data.equipped_helmet,
+      equippedBoots: data.equipped_boots,
+      equippedAccessory: data.equipped_accessory,
+      items: (data.items || []).map((it: any) => ({
+        ...it,
+        // Fallback for missing descriptions/icons from server logic merges
+        description: it.description || ITEM_DATABASE.find(d => d.id === it.id)?.description || '探險獲得的道具',
+        icon: it.icon || ITEM_DATABASE.find(d => d.id === it.id)?.icon || '🧪'
+      })),
+      skills: (data.skills || []).map((s: any) => ({
+        id: s.id,
+        level: s.level ?? 1,
+        fragments: s.fragments ?? 0
+      })),
+      partners: data.partners || [],
+      gods: data.gods || [],
+      activeGodId: data.active_god_id,
+      quests: Array.isArray(data.quests) ? data.quests : [], // Ensure Array
+      uid: data.uid || data.uid_12_code || 'G-0000', // Try fallback
+      id: data.id
+    };
+  }, []);
+
   const fetchProfile = async (userId: string) => {
     setLoading(true);
     const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
     if (data) {
-      // Decode json fields if they were stored as JSON strings or raw objects
-      setPlayer({
-        nickname: data.nickname,
-        level: data.level, exp: data.exp, maxExp: data.max_exp,
-        hp: data.hp, maxHp: data.max_hp, mp: data.mp ?? 50, maxMp: data.max_mp ?? (40 + (data.level * 10)), attack: data.attack, defense: data.defense,
-        gold: data.gold, baseMaterials: data.base_materials,
-        lingQi: data.ling_qi ?? 0,
-        techFragments: data.tech_fragments ?? 0,
-        incense: data.incense ?? 0,
-        saltCrystals: data.salt_crystals ?? 0,
-        premiumGems: data.premium_gems ?? 0,
-        buildings: data.buildings || [],
-        equipment: data.equipment || [],
-        equippedWeapon: data.equipped_weapon,
-        equippedArmor: data.equipped_armor,
-        equippedHelmet: data.equipped_helmet,
-        equippedBoots: data.equipped_boots,
-        equippedAccessory: data.equipped_accessory,
-        items: data.items || [],
-        skills: (data.skills || []).map((s: any) => ({
-          id: s.id,
-          level: s.level ?? 1,
-          fragments: s.fragments ?? 0
-        })),
-        partners: data.partners || [],
-        gods: data.gods || [],
-        activeGodId: data.active_god_id,
-        uid: data.uid,
-      });
+      setPlayer(mapServerProfile(data));
 
       // NEW TAB WINS: Claim the session for ourself unconditionally
       const { error: sessionError } = await supabase.from('profiles').update({ session_id: mySessionId }).eq('id', userId);
@@ -717,8 +756,26 @@ const App: React.FC = () => {
       console.error('Fetch profile error:', error);
     }
 
+    // Speed calculation helper for restoration
+    const getCurrentSpeedPerSec = () => {
+      // Calculate weather (deterministic)
+      const pool: WeatherType[] = ['sunny', 'sunny', 'sunny', 'sunny', 'rainy', 'rainy', 'foggy', 'stormy'];
+      const WEATHER_CYCLE_MS = 10 * 60 * 1000;
+      const slot = Math.floor(Date.now() / WEATHER_CYCLE_MS);
+      const currentWType = pool[(slot * 31337) % pool.length];
+
+      // Check resistance if god is present
+      const activeGodId = data.active_god_id;
+      const gods = data.gods || [];
+      const activeGodObj = activeGodId ? gods.find((g: any) => g.id === activeGodId) : null;
+      const hasResist = activeGodObj && (activeGodObj.resistanceType === currentWType || activeGodObj.resistanceType === 'all');
+
+      const wMod = hasResist ? (currentWType === 'sunny' ? 1.1 : 1.0) : (WEATHER_TYPES[currentWType]?.walkSpeedMod || 1.0);
+      return 0.0048 * wMod;
+    };
+
     // Restore walk state from DB if present
-    if (data && data.walk_target_lat && data.walk_target_lng && data.walk_started_at && data.walk_start_lat && data.walk_start_lng && !data.travel_path) {
+    if (data && data.walk_target_lat != null && data.walk_target_lng != null && data.walk_started_at && data.walk_start_lat != null && data.walk_start_lng != null && !data.travel_path) {
       const targetLat: number = data.walk_target_lat;
       const targetLng: number = data.walk_target_lng;
       const startLat: number = data.walk_start_lat;
@@ -729,29 +786,32 @@ const App: React.FC = () => {
       const dLat = targetLat - startLat;
       const dLng = targetLng - startLng;
       const dist = Math.hypot(dLat, dLng);
-      // Speed is ~0.00008 lat/lng units per frame (assuming 60fps = ~0.0048 per sec limit)
-      // Actually walking is 0.00008 hypot distance per frame ~ 0.0048 per second
-      const speedPerSec = 0.0048;
-      const durationSec = dist / speedPerSec;
+      // Use duration from server or fall-back to calculating it once
+      const durationSec = (data.walk_duration_seconds != null && data.walk_duration_seconds > 0)
+        ? data.walk_duration_seconds
+        : (dist / getCurrentSpeedPerSec());
 
       if (elapsedSec >= durationSec) {
-        // Arrived at walking target while offline
+        console.log('步行任務離線歸位:', { elapsedSec, durationSec, targetLat, targetLng });
         setPosition([targetLat, targetLng]);
+        positionRef.current = [targetLat, targetLng];
         setTargetPosition(null);
         setIsWalking(false);
         walkTargetRef.current = null;
         walkStartRef.current = null;
         walkStartedAtRef.current = null;
       } else {
-        // Still walking towards target
         const currentProgress = elapsedSec / durationSec;
         const currentLat = startLat + dLat * currentProgress;
         const currentLng = startLng + dLng * currentProgress;
+        console.log('步行任務補償更新:', { currentLat, currentLng, progress: currentProgress });
         setPosition([currentLat, currentLng]);
+        positionRef.current = [currentLat, currentLng];
         setTargetPosition([targetLat, targetLng]);
         walkTargetRef.current = [targetLat, targetLng];
         walkStartRef.current = [startLat, startLng];
         walkStartedAtRef.current = startedAt;
+        walkDurationSecRef.current = durationSec;
         setIsWalking(true);
       }
     }
@@ -759,25 +819,31 @@ const App: React.FC = () => {
     // Restore travel state from DB if present
     if (data && data.travel_path && data.travel_started_at && data.travel_duration_seconds) {
       const path: [number, number][] = data.travel_path;
-      const departedAt = new Date(data.travel_started_at);
-      const durationSec: number = data.travel_duration_seconds;
-      const elapsedSec = (Date.now() - departedAt.getTime()) / 1000;
+      if (path.length > 0) {
+        const departedAt = new Date(data.travel_started_at);
+        const durationSec: number = data.travel_duration_seconds;
+        const elapsedSec = (Date.now() - departedAt.getTime()) / 1000;
 
-      if (elapsedSec >= durationSec) {
-        // Already arrived, jump to destination immediately
-        const finalPos = path[path.length - 1];
-        setPosition(finalPos);
-        setIsTraveling(false);
-        setTravelPath([]);
-        setTravelDepartedAt(null);
-        setTravelDurationSec(0);
-        // Clear travel state on DB (will be done by next saveProfile)
-      } else {
-        // Journey in progress, restore travel state
-        setTravelPath(path);
-        setTravelDepartedAt(departedAt);
-        setTravelDurationSec(durationSec);
-        setIsTraveling(true);
+        if (elapsedSec >= durationSec) {
+          const finalPos = path[path.length - 1];
+          setPosition(finalPos);
+          positionRef.current = finalPos;
+          setIsTraveling(false);
+          setTravelPath([]);
+          setTravelDepartedAt(null);
+          setTravelDurationSec(0);
+          travelPathRef.current = [];
+          travelDepartedAtRef.current = null;
+          travelDurationSecRef.current = 0;
+        } else {
+          setTravelPath(path);
+          setTravelDepartedAt(departedAt);
+          setTravelDurationSec(durationSec);
+          travelPathRef.current = path;
+          travelDepartedAtRef.current = departedAt;
+          travelDurationSecRef.current = durationSec;
+          setIsTraveling(true);
+        }
       }
     }
 
@@ -786,7 +852,7 @@ const App: React.FC = () => {
 
   // Sync to database
   const saveProfile = useCallback(async (newState?: CharacterStats, forceLocation?: [number, number]) => {
-    if (isDoubleTabbedRef.current) return;
+    if (loading || isDoubleTabbedRef.current) return;
     const p = newState || playerRef.current;
     if (!p || !session?.user?.id) return;
 
@@ -822,30 +888,11 @@ const App: React.FC = () => {
         walk_started_at: null,
       };
 
-    const { data: updatedProfile, error } = await supabase.rpc('secure_sync_profile', {
+    const { data: _updatedProfile, error: syncError } = await supabase.rpc('secure_sync_profile', {
       p_lat: forceLocation ? forceLocation[0] : positionRef.current[0],
       p_lng: forceLocation ? forceLocation[1] : positionRef.current[1],
       p_hp: p.hp,
       p_mp: p.mp,
-      p_exp: p.exp,
-      p_gold: p.gold,
-      p_base_materials: p.baseMaterials,
-      p_buildings: p.buildings,
-      p_items: p.items,
-      p_partners: p.partners,
-      p_equipment: p.equipment,
-      p_equipped_weapon: p.equippedWeapon,
-      p_equipped_armor: p.equippedArmor,
-      p_equipped_helmet: p.equippedHelmet,
-      p_equipped_boots: p.equippedBoots,
-      p_equipped_accessory: p.equippedAccessory,
-      p_ling_qi: p.lingQi,
-      p_tech_fragments: p.techFragments,
-      p_incense: p.incense,
-      p_salt_crystals: p.saltCrystals,
-      p_premium_gems: p.premiumGems,
-      p_gods: p.gods,
-      p_active_god_id: p.activeGodId,
       p_travel_data: {
         path: travelSaveData.travel_path,
         started_at: travelSaveData.travel_started_at,
@@ -856,27 +903,18 @@ const App: React.FC = () => {
         target_lng: walkSaveData.walk_target_lng,
         start_lat: walkSaveData.walk_start_lat,
         start_lng: walkSaveData.walk_start_lng,
-        started_at: walkSaveData.walk_started_at
-      }
+        started_at: walkSaveData.walk_started_at,
+        duration: walkDurationSecRef.current
+      },
+      p_active_god_id: p.activeGodId
     });
 
-    if (error) {
-      console.error('存檔失敗:', error.message);
-    } else if (updatedProfile) {
-      // 伺服器同步成功，確保本地與伺服器一致
-      setPlayer(prev => prev ? {
-        ...prev,
-        current_location_lat: updatedProfile.current_location_lat,
-        current_location_lng: updatedProfile.current_location_lng
-      } : null);
-    }
-
-    if (error) {
-      console.error('Save Profile Error:', error);
+    if (syncError) {
+      console.error('Save Profile Error:', (syncError as any).message);
     } else {
       console.log('Profile Saved Successfully');
     }
-  }, [session, mySessionId, isTraveling]);
+  }, [session, mySessionId, isTraveling, loading]);
 
   const pendingSaveRef = React.useRef<any>(null);
 
@@ -1055,23 +1093,25 @@ const App: React.FC = () => {
     }
 
     let frameId: number;
-    // Speed is ~0.00008 lat/lng units per frame (assuming 60fps = ~0.0048 per sec limit)
-    // Actually walking is 0.00008 hypot distance per frame ~ 0.0048 per second
-    const baseSpeedPerSec = 0.0048;
-    // 天氣移動速度修飾（神明抵禦可免疫懲罰）
-    const currentWeather = weatherRef.current;
-    const weatherSpeedMod = currentWeather && !hasWeatherResistance(currentWeather)
-      ? WEATHER_TYPES[currentWeather].walkSpeedMod
-      : (currentWeather === 'sunny' ? WEATHER_TYPES.sunny.walkSpeedMod : 1.0);
-    const speedPerSec = baseSpeedPerSec * weatherSpeedMod;
 
-
-    // Initialize refs if starting a new walk
+    // Initialize refs if starting a new walk - Calculate trip duration ONCE
     if (!walkStartRef.current || !walkStartedAtRef.current || !walkTargetRef.current || walkTargetRef.current[0] !== targetPosition[0] || walkTargetRef.current[1] !== targetPosition[1]) {
-      walkStartRef.current = [...positionRef.current] as [number, number];
-      walkTargetRef.current = [...targetPosition] as [number, number];
+      const startPos = [...positionRef.current] as [number, number];
+      const targetPos = [...targetPosition] as [number, number];
+      const dist = Math.hypot(targetPos[0] - startPos[0], targetPos[1] - startPos[1]);
+
+      const currentWeather = weatherRef.current;
+      const weatherSpeedMod = currentWeather && !hasWeatherResistance(currentWeather)
+        ? WEATHER_TYPES[currentWeather].walkSpeedMod
+        : (currentWeather === 'sunny' ? WEATHER_TYPES.sunny.walkSpeedMod : 1.0);
+      const speedUsed = 0.0048 * weatherSpeedMod;
+
+      walkStartRef.current = startPos;
+      walkTargetRef.current = targetPos;
       walkStartedAtRef.current = new Date();
-      saveProfileRef.current?.(); // Trigger save to register new walk start
+      walkDurationSecRef.current = dist / speedUsed;
+
+      saveProfileRef.current?.(); // Trigger save to register walk start with duration
     }
 
     const animate = () => {
@@ -1080,12 +1120,11 @@ const App: React.FC = () => {
       const targetLat = walkTargetRef.current![0];
       const targetLng = walkTargetRef.current![1];
       const startedAt = walkStartedAtRef.current!;
+      const durationSec = walkDurationSecRef.current;
 
       const elapsedSec = (Date.now() - startedAt.getTime()) / 1000;
       const dLat = targetLat - startLat;
       const dLng = targetLng - startLng;
-      const dist = Math.hypot(dLat, dLng);
-      const durationSec = dist / speedPerSec;
 
       if (durationSec <= 0 || elapsedSec >= durationSec) {
         // Arrived
@@ -1095,7 +1134,8 @@ const App: React.FC = () => {
         walkTargetRef.current = null;
         walkStartRef.current = null;
         walkStartedAtRef.current = null;
-        saveProfileRef.current?.(undefined, [targetLat, targetLng]); // Save arrival with exact final coordinates
+        walkDurationSecRef.current = 0;
+        saveProfileRef.current?.(undefined, [targetLat, targetLng]);
         return;
       }
 
@@ -1105,12 +1145,12 @@ const App: React.FC = () => {
       const currentLng = startLng + dLng * currentProgress;
 
       if (!isInTaiwan(currentLat, currentLng)) {
-        // Stop walking if we hit the boundary mid-walk
         setTargetPosition(null);
         setIsWalking(false);
         walkTargetRef.current = null;
         walkStartRef.current = null;
         walkStartedAtRef.current = null;
+        walkDurationSecRef.current = 0;
         saveProfileRef.current?.(undefined, [currentLat, currentLng]);
         return;
       }
@@ -1122,7 +1162,7 @@ const App: React.FC = () => {
 
     frameId = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(frameId);
-  }, [targetPosition, isTraveling]);
+  }, [targetPosition, isTraveling, weather, player?.activeGodId, hasWeatherResistance]);
 
   const handleSaveNickname = async () => {
     if (!player || !session?.user?.id || !tempNickname.trim()) {
@@ -1138,43 +1178,55 @@ const App: React.FC = () => {
     await supabase.from('profiles').update({ nickname: newName }).eq('id', session.user.id);
   };
 
-  const startHunt = useCallback((isElite = false) => {
+  const startHunt = useCallback(async (isElite = false) => {
     if (isTravelingRef.current) {
       console.log('Cannot hunt: Traveling');
       return;
     }
-    const p = playerRef.current;
-    if (!p) {
-      console.log('Cannot hunt: Player data missing');
+
+    // 1. Encounter Check via Backend (Only for non-Elite/POI checks or when called from Explore)
+    // Use the dynamic encounter rate from the backend (secure_check_encounter already handles the rate)
+    const { data: enc, error: encError } = await supabase.rpc('secure_check_encounter', {
+      p_weather: weatherRef.current,
+      p_force: !autoExplore // Manual button always forces encounter
+    });
+
+    if (encError) {
+      console.error('Encounter check error:', encError);
+    }
+
+    if (!isElite && (!enc || enc.result === 'none')) {
+      if (!autoExplore) {
+        console.warn('Manual Hunt failed to force encounter - check server RPC');
+      }
       return;
     }
-    console.log('Starting hunt check...', p.level);
+
+    const isWeatherSpecial = enc?.result === 'weather_special';
+    const p = playerRef.current;
+    if (!p) return;
+
+    console.log('Starting hunt...', { level: p.level, isElite, isWeatherSpecial });
     const lv = p.level;
     const pool = MONSTER_DATABASE.filter(m => lv >= m.minLv && lv <= m.maxLv + 5);
     const template = pool.length > 0 ? pool[Math.floor(Math.random() * pool.length)] : MONSTER_DATABASE[0];
 
-    const isBoss = isElite && template.name.includes('黑龍'); // Using Black Dragon as Boss definition for now
-    const statMultiplier = isElite ? 2.5 : 1;
+    const isBoss = isElite && template.name.includes('黑龍');
+    // Weather Special enemies are roughly 2x stronger than normal
+    const statMultiplier = (isElite ? 2.5 : 1) * (isWeatherSpecial ? 2.0 : 1.0);
 
     let hp, eAtk, eDef;
 
-    if (isElite || isBoss) {
-      // Dynamic Scaling System: Scale based on player's overall combat power
+    if (isElite || isBoss || isWeatherSpecial) {
       const pHP = p.maxHp + totalEquipHp(p) + totalPartnerHp(p);
       const pATK = p.attack + totalEquipAtk(p) + totalPartnerAtk(p);
       const pDEF = p.defense + totalEquipDef(p) + totalPartnerDef(p);
 
-      const diffMultiplier = isBoss ? 1.5 : 1.0;
+      const diffMultiplier = isBoss ? 1.5 : (isWeatherSpecial ? 1.2 : 1.0);
 
-      // HP: Set to require 5-8 hits from player's total ATK to kill
       const baseHp = Math.max(template.baseHp * statMultiplier, pATK * (5 + Math.random() * 3) * diffMultiplier);
-
-      // ATK: Target 15-20% of player's total HP per hit (after DEF reduction is considered)
-      // Elite Attack - Player Def = Target Damage => Elite Attack = Target Damage + Player Def
       const targetDmgPerHit = pHP * (0.15 + Math.random() * 0.05) * diffMultiplier;
       const baseAtk = Math.max(template.baseAtk * statMultiplier, pDEF + targetDmgPerHit);
-
-      // DEF: Elite negates about 30% of player ATK
       const baseDef = Math.max(template.baseDef * statMultiplier, pATK * 0.3 * diffMultiplier);
 
       hp = Math.floor(baseHp);
@@ -1188,19 +1240,20 @@ const App: React.FC = () => {
 
     const enemy = {
       id: Math.random().toString(),
-      name: (isBoss ? '【首領】' : isElite ? '【菁英】' : '') + template.name,
+      name: (isBoss ? '【首領】' : isElite ? '【菁英】' : isWeatherSpecial ? '【掩人耳目】' : '') + template.name,
       avatar: template.avatar,
       element: template.element,
-      level: lv + Math.floor(Math.random() * 3) - 1 + (isBoss ? 5 : isElite ? 2 : 0),
+      level: lv + Math.floor(Math.random() * 3) - 1 + (isBoss ? 5 : isElite ? 2 : isWeatherSpecial ? 3 : 0),
       hp, maxHp: hp,
       attack: eAtk,
       defense: eDef,
-      expReward: Math.floor((18 + lv * 6) * (isElite ? 2.5 : 1)),
-      goldReward: Math.floor((8 + lv * 3) * (isElite ? 2.5 : 1)),
+      expReward: Math.floor((18 + lv * 6) * (isElite ? 2.5 : 1) * (isWeatherSpecial ? 3 : 1)),
+      goldReward: Math.floor((8 + lv * 3) * (isElite ? 2.5 : 1) * (isWeatherSpecial ? 3 : 1)),
       lootTable: [],
       // Metadata for backend resolution
       isElite,
       isBoss,
+      isWeatherSpecial,
       baseLv: lv
     };
 
@@ -1222,11 +1275,7 @@ const App: React.FC = () => {
       const d = dirs[Math.floor(Math.random() * dirs.length)];
       move(d);
 
-      // Foggy weather increases encounter rate from 30% to 50%
-      const encounterThreshold = weatherRef.current === 'foggy' ? 0.5 : 0.7;
-      if (Math.random() > encounterThreshold) {
-        startHunt();
-      }
+      startHunt();
     }, 2000); // Move every 2 seconds
 
     return () => clearInterval(encounterMover);
@@ -1236,23 +1285,43 @@ const App: React.FC = () => {
     if (!player || !currentEnemy) return;
 
     // Call Backend to resolve rewards securely
+    const lvRewards = getRewardsByLevel((currentEnemy as any).baseLv || player.level);
+
     const { data: result, error } = await supabase.rpc('secure_resolve_combat', {
       p_monster_name: currentEnemy.name,
       p_is_elite: (currentEnemy as any).isElite || false,
       p_is_boss: (currentEnemy as any).isBoss || false,
+      p_is_weather_special: (currentEnemy as any).isWeatherSpecial || false,
       p_lv_at_combat: (currentEnemy as any).baseLv || player.level,
+      p_base_exp: lvRewards.exp,
+      p_base_gold: lvRewards.gold,
       p_player_hp: finalHp ?? player.hp,
       p_player_mp: finalMp ?? player.mp,
-      p_skill_reward_id: SKILL_DATABASE[Math.floor(Math.random() * SKILL_DATABASE.length)].id, // Pass a potential skill
+      p_skill_reward_id: SKILL_DATABASE[Math.floor(Math.random() * SKILL_DATABASE.length)].id,
       p_lat: positionRef.current[0],
       p_lng: positionRef.current[1]
     });
 
     if (error) {
-      console.error('Loot Resolution Error:', error);
+      console.error('❌ [Combat RPC Failed]:', error);
+      alert(`戰鬥結算失敗: ${error.message || '未知錯誤'}`);
       setIsCombatAction(false);
       setCurrentEnemy(null);
       return;
+    }
+
+    if (!result) {
+      console.error('❌ [Combat result empty]');
+      setIsCombatAction(false);
+      setCurrentEnemy(null);
+      return;
+    }
+
+    console.log('✅ [Combat RPC Success]:', result);
+
+    if (result.updated_profile) {
+      // 🚀 AUTHORITATIVE STATE SYNC
+      setPlayer(mapServerProfile(result.updated_profile));
     }
 
     if (result.leveled_up) {
@@ -1271,31 +1340,30 @@ const App: React.FC = () => {
     const rewardItems = [...sLoots];
     if (sEquip) rewardItems.push({ name: sEquip.name, quantity: 1, icon: sEquip.icon || '🛡️' });
 
-    /*
-    setLootMessage({
-      title: '戰鬥勝利獎勵',
-      items: rewardItems,
-      gold: result.gold,
-      exp: result.exp
-    } as any);
-    */
+    // Rewards are now only displayed in the bottom-right combat logs, as requested.
 
-    // Simple local log with fallback to prevent '+ EXP' (missing numbers)
-    // The RPC should return these, but if it fails or returns undefined, we fallback to local estimates
-    const finalExp = (result?.exp !== undefined && result?.exp !== null) ? result.exp : _expReward;
-    const finalGold = (result?.gold !== undefined && result?.gold !== null) ? result.gold : _goldReward;
+    // AUTHORITATIVE LOGGING
+    const finalExp = result?.exp ?? _expReward;
+    const finalGold = result?.gold ?? _goldReward;
 
     const newLog: CombatLog = {
-      id: Date.now().toString(),
+      id: `battle_${Date.now()}`,
       type: 'win',
       enemyName: currentEnemy.name,
       exp: finalExp,
       gold: finalGold,
       items: rewardItems.map(i => ({ name: i.name, quantity: i.quantity || 1, icon: i.icon || '📦' }))
     };
-    setCombatLogs(prev => [newLog, ...prev].slice(0, 6));
+    setCombatLogs(prev => [newLog, ...prev].slice(0, 10)); // Keep more logs for debugging
 
-    console.log('Combat Resolved:', { result, finalExp, finalGold });
+    console.log('--- ⚔️ COMBAT RESOLVED ---', {
+      monster: currentEnemy.name,
+      receivedExp: finalExp,
+      receivedGold: finalGold,
+      leveledUp: result?.leveled_up,
+      newLevel: result?.new_level,
+      questProgress: result?.updated_profile?.quests
+    });
 
     setIsCombatAction(false);
     setCurrentEnemy(null);
@@ -1312,44 +1380,15 @@ const App: React.FC = () => {
       setActivePoiCombat(null);
       fetchPois();
     }
-  }, [player, currentEnemy, fetchPois, session, saveProfile]);
+  }, [player, currentEnemy, fetchPois, session, saveProfile, mapServerProfile]);
 
-  // ─── Weather Effects Tick (Every 10 seconds) ───
-  useEffect(() => {
-    if (!session?.user?.id || !player || isCombatAction || isTraveling || inTown) return;
+  // ─── Weather Effects & Encounter Rate Logic ───
 
-    const tickInterval = 10000;
-    const weatherTicker = setInterval(() => {
-      const wConf = WEATHER_TYPES[weather];
-      // Only apply damage if weather has envHpTickDmg and player has no resistance
-      if (wConf.envHpTickDmg > 0 && !hasWeatherResistance(weather)) {
-        const dmg = Math.floor(player.maxHp * wConf.envHpTickDmg);
-        if (dmg > 0) {
-          const newHp = Math.max(1, player.hp - dmg);
-          if (newHp < player.hp) {
-            setPlayer(p => p ? { ...p, hp: newHp } : null);
-            setCombatLogs(prev => [
-              {
-                id: `env_${Date.now()}`,
-                type: 'info',
-                enemyName: '環境',
-                message: `⚠️ 【${wConf.label}】環境嚴苛，體力流失了 ${dmg} 點！`
-              } as CombatLog,
-              ...prev
-            ].slice(0, 6));
-
-            // Inform server occasionally or let next auto-save handle it
-            // We force a save if HP is critically low
-            if (newHp < player.maxHp * 0.2) {
-              saveProfile({ ...player, hp: newHp });
-            }
-          }
-        }
-      }
-    }, tickInterval);
-
-    return () => clearInterval(weatherTicker);
-  }, [weather, hasWeatherResistance, player?.hp, player?.maxHp, session, isCombatAction, isTraveling, inTown, saveProfile]);
+  // ─── Fixed Rewards by Level ───
+  const getRewardsByLevel = (lv: number) => ({
+    exp: 15 + (lv - 1) * 10,
+    gold: 10 + (lv - 1) * 5
+  });
 
   const handleCombatLose = useCallback(async (finalHp?: number, finalMp?: number) => {
     if (!player) return;
@@ -1419,108 +1458,92 @@ const App: React.FC = () => {
     saveProfile(nextState);
   }, [player, saveProfile]);
 
-  const useItem = useCallback((item: GameItem, silent = false) => {
-    if (!player || (item.type !== 'potion' && item.type !== 'consumable')) return;
+  const useItem = useCallback(async (item: GameItem, silent = false) => {
+    if (!player || !session?.user?.id || (item.type !== 'potion' && item.type !== 'consumable')) return;
 
-    // Update items list
-    const newItems = player.items.map(i => {
-      if (i.id === item.id) {
-        const q = i.quantity ?? 1;
-        return { ...i, quantity: q - 1 };
-      }
-      return i;
-    }).filter(i => (i.quantity ?? 0) > 0);
+    // Call server to persist usage and get authoritative state
+    const { data: result, error } = await supabase.rpc('secure_batch_use_item', {
+      p_item_id: item.id,
+      p_count: 1
+    });
 
-    let nextState = { ...player, items: newItems };
+    if (error) {
+      console.error("Use item error:", error);
+      return;
+    }
 
-    if (item.type === 'potion') {
-      let recoverHp = 0;
-      let recoverMp = 0;
-      if (item.id === 'item_hp_pot' || item.id === 'it_01') recoverHp = 50;
-      else if (item.id === 'item_hp_pot_m') recoverHp = 150;
-      else if (item.id === 'item_mp_pot') recoverMp = 50;
-      else if (item.id === 'item_revive_pot') recoverHp = 9999;
-
-      const currentMaxHp = nextState.maxHp + totalEquipHp(nextState) + totalPartnerHp(nextState);
-      nextState = {
-        ...nextState,
-        hp: Math.min(nextState.hp + recoverHp, currentMaxHp),
-        mp: Math.min(nextState.mp + recoverMp, nextState.maxMp)
-      };
+    if (result && result.success && result.updated_profile) {
+      // Authoritative Local Sync
+      setPlayer(mapServerProfile(result.updated_profile));
 
       if (!silent) {
         const recoverItems = [];
-        if (recoverHp > 0) recoverItems.push({ name: '恢復生命', quantity: Math.min(recoverHp, currentMaxHp - player.hp), icon: '💖' });
-        if (recoverMp > 0) recoverItems.push({ name: '恢復魔力', quantity: Math.min(recoverMp, player.maxMp - player.mp), icon: '💧' });
+        if (result.hp_recovered > 0) recoverItems.push({ name: '恢復生命', quantity: result.hp_recovered, icon: '💖' });
+        if (result.mp_recovered > 0) recoverItems.push({ name: '恢復魔力', quantity: result.mp_recovered, icon: '💧' });
+        if (result.str_gained > 0) recoverItems.push({ name: '攻擊永久提升', quantity: result.str_gained, icon: '⚔️' });
+        if (result.def_gained > 0) recoverItems.push({ name: '防禦永久提升', quantity: result.def_gained, icon: '🛡️' });
+        if (result.max_hp_gained > 0) recoverItems.push({ name: '生命上限永久提升', quantity: result.max_hp_gained, icon: '❤️' });
 
         setLootMessage({
-          title: '藥水使用確認',
+          title: '使用道具紀錄',
           items: [
             { name: item.name, quantity: 1, icon: ITEM_DATABASE.find(itemDef => itemDef.id === item.id)?.icon ?? item.icon },
             ...recoverItems
           ]
         });
       }
-    } else if (item.type === 'consumable') {
-      if (item.id === 'item_str_seed') {
-        nextState = { ...nextState, attack: nextState.attack + 2 };
-        if (!silent) {
-          setLootMessage({
-            title: '永久能力提升！',
-            items: [{ name: '攻擊力', quantity: 2, icon: '⚔️' }]
-          });
-        }
-      } else if (item.id === 'item_def_seed') {
-        nextState = { ...nextState, defense: nextState.defense + 2 };
-        if (!silent) {
-          setLootMessage({
-            title: '永久能力提升！',
-            items: [{ name: '防禦力', quantity: 2, icon: '🛡️' }]
-          });
-        }
-      } else if (item.id === 'item_hp_seed') {
-        nextState = { ...nextState, maxHp: nextState.maxHp + 10, hp: nextState.hp + 10 };
-        if (!silent) {
-          setLootMessage({
-            title: '永久能力提升！',
-            items: [{ name: '生命上限', quantity: 10, icon: '❤️' }]
-          });
-        }
-      }
+    }
+  }, [player, session, mapServerProfile]);
+
+  const handleBatchUseItem = useCallback(async () => {
+    if (!player || !session?.user?.id || !batchUseItem) return;
+
+    const { data: result, error } = await supabase.rpc('secure_batch_use_item', {
+      p_item_id: batchUseItem.id,
+      p_count: batchAmount
+    });
+
+    if (error) {
+      alert(`使用失敗: ${error.message}`);
+      return;
     }
 
-    setPlayer(nextState);
-    saveProfile(nextState);
-  }, [player, saveProfile, totalEquipHp, totalPartnerHp]);
+    if (result && result.success && result.updated_profile) {
+      // Authoritative State Sync
+      setPlayer(mapServerProfile(result.updated_profile));
 
-  const handleCraftAlchemy = useCallback((recipe: AlchemyRecipe) => {
+      setLootMessage({
+        title: '✨ 批量使用成功！',
+        items: [
+          { name: batchUseItem.name, quantity: batchAmount, icon: batchUseItem.icon },
+          result.str_gained > 0 ? { name: '力量提升', quantity: result.str_gained, icon: '💪' } : null,
+          result.def_gained > 0 ? { name: '防禦提升', quantity: result.def_gained, icon: '🛡️' } : null,
+          result.hp_recovered > 0 ? { name: '生命恢復', quantity: result.hp_recovered, icon: '💖' } : null,
+          result.mp_recovered > 0 ? { name: '魔力恢復', quantity: result.mp_recovered, icon: '💧' } : null,
+          result.max_hp_gained > 0 ? { name: '生命上限提升', quantity: result.max_hp_gained, icon: '❤️' } : null,
+        ].filter(Boolean) as any
+      });
+      setBatchUseItem(null);
+      setBatchAmount(1);
+    }
+  }, [player, session, batchUseItem, batchAmount, mapServerProfile]);
+
+
+  const handleCraftAlchemy = useCallback(async (recipe: AlchemyRecipe) => {
     if (!player) return;
 
-    // 1. Deduct Mats
-    let currentItems = [...player.items];
-    for (const req of recipe.materials) {
-      currentItems = currentItems.map(i => i.id === req.id ? { ...i, quantity: (i.quantity ?? 1) - req.quantity } : i).filter(i => (i.quantity ?? 1) > 0);
+    const { data: result, error } = await supabase.rpc('secure_craft_alchemy', {
+      p_recipe_id: recipe.id
+    });
+
+    if (error) {
+      alert('煉金失敗: ' + error.message);
+      return;
     }
 
-    // 2. Add Result
-    const existing = currentItems.find(i => i.id === recipe.targetItemId);
-    if (existing) {
-      existing.quantity = (existing.quantity ?? 1) + 1;
-    } else {
-      const itemDef = ITEM_DATABASE.find(i => i.id === recipe.targetItemId);
-      if (itemDef) {
-        currentItems.push({ ...itemDef, quantity: 1 } as GameItem);
-      }
+    if (result && result.updated_profile) {
+      setPlayer(mapServerProfile(result.updated_profile));
     }
-
-    const nextState = {
-      ...player,
-      gold: player.gold - recipe.goldCost,
-      items: currentItems
-    };
-
-    setPlayer(nextState);
-    saveProfile(nextState);
 
     // Quest: craft progress tracking
     if (session?.user?.id) {
@@ -1529,71 +1552,47 @@ const App: React.FC = () => {
         p_increment: 1
       }).then();
     }
-  }, [player, saveProfile, session]);
+  }, [player, session]);
 
-  const handleCraftEquipment = useCallback((recipe: BlacksmithRecipe) => {
+  const handleCraftEquipment = useCallback(async (recipe: BlacksmithRecipe) => {
     if (!player) return;
     setForgingRecipeId(recipe.id);
 
-    setTimeout(() => {
-      // Deduct materials
-      const refreshedPlayer = playerRef.current;
-      if (!refreshedPlayer) {
-        setForgingRecipeId(null);
-        return;
-      }
+    const { data, error } = await supabase.rpc('secure_craft_equipment', {
+      p_recipe_id: recipe.id
+    });
 
-      const currentItems = [...refreshedPlayer.items];
-      recipe.materials.forEach(req => {
-        const itemIdx = currentItems.findIndex(i => i.id === req.id);
-        if (itemIdx >= 0) {
-          const newQty = (currentItems[itemIdx].quantity ?? 1) - req.quantity;
-          if (newQty <= 0) currentItems.splice(itemIdx, 1);
-          else currentItems[itemIdx] = { ...currentItems[itemIdx], quantity: newQty };
-        }
-      });
-
-      // Find target equipment definition
-      const targetDef = EQUIPMENT_DATABASE.find(e => e.id === recipe.targetEquipmentId);
-      if (!targetDef) {
-        setForgingRecipeId(null);
-        return;
-      }
-
-      // Add equipment with unique ID
-      const newEquip: Equipment = {
-        ...targetDef,
-        id: `eq_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
-      };
-
-      const nextState = {
-        ...refreshedPlayer,
-        gold: refreshedPlayer.gold - recipe.goldCost,
-        items: currentItems,
-        equipment: [...refreshedPlayer.equipment, newEquip]
-      };
-
-      setPlayer(nextState);
-      saveProfile(nextState);
+    if (error) {
+      alert('鍛造失敗: ' + error.message);
       setForgingRecipeId(null);
+      return;
+    }
 
-      // Show completion popup
+    if (data && data.updated_profile) {
+      setPlayer(mapServerProfile(data.updated_profile));
+    }
+
+    setForgingRecipeId(null);
+    const newEquip = data.equipment;
+
+    // Show completion popup
+    if (newEquip) {
       setLootMessage({
         title: '製作完成',
         items: [{ name: newEquip.name, quantity: 1, icon: newEquip.icon || '🛡️' }],
         gold: 0,
         exp: 0
       } as any);
+    }
 
-      // Quest: craft progress tracking
-      if (session?.user?.id) {
-        supabase.rpc('increment_craft_quests', {
-          p_user_id: session.user.id,
-          p_increment: 1
-        }).then();
-      }
-    }, 3000);
-  }, [player, saveProfile, session]);
+    // Quest: craft progress tracking
+    if (session?.user?.id) {
+      supabase.rpc('increment_craft_quests', {
+        p_user_id: session.user.id,
+        p_increment: 1
+      }).then();
+    }
+  }, [player, session]);
 
   const handleSellItem = useCallback((item: GameItem) => {
     if (!player) return;
@@ -1624,9 +1623,8 @@ const App: React.FC = () => {
       return;
     }
 
-    if (result && result.success) {
-      // We rely on the Supabase real-time subscription to update the local 'player' state
-      // but we can provide immediate feedback
+    if (result && result.success && result.updated_profile) {
+      setPlayer(mapServerProfile(result.updated_profile));
       console.log(`Successfully sold ${equipment.name} for ${result.gold_gained} gold`);
     }
   }, [player, session?.user?.id]);
@@ -1646,17 +1644,20 @@ const App: React.FC = () => {
       return;
     }
 
-    if (result && result.success) {
-      setLootMessage({
-        title: '✨ 技能升級成功！',
-        items: [{
-          name: SKILL_DATABASE.find(s => s.id === skillId)?.name || '技能',
-          quantity: result.new_level,
-          icon: '⬆️'
-        }]
-      });
-    } else {
-      alert(result?.message || '升級失敗，運氣不佳...');
+    if (result && result.updated_profile) {
+      setPlayer(mapServerProfile(result.updated_profile));
+      if (result.success) {
+        setLootMessage({
+          title: '✨ 技能升級成功！',
+          items: [{
+            name: SKILL_DATABASE.find(s => s.id === skillId)?.name || '技能',
+            quantity: result.new_level,
+            icon: '⬆️'
+          }]
+        });
+      } else {
+        alert(result?.message || '升級失敗，運氣不佳...');
+      }
     }
   }, [player, session?.user?.id]);
 
@@ -1956,6 +1957,42 @@ const App: React.FC = () => {
       ));
   }, [pois, poiIconsMapping, handleMarkClick, weather, hasWeatherResistance, position]);
 
+  // Static facility POI layers (Shipyard/Dock) - always visible
+  const facilityLayers = useMemo(() => {
+    const layers: React.ReactNode[] = [];
+    TOWN_DATABASE.forEach(town => {
+      (['shipyard', 'dock'] as const).forEach(fac => {
+        if (!town.facilities.includes(fac)) return;
+        // Offset slightly so icons don't overlap city center
+        const offset = fac === 'shipyard' ? [-0.003, 0.007] : [0.003, 0.007];
+        const lat = town.lat + offset[0];
+        const lng = town.lng + offset[1];
+        const label = fac === 'shipyard' ? '造船廠' : '客運碼頭';
+        layers.push(
+          <Marker
+            key={`fac-${town.id}-${fac}`}
+            position={[lat, lng]}
+            icon={createFacilityIcon(fac, `${town.name} ${label}`)}
+            eventHandlers={{
+              click: (e) => {
+                L.DomEvent.stopPropagation(e as any);
+                // Check if player is within town radius
+                const dist = getDistance(positionRef.current[0], positionRef.current[1], town.lat, town.lng);
+                if (dist > town.radius) {
+                  alert(`⚓ 你必須抵達【${town.name}】附近，才能使用此設施。\n（目前距離：${Math.round(dist)} 公尺，需 ${town.radius} 公尺以內）`);
+                  return;
+                }
+                setInitialFacility(fac);
+                setInTown(town);
+              }
+            }}
+          />
+        );
+      });
+    });
+    return layers;
+  }, []);
+
   if (loading) {
     return <div className="flex items-center justify-center min-h-screen bg-[#0a0e1a] text-game-accent"><Loader2 className="animate-spin w-12 h-12" /></div>;
   }
@@ -2201,6 +2238,7 @@ const App: React.FC = () => {
               />
               {townLayers}
               {poiLayers}
+              {facilityLayers}
               <Marker position={position} icon={playerIcon}>
                 <Popup>你的位置</Popup>
               </Marker>
@@ -2521,7 +2559,7 @@ const App: React.FC = () => {
         )}
 
         {/* ─── PARTNERS ─── */}
-        {activeTab === 'partners' && <PartnersTab player={player!} onUpdatePlayer={setPlayer as any} saveProfile={saveProfile} isCombatAction={isCombatAction} />}
+        {activeTab === 'partners' && <PartnersTab player={player!} onUpdatePlayer={setPlayer as any} saveProfile={saveProfile} isCombatAction={isCombatAction} mapServerProfile={mapServerProfile} />}
 
         {activeTab === 'home' && <HomeTab player={player!} onUpdatePlayer={setPlayer as any} saveProfile={saveProfile} />}
 
@@ -2650,6 +2688,22 @@ const App: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5">
+                      <tr className="hover:bg-white/5 transition-colors">
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2 text-gray-300 font-bold mb-1"><TrendingUp size={14} className="text-game-accent" /> 經驗進度</div>
+                          <div className="text-[12px] text-gray-500 font-normal leading-relaxed">當前獲得的經驗點數，集滿後可提升等級。</div>
+                          <div className="mt-2 w-full h-1.5 bg-white/10 rounded-full overflow-hidden border border-white/5">
+                            <div
+                              className="h-full bg-gradient-to-r from-game-accent to-indigo-500 transition-all duration-500"
+                              style={{ width: `${Math.min(100, (player.exp / player.maxExp) * 100)}%` }}
+                            />
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 font-mono font-bold text-gray-300 text-sm text-right whitespace-nowrap">
+                          <div className="text-base text-white">{player.exp.toLocaleString()} / {player.maxExp.toLocaleString()}</div>
+                          <div className="text-[10px] text-gray-500 font-bold tracking-tight">{((player.exp / player.maxExp) * 100).toFixed(2)}%</div>
+                        </td>
+                      </tr>
                       <tr className="hover:bg-white/5 transition-colors">
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2 text-gray-300 font-bold mb-1"><Sword size={14} className="text-red-400" /> 攻擊力</div>
@@ -2843,22 +2897,79 @@ const App: React.FC = () => {
                 <div className="text-center text-gray-500 py-8 text-sm">背包空空如也…去探索看看吧！</div>
               ) : (
                 <div className="flex flex-wrap gap-3">
-                  {player.items.map(item => (
-                    <div key={item.id} className="tooltip-wrap" onClick={() => (item.type === 'potion' || item.type === 'consumable') && useItem(item)}>
-                      <div className={`inv-slot ${(item.type === 'potion' || item.type === 'consumable') ? 'cursor-pointer hover:ring-2 hover:ring-game-accent/50' : 'opacity-80'}`}>
-                        <span className="text-2xl">{ITEM_DATABASE.find(i => i.id === item.id)?.icon ?? item.icon}</span>
-                        <span className="inv-qty">×{item.quantity}</span>
+                  {player.items.map(item => {
+                    const itemDef = ITEM_DATABASE.find(id => id.id === item.id);
+                    const description = item.description || itemDef?.description || '普通道具';
+                    return (
+                      <div key={item.id} className="tooltip-wrap" onClick={() => {
+                        if (item.type === 'potion' || item.type === 'consumable') {
+                          setBatchUseItem(item);
+                          setBatchAmount(1);
+                        }
+                      }}>
+                        <div className={`inv-slot ${(item.type === 'potion' || item.type === 'consumable') ? 'cursor-pointer hover:ring-2 hover:ring-game-accent/50' : 'opacity-80'}`}>
+                          <span className="text-2xl">{itemDef?.icon ?? item.icon}</span>
+                          <span className="inv-qty">×{item.quantity}</span>
+                        </div>
+                        <div className="tooltip-text">
+                          <div className="font-bold">{item.name}</div>
+                          <div className="text-gray-400 text-[11px]">{description}</div>
+                          {(item.type === 'potion' || item.type === 'consumable') && <div className="mt-1 text-[10px] text-game-accent font-bold">點擊使用 / 批次使用</div>}
+                        </div>
                       </div>
-                      <div className="tooltip-text">
-                        <div className="font-bold">{item.name}</div>
-                        <div className="text-gray-400 text-[11px]">{item.description}</div>
-                        {(item.type === 'potion' || item.type === 'consumable') && <div className="mt-1 text-[10px] text-game-accent font-bold">點擊使用</div>}
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
+
+            {/* Batch Use Modal */}
+            {batchUseItem && (
+              <div className="fixed inset-0 z-[3000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm anim-fade-in">
+                <div className="glass-panel w-full max-w-xs rounded-3xl p-6 border border-white/20 shadow-2xl scale-110">
+                  <h3 className="text-lg font-bold mb-4 flex items-center gap-2">使用道具</h3>
+                  <div className="flex items-center gap-4 mb-6 bg-white/5 p-4 rounded-2xl border border-white/5">
+                    <div className="text-4xl">{batchUseItem.icon}</div>
+                    <div>
+                      <div className="font-bold text-white">{batchUseItem.name}</div>
+                      <div className="text-[10px] text-gray-400">目前持有: {batchUseItem.quantity}</div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div>
+                      <div className="flex justify-between text-xs text-gray-400 mb-2">
+                        <span>選擇數量</span>
+                        <span className="text-game-accent font-bold">{batchAmount} / {batchUseItem.quantity}</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="1"
+                        max={batchUseItem.quantity}
+                        value={batchAmount}
+                        onChange={(e) => setBatchAmount(parseInt(e.target.value))}
+                        className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-game-accent"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        onClick={() => setBatchUseItem(null)}
+                        className="py-3 rounded-xl bg-white/5 hover:bg-white/10 text-gray-400 font-bold text-sm transition-all"
+                      >
+                        取消
+                      </button>
+                      <button
+                        onClick={handleBatchUseItem}
+                        className="py-3 rounded-xl bg-gradient-to-r from-game-accent to-indigo-500 text-white font-bold text-sm shadow-lg shadow-game-accent/20 hover:scale-[1.02] active:scale-95 transition-all"
+                      >
+                        確認使用
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -2984,12 +3095,13 @@ const App: React.FC = () => {
             town={inTown}
             player={player!}
             userId={session.user.id}
-            onLeave={() => setInTown(null)}
+            onLeave={() => { setInTown(null); setInitialFacility(null); }}
             onCraftAlchemy={handleCraftAlchemy}
             onCraftEquipment={handleCraftEquipment}
             onTravel={handleTravel}
             onSellEquipment={handleSellEquipment}
             forgingRecipeId={forgingRecipeId}
+            initialFacility={initialFacility}
           />
         )}
       </div>

@@ -295,24 +295,26 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({
         if (isFrozen) {
             log(`❄️ 魔物遭到冰凍，無法動彈！`);
 
-            // Still process end of turn player buffs 
-            let postPHp = nextPHp;
-            if (combatStats.heal && combatStats.heal > 0 && nextPHp < combatStats.maxHp) {
-                const regen = Math.min(combatStats.heal, combatStats.maxHp - nextPHp);
-                postPHp = Math.min(postPHp + regen, combatStats.maxHp);
-                setPHp(postPHp);
-                log(`✨ 夥伴支援！治癒光輝恢復了 ${regen} 點生命`);
-            }
+            // 延遲 2 秒執行夥伴恢復與持續恢復，增加辨識度
+            setTimeout(() => {
+                let postPHp = nextPHp;
+                if (combatStats.heal && combatStats.heal > 0 && nextPHp < combatStats.maxHp) {
+                    const regenVal = Math.min(combatStats.heal, combatStats.maxHp - nextPHp);
+                    postPHp = Math.min(postPHp + regenVal, combatStats.maxHp);
+                    setPHp(postPHp);
+                    log(`✨ 夥伴支援！治癒光輝恢復了 ${regenVal} 點生命`);
+                }
 
-            const regenBuff = activeBuffs.find(b => b.type === 'regen');
-            if (regenBuff && postPHp < combatStats.maxHp) {
-                const healAmt = Math.min(regenBuff.power, combatStats.maxHp - postPHp);
-                postPHp = Math.min(postPHp + healAmt, combatStats.maxHp);
-                setPHp(postPHp);
-                log(`💚 持續恢復生傚！恢復了 ${healAmt} 點生命`);
-            }
+                const rBuff = activeBuffs.find(b => b.type === 'regen');
+                if (rBuff && postPHp < combatStats.maxHp) {
+                    const hAmt = Math.min(rBuff.power, combatStats.maxHp - postPHp);
+                    postPHp = Math.min(postPHp + hAmt, combatStats.maxHp);
+                    setPHp(postPHp);
+                    log(`💚 持續恢復生傚！恢復了 ${hAmt} 點生命`);
+                }
 
-            processBuffsAndTurnEnd();
+                processBuffsAndTurnEnd();
+            }, 2000);
             return;
         }
 
@@ -354,24 +356,26 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({
         if (finalPHp <= 0) {
             checkRevive(finalPHp, currentPMp);
         } else {
-            // End of turn effects
-            let postPHp = finalPHp;
-            if (combatStats.heal && combatStats.heal > 0 && finalPHp < combatStats.maxHp) {
-                const regen = Math.min(combatStats.heal, combatStats.maxHp - finalPHp);
-                postPHp = Math.min(postPHp + regen, combatStats.maxHp);
-                setPHp(postPHp);
-                log(`✨ 夥伴支援！治癒光輝恢復了 ${regen} 點生命`);
-            }
+            // 延遲 2 秒執行夥伴恢復與持續恢復，讓玩家看清怪物攻擊後的狀態
+            setTimeout(() => {
+                let postPHp = finalPHp;
+                if (combatStats.heal && combatStats.heal > 0 && finalPHp < combatStats.maxHp) {
+                    const regenVal = Math.min(combatStats.heal, combatStats.maxHp - finalPHp);
+                    postPHp = Math.min(postPHp + regenVal, combatStats.maxHp);
+                    setPHp(postPHp);
+                    log(`✨ 夥伴支援！治癒光輝恢復了 ${regenVal} 點生命`);
+                }
 
-            const regenBuff = activeBuffs.find(b => b.type === 'regen');
-            if (regenBuff && postPHp < combatStats.maxHp) {
-                const healAmt = Math.min(regenBuff.power, combatStats.maxHp - postPHp);
-                postPHp = Math.min(postPHp + healAmt, combatStats.maxHp);
-                setPHp(postPHp);
-                log(`💚 持續恢復生傚！恢復了 ${healAmt} 點生命`);
-            }
+                const rBuff = activeBuffs.find(b => b.type === 'regen');
+                if (rBuff && postPHp < combatStats.maxHp) {
+                    const hAmt = Math.min(rBuff.power, combatStats.maxHp - postPHp);
+                    postPHp = Math.min(postPHp + hAmt, combatStats.maxHp);
+                    setPHp(postPHp);
+                    log(`💚 持續恢復生傚！恢復了 ${hAmt} 點生命`);
+                }
 
-            processBuffsAndTurnEnd();
+                processBuffsAndTurnEnd();
+            }, 2000);
         }
     };
 

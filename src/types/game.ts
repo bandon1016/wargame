@@ -371,9 +371,11 @@ export interface CharacterStats {
     activeQuests?: Quest[];
     completedQuests?: string[];
     uid: string;
+    id?: string;
     // 神明系統 (新)
     gods: God[];
     activeGodId: string | null;
+    quests: DailyQuest[];
 }
 
 export interface God {
@@ -428,15 +430,15 @@ export interface Enemy {
 
 // 怪物列表 & 掉落資料
 export const MONSTER_DATABASE = [
-    { name: '史萊姆', avatar: '🟢', element: 'water' as ElementType, minLv: 1, maxLv: 5, baseHp: 40, baseAtk: 4, baseDef: 1 },
-    { name: '哥布林', avatar: '👺', element: 'lightning' as ElementType, minLv: 1, maxLv: 8, baseHp: 55, baseAtk: 7, baseDef: 2 },
-    { name: '野豬', avatar: '🐗', element: 'neutral' as ElementType, minLv: 3, maxLv: 12, baseHp: 80, baseAtk: 10, baseDef: 5 },
-    { name: '骷髏兵', avatar: '💀', element: 'dark' as ElementType, minLv: 5, maxLv: 15, baseHp: 70, baseAtk: 12, baseDef: 4 },
-    { name: '石像鬼', avatar: '🗿', element: 'light' as ElementType, minLv: 8, maxLv: 20, baseHp: 120, baseAtk: 9, baseDef: 12 },
-    { name: '火焰蜥蜴', avatar: '🦎', element: 'fire' as ElementType, minLv: 10, maxLv: 25, baseHp: 100, baseAtk: 18, baseDef: 6 },
-    { name: '暗影狼', avatar: '🐺', element: 'dark' as ElementType, minLv: 12, maxLv: 30, baseHp: 90, baseAtk: 22, baseDef: 7 },
-    { name: '冰霜巨人', avatar: '🧊', element: 'water' as ElementType, minLv: 20, maxLv: 40, baseHp: 200, baseAtk: 25, baseDef: 15 },
-    { name: '黑龍', avatar: '🐉', element: 'dark' as ElementType, minLv: 30, maxLv: 50, baseHp: 350, baseAtk: 40, baseDef: 20 },
+    { name: '史萊姆', avatar: '🟢', element: 'water' as ElementType, minLv: 1, maxLv: 5, baseHp: 40, baseAtk: 4, baseDef: 1, baseExp: 15, baseGold: 10 },
+    { name: '哥布林', avatar: '👺', element: 'lightning' as ElementType, minLv: 1, maxLv: 8, baseHp: 55, baseAtk: 7, baseDef: 2, baseExp: 25, baseGold: 18 },
+    { name: '野豬', avatar: '🐗', element: 'neutral' as ElementType, minLv: 3, maxLv: 12, baseHp: 80, baseAtk: 10, baseDef: 5, baseExp: 45, baseGold: 35 },
+    { name: '骷髏兵', avatar: '💀', element: 'dark' as ElementType, minLv: 5, maxLv: 15, baseHp: 70, baseAtk: 12, baseDef: 4, baseExp: 60, baseGold: 50 },
+    { name: '石像鬼', avatar: '🗿', element: 'light' as ElementType, minLv: 8, maxLv: 20, baseHp: 120, baseAtk: 9, baseDef: 12, baseExp: 90, baseGold: 75 },
+    { name: '火焰蜥蜴', avatar: '🦎', element: 'fire' as ElementType, minLv: 10, maxLv: 25, baseHp: 100, baseAtk: 18, baseDef: 6, baseExp: 130, baseGold: 110 },
+    { name: '暗影狼', avatar: '🐺', element: 'dark' as ElementType, minLv: 12, maxLv: 30, baseHp: 90, baseAtk: 22, baseDef: 7, baseExp: 180, baseGold: 150 },
+    { name: '冰霜巨人', avatar: '🧊', element: 'water' as ElementType, minLv: 20, maxLv: 40, baseHp: 200, baseAtk: 25, baseDef: 15, baseExp: 350, baseGold: 300 },
+    { name: '黑龍', avatar: '🐉', element: 'dark' as ElementType, minLv: 30, maxLv: 50, baseHp: 350, baseAtk: 40, baseDef: 20, baseExp: 800, baseGold: 1200 },
 ];
 
 export const SKILL_DATABASE: Skill[] = [
@@ -901,13 +903,14 @@ export const POI_DETAILS = {
 // Partners Data
 export const PARTNER_POOL = [
     { name: '聖靈騎士', role: 'tank' as const, rarity: 5 as const, power: 80, avatar: '🧔' },
+    { name: '暗影刺客', role: 'dps' as const, rarity: 5 as const, power: 55, avatar: '🕵️' },
+    { name: '仙境藥師', role: 'healer' as const, rarity: 5 as const, power: 70, avatar: '🧚' },
     { name: '精靈射手', role: 'dps' as const, rarity: 4 as const, power: 53, avatar: '🧝' },
     { name: '治癒修女', role: 'healer' as const, rarity: 4 as const, power: 43, avatar: '👩‍🦰' },
+    { name: '大地祭司', role: 'healer' as const, rarity: 4 as const, power: 30, avatar: '👳' },
     { name: '鐵甲守衛', role: 'tank' as const, rarity: 3 as const, power: 27, avatar: '👨‍🦲' },
     { name: '見習法師', role: 'dps' as const, rarity: 3 as const, power: 20, avatar: '🧙' },
     { name: '流浪劍客', role: 'dps' as const, rarity: 3 as const, power: 18, avatar: '👨‍🦱' },
-    { name: '暗影刺客', role: 'dps' as const, rarity: 5 as const, power: 55, avatar: '🕵️' },
-    { name: '大地祭司', role: 'healer' as const, rarity: 4 as const, power: 30, avatar: '👳' },
 ];
 
 export const getPartnerAvatar = (name: string, fallback: string) => {

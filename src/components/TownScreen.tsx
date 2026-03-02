@@ -24,6 +24,7 @@ interface TownScreenProps {
     onSellEquipment: (equipment: Equipment) => void;
     quests?: any[];
     onRefreshQuests?: () => void;
+    initialFacility?: 'market' | 'alchemy' | 'blacksmith' | 'station' | 'quest_board' | 'shipyard' | 'dock' | null;
 }
 
 const FACILITY_NPCS = {
@@ -36,8 +37,8 @@ const FACILITY_NPCS = {
     dock: { name: '老船長 傑克', avatar: '⚓', dialogue: '起風了！只要你有一艘好船，大海就是你的地圖。隨時準備出航！' },
 };
 
-export const TownScreen: React.FC<TownScreenProps> = ({ town, player, userId, onLeave, onCraftAlchemy, onCraftEquipment, onTravel, onSellEquipment, forgingRecipeId, quests, onRefreshQuests }) => {
-    const [activeFacility, setActiveFacility] = useState<'inn' | 'market' | 'alchemy' | 'blacksmith' | 'station' | 'quest_board' | 'shipyard' | 'dock' | null>(null);
+export const TownScreen: React.FC<TownScreenProps> = ({ town, player, userId, onLeave, onCraftAlchemy, onCraftEquipment, onTravel, onSellEquipment, forgingRecipeId, quests, onRefreshQuests, initialFacility }) => {
+    const [activeFacility, setActiveFacility] = useState<'inn' | 'market' | 'alchemy' | 'blacksmith' | 'station' | 'quest_board' | 'shipyard' | 'dock' | null>(initialFacility ?? null);
     const [localQuests, setLocalQuests] = useState<any[]>(quests || []);
     const [accepting, setAccepting] = useState<string | null>(null);
 

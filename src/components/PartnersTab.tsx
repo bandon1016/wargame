@@ -1,13 +1,15 @@
 import React, { useState, useMemo } from 'react';
 import { Star, Sparkles, UserPlus, Users, ShieldAlert, CheckCircle2, MinusCircle, PlusCircle, Loader2, X, Zap, AlertTriangle, ArrowRight, Home, Flame, Diamond, Search, Info } from 'lucide-react';
 import type { Partner, CharacterStats, God } from '../types/game';
-import { RARITY_COLORS, PARTNER_POOL, getPartnerAvatar, GOD_DATABASE } from '../types/game';
+import { RARITY_COLORS, getPartnerAvatar } from '../types/game';
+import { supabase } from '../lib/supabase';
 
 interface Props {
     player: CharacterStats;
     onUpdatePlayer: (a: React.SetStateAction<CharacterStats>) => void;
     saveProfile: (p: CharacterStats) => void;
     isCombatAction: boolean;
+    mapServerProfile: (data: any) => CharacterStats;
 }
 
 const getLatestAvatar = getPartnerAvatar;
@@ -26,7 +28,7 @@ const Stars = ({ n }: { n: number }) => (
     <div className="flex">{Array.from({ length: n }).map((_, i) => <Star key={i} size={10} fill="#fbbf24" className="text-game-gold" />)}</div>
 );
 
-export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfile, isCombatAction }) => {
+export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfile, isCombatAction, mapServerProfile }) => {
     const [anim, setAnim] = useState(false);
     const [drawn, setDrawn] = useState<Partner[] | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -84,36 +86,27 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
         setSynthResults(null);
         setSynthSuccessCount(0);
 
-        setTimeout(() => {
-            const results: Partner[] = [];
-            let successHits = 0;
-            const successRate = synthRarity === 3 ? 0.10 : 0.05;
+        setTimeout(async () => {
+            const { data, error } = await supabase.rpc('secure_synthesis', {
+                p_material_ids: selectedMaterials.slice(0, synthCount * 4)
+            });
 
-            for (let i = 0; i < synthCount; i++) {
-                const isSuccess = Math.random() < successRate;
-                if (isSuccess) successHits++;
-                const nextRarity = isSuccess ? (synthRarity + 1 as 3 | 4 | 5) : synthRarity;
-
-                const cands = PARTNER_POOL.filter(p => p.rarity === nextRarity);
-                const s = cands[Math.floor(Math.random() * cands.length)];
-                results.push({ id: Math.random().toString() + i, ...s, level: 1, exp: 0, maxExp: 100, isDeployed: false });
+            if (error) {
+                alert('合成失敗: ' + error.message);
+                setSynthAnim(false);
+                return;
             }
 
-            setSynthResults(results);
-            setSynthSuccessCount(successHits);
+            if (data && data.updated_profile) {
+                onUpdatePlayer(mapServerProfile(data.updated_profile));
+                setSynthResults(data.results || []);
+                setSynthSuccessCount(data.success_count || 0);
+            } else {
+                // Fallback if updated_profile is not returned, but results might be
+                setSynthResults(data.results || []);
+                setSynthSuccessCount(data.success_count || 0);
+            }
             setSynthAnim(false);
-
-            onUpdatePlayer(prev => {
-                const materialsToConsume = selectedMaterials.slice(0, synthCount * 4);
-                const nextPartners = prev.partners.filter(p => !materialsToConsume.includes(p.id));
-                nextPartners.push(...results);
-                const nextState = {
-                    ...prev,
-                    partners: nextPartners
-                };
-                saveProfile(nextState);
-                return nextState;
-            });
             setSelectedMaterials([]);
         }, 2000);
     };
@@ -122,38 +115,20 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
         if (player.incense < 100) { alert('香火不足！招募神明需要 100 香火'); return; }
         setGodDrawLoading(true); setDrawGodResult(null);
 
-        setTimeout(() => {
-            const r = Math.random();
-            const success = r < 0.02; // 2% Success rate
-            let newGod: God | null = null;
+        setTimeout(async () => {
+            const { data, error } = await supabase.rpc('secure_draw_god');
 
-            if (success) {
-                const ownedNames = new Set(player.gods.map(g => g.name));
-                const available = GOD_DATABASE.filter(g => !ownedNames.has(g.name));
-                const source = available.length > 0 ? available : GOD_DATABASE;
-                const template = source[Math.floor(Math.random() * source.length)];
-
-                newGod = {
-                    id: Math.random().toString(),
-                    ...template,
-                    level: 1,
-                    exp: 0,
-                    maxExp: 100,
-                };
+            if (error) {
+                console.error('Draw god error:', error);
+                setGodDrawLoading(false);
+                return;
             }
 
-            setDrawGodResult(newGod);
+            if (data && data.updated_profile) {
+                onUpdatePlayer(mapServerProfile(data.updated_profile));
+                setDrawGodResult(data.god);
+            }
             setGodDrawLoading(false);
-
-            onUpdatePlayer(prev => {
-                const nextState = {
-                    ...prev,
-                    incense: prev.incense - 100,
-                    gods: newGod ? [...prev.gods, newGod] : prev.gods
-                };
-                saveProfile(nextState);
-                return nextState;
-            });
         }, 3000);
     };
 
@@ -199,26 +174,19 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
         if (player.gold < 100) { alert('金幣不足！需要 100 金幣'); return; }
         setAnim(true); setDrawn(null);
 
-        setTimeout(() => {
-            const r = Math.random();
-            let rarity: 3 | 4 | 5 = 3;
-            if (r > 0.99) rarity = 5; else if (r > 0.89) rarity = 4;
-            const cands = PARTNER_POOL.filter(p => p.rarity === rarity);
-            const s = cands[Math.floor(Math.random() * cands.length)];
-            const np: Partner = { id: Math.random().toString(), ...s, level: 1, exp: 0, maxExp: 100, isDeployed: false };
+        setTimeout(async () => {
+            const { data, error } = await supabase.rpc('secure_gacha', { p_count: 1 });
+            if (error) {
+                console.error('Gacha error:', error);
+                setAnim(false);
+                return;
+            }
 
-            setDrawn([np]);
+            if (data && data.updated_profile) {
+                onUpdatePlayer(mapServerProfile(data.updated_profile));
+                setDrawn(data.results || []);
+            }
             setAnim(false);
-
-            onUpdatePlayer(prev => {
-                const nextState = {
-                    ...prev,
-                    gold: prev.gold - 100,
-                    partners: [...prev.partners, np]
-                };
-                saveProfile(nextState); // SYNC FIX: Persist latest state
-                return nextState;
-            });
         }, 1500);
     };
 
@@ -226,29 +194,19 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
         if (player.gold < 1000) { alert('金幣不足！需要 1000 金幣'); return; }
         setAnim(true); setDrawn(null);
 
-        setTimeout(() => {
-            const newPartners: Partner[] = [];
-            for (let i = 0; i < 10; i++) {
-                const r = Math.random();
-                let rarity: 3 | 4 | 5 = 3;
-                if (r > 0.99) rarity = 5; else if (r > 0.89) rarity = 4;
-                const cands = PARTNER_POOL.filter(p => p.rarity === rarity);
-                const s = cands[Math.floor(Math.random() * cands.length)];
-                newPartners.push({ id: Math.random().toString() + i, ...s, level: 1, exp: 0, maxExp: 100, isDeployed: false });
+        setTimeout(async () => {
+            const { data, error } = await supabase.rpc('secure_gacha', { p_count: 10 });
+            if (error) {
+                console.error('Gacha x10 error:', error);
+                setAnim(false);
+                return;
             }
 
-            setDrawn(newPartners);
+            if (data && data.updated_profile) {
+                onUpdatePlayer(mapServerProfile(data.updated_profile));
+                setDrawn(data.results || []);
+            }
             setAnim(false);
-
-            onUpdatePlayer(prev => {
-                const nextState = {
-                    ...prev,
-                    gold: prev.gold - 1000,
-                    partners: [...prev.partners, ...newPartners]
-                };
-                saveProfile(nextState); // SYNC FIX: Persist latest state
-                return nextState;
-            });
         }, 2000);
     };
 
