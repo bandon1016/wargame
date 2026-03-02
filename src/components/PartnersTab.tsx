@@ -61,6 +61,15 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
         if (selectedMaterials.includes(partnerId)) {
             setSelectedMaterials(prev => prev.filter(id => id !== partnerId));
         } else {
+            const partner = player.partners.find(p => p.id === partnerId);
+            if (!partner || partner.rarity !== synthRarity) {
+                alert(`請選擇 ${synthRarity} 星夥伴作為素材`);
+                return;
+            }
+            if (partner.rarity >= 5) {
+                alert('五星夥伴無法作為合成素材');
+                return;
+            }
             setSelectedMaterials(prev => [...prev, partnerId]);
         }
     };

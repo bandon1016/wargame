@@ -654,7 +654,7 @@ const App: React.FC = () => {
       quests: Array.isArray(data.quests) ? data.quests : [], // Ensure Array
       uid: data.uid || data.uid_12_code || 'G-0000', // Try fallback
       id: data.id,
-      updatedAt: data.updated_at ? new Date(data.updated_at).getTime() : Date.now()
+      updatedAt: data.updated_at ? Math.floor(new Date(data.updated_at).getTime()) : Math.floor(Date.now())
     };
   }, []);
 
@@ -916,13 +916,16 @@ const App: React.FC = () => {
       p_tech_fragments: p.techFragments,
       p_incense: p.incense,
       p_salt_crystals: p.saltCrystals,
-      p_premium_gems: p.premiumGems
+      p_premium_gems: p.premiumGems,
+      p_last_updated_at: p.updatedAt
     });
 
     if (syncError) {
       console.error('Save Profile Error:', (syncError as any).message);
-    } else {
+    } else if (_updatedProfile) {
       console.log('Profile Saved Successfully');
+      // Sync local state with authoritative server timestamp/data
+      setPlayer(mapServerProfile(_updatedProfile));
     }
   }, [session, mySessionId, isTraveling, loading]);
 

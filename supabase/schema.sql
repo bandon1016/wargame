@@ -227,7 +227,8 @@ create or replace function public.secure_sync_profile(
   p_tech_fragments integer default null,
   p_incense integer default null,
   p_salt_crystals integer default null,
-  p_premium_gems integer default null
+  p_premium_gems integer default null,
+  p_last_updated_at bigint default null
 )
 returns public.profiles
 language plpgsql
@@ -235,16 +236,37 @@ security definer
 as $$
 declare
   v_profile public.profiles;
+  v_db_updated_at_ms bigint;
 begin
   -- 1. 取得現有資料
   select * into v_profile from public.profiles where id = auth.uid();
   
-  -- 2. 基本地理校驗 (防止飛到海裡或境外)
+  -- 2. 基本地理校驗
   if p_lat < 21.0 or p_lat > 26.0 or p_lng < 119.0 or p_lng > 123.0 then
     raise exception '非法地理位置';
   end if;
 
-  -- 3. 更新資料
+  -- 3. 版本檢核 (Optimistic Locking)
+  -- 使用 floor 確保毫秒精度對齊
+  v_db_updated_at_ms := floor(extract(epoch from v_profile.updated_at) * 1000);
+  
+  -- 允許 50ms 的緩衝空間以應對網路延遲與運算時差
+  if p_last_updated_at is not null and v_db_updated_at_ms > (p_last_updated_at + 50) then
+    -- 只更新位置與屬性，保護夥伴、建築與金幣不被舊版本覆寫
+    update public.profiles
+    set 
+        current_location_lat = p_lat,
+        current_location_lng = p_lng,
+        hp = p_hp,
+        mp = p_mp,
+        updated_at = now()
+    where id = auth.uid()
+    returning * into v_profile;
+    
+    return v_profile;
+  end if;
+
+  -- 4. 正常更新資料
   update public.profiles
   set 
     current_location_lat = p_lat,

@@ -346,15 +346,25 @@ BEGIN
     SELECT (elem->>'rarity')::integer INTO v_rarity
     FROM jsonb_array_elements(v_profile.partners) AS elem
     WHERE elem->>'id' = p_material_ids[1];
+    
     IF v_rarity IS NULL THEN 
-        RAISE EXCEPTION '找不到素材 (ID: %)，請重新整理', p_material_ids[1]; 
+        RAISE EXCEPTION '找不到起始素材 (ID: %)，可能是連線問題或資料已過期', p_material_ids[1]; 
     END IF;
     
-    IF v_rarity > 4 THEN RAISE EXCEPTION 'Invalid material rarity: %', v_rarity; END IF;
+    IF v_rarity > 4 THEN 
+        RAISE EXCEPTION '五星夥伴 (ID: %) 無法進一步合成，請重新選擇', p_material_ids[1]; 
+    END IF;
+    
+    IF v_rarity < 3 THEN 
+        RAISE EXCEPTION '三星以下夥伴 (ID: %) 無法進行此合成，目前僅支援 3-4 星合成', p_material_ids[1]; 
+    END IF;
 
     FOR i IN 1..v_count LOOP
-        IF NOT EXISTS (SELECT 1 FROM jsonb_array_elements(v_profile.partners) AS elem WHERE elem->>'id' = p_material_ids[i] AND (elem->>'rarity')::integer = v_rarity) THEN
-            RAISE EXCEPTION '素材 % 不存在或星級不符，請重新選擇', p_material_ids[i];
+        IF NOT EXISTS (
+            SELECT 1 FROM jsonb_array_elements(v_profile.partners) AS elem 
+            WHERE elem->>'id' = p_material_ids[i] AND (elem->>'rarity')::integer = v_rarity
+        ) THEN
+            RAISE EXCEPTION '素材 (ID: %) 不存在或星級 (%) 與組隊不符，請重新整理', p_material_ids[i], v_rarity;
         END IF;
     END LOOP;
 
