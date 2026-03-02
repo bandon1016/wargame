@@ -704,19 +704,22 @@ const App: React.FC = () => {
 
 
 
-  const fetchProfile = async (userId: string) => {
-    setLoading(true);
+  const fetchProfile = async (userId: string, silent = false) => {
+    if (!silent) setLoading(true);
     const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
     if (data) {
       setPlayer(mapServerProfile(data));
 
-      // NEW TAB WINS: Claim the session for ourself unconditionally
-      const { error: sessionError } = await supabase.from('profiles').update({ session_id: mySessionId }).eq('id', userId);
-      if (sessionError) {
-        console.error("Failed to claim session:", sessionError);
-      } else {
-        console.log("Session claimed successfully:", mySessionId);
+      // NEW TAB WINS: Claim the session for ourself unconditionally (only if not a silent background sync)
+      if (!silent) {
+        const { error: sessionError } = await supabase.from('profiles').update({ session_id: mySessionId }).eq('id', userId);
+        if (sessionError) {
+          console.error("Failed to claim session:", sessionError);
+        } else {
+          console.log("Session claimed successfully:", mySessionId);
+        }
       }
+
       // Load saved position
       if (data.current_location_lat === 25.0330 && data.current_location_lng === 121.5654 && data.level === 1) {
         // 新角色，嘗試使用 GPS
@@ -836,7 +839,7 @@ const App: React.FC = () => {
       }
     }
 
-    setLoading(false);
+    if (!silent) setLoading(false);
   };
 
   // Sync to database
@@ -2583,7 +2586,7 @@ const App: React.FC = () => {
         )}
 
         {/* ─── PARTNERS ─── */}
-        {activeTab === 'partners' && <PartnersTab player={player!} onUpdatePlayer={setPlayer as any} saveProfile={saveProfile} isCombatAction={isCombatAction} mapServerProfile={mapServerProfile} refreshProfile={() => fetchProfile(session.user.id)} setRpcPending={(val: boolean) => { isRpcPendingRef.current = val; }} />}
+        {activeTab === 'partners' && <PartnersTab player={player!} onUpdatePlayer={setPlayer as any} saveProfile={saveProfile} isCombatAction={isCombatAction} mapServerProfile={mapServerProfile} setRpcPending={(val: boolean) => { isRpcPendingRef.current = val; }} />}
 
         {activeTab === 'home' && <HomeTab player={player!} onUpdatePlayer={setPlayer as any} saveProfile={saveProfile} />}
 

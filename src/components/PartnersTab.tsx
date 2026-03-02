@@ -10,7 +10,6 @@ interface Props {
     saveProfile: (p: CharacterStats) => void;
     isCombatAction: boolean;
     mapServerProfile: (data: any) => CharacterStats;
-    refreshProfile?: () => void;
     setRpcPending?: (val: boolean) => void;
 }
 
@@ -30,7 +29,7 @@ const Stars = ({ n }: { n: number }) => (
     <div className="flex">{Array.from({ length: n }).map((_, i) => <Star key={i} size={10} fill="#fbbf24" className="text-game-gold" />)}</div>
 );
 
-export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfile, isCombatAction, mapServerProfile, refreshProfile, setRpcPending }) => {
+export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfile, isCombatAction, mapServerProfile, setRpcPending }) => {
     const [anim, setAnim] = useState(false);
     const [drawn, setDrawn] = useState<Partner[] | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -121,9 +120,6 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
                 if (data && data.updated_profile) {
                     onUpdatePlayer(mapServerProfile(data.updated_profile));
                 }
-
-                // Explicit Refetch to ensure state is absolutely fresh and in sync with DB
-                refreshProfile?.();
 
                 if (data) {
                     setSynthResults(data.results || []);
