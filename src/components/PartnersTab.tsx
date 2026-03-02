@@ -10,6 +10,7 @@ interface Props {
     saveProfile: (p: CharacterStats) => void;
     isCombatAction: boolean;
     mapServerProfile: (data: any) => CharacterStats;
+    setRpcPending?: (val: boolean) => void;
 }
 
 const getLatestAvatar = getPartnerAvatar;
@@ -28,7 +29,7 @@ const Stars = ({ n }: { n: number }) => (
     <div className="flex">{Array.from({ length: n }).map((_, i) => <Star key={i} size={10} fill="#fbbf24" className="text-game-gold" />)}</div>
 );
 
-export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfile, isCombatAction, mapServerProfile }) => {
+export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfile, isCombatAction, mapServerProfile, setRpcPending }) => {
     const [anim, setAnim] = useState(false);
     const [drawn, setDrawn] = useState<Partner[] | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -37,6 +38,7 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
     const [isSanctuaryOpen, setIsSanctuaryOpen] = useState(false);
     const [drawGodResult, setDrawGodResult] = useState<God | null>(null);
     const [godDrawLoading, setGodDrawLoading] = useState(false);
+    const [godError, setGodError] = useState<string | null>(null);
 
     // Synthesis states
     const [isSynthesisModalOpen, setIsSynthesisModalOpen] = useState(false);
@@ -86,49 +88,60 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
         setSynthResults(null);
         setSynthSuccessCount(0);
 
+        setRpcPending?.(true);
         setTimeout(async () => {
-            const { data, error } = await supabase.rpc('secure_synthesis', {
-                p_material_ids: selectedMaterials.slice(0, synthCount * 4)
-            });
+            try {
+                const { data, error } = await supabase.rpc('secure_synthesis', {
+                    p_material_ids: selectedMaterials.slice(0, synthCount * 4)
+                });
 
-            if (error) {
-                alert('合成失敗: ' + error.message);
+                if (error) throw error;
+
+                if (data && data.updated_profile) {
+                    onUpdatePlayer(mapServerProfile(data.updated_profile));
+                }
+
+                if (data) {
+                    setSynthResults(data.results || []);
+                    setSynthSuccessCount(data.success_count || 0);
+                }
+            } catch (err: any) {
+                alert('合成失敗: ' + (err.message || '未知錯誤'));
+            } finally {
                 setSynthAnim(false);
-                return;
+                setSelectedMaterials([]);
+                setRpcPending?.(false);
             }
-
-            if (data && data.updated_profile) {
-                onUpdatePlayer(mapServerProfile(data.updated_profile));
-                setSynthResults(data.results || []);
-                setSynthSuccessCount(data.success_count || 0);
-            } else {
-                // Fallback if updated_profile is not returned, but results might be
-                setSynthResults(data.results || []);
-                setSynthSuccessCount(data.success_count || 0);
-            }
-            setSynthAnim(false);
-            setSelectedMaterials([]);
         }, 2000);
     };
 
     const drawGod = () => {
         if (player.incense < 100) { alert('香火不足！招募神明需要 100 香火'); return; }
-        setGodDrawLoading(true); setDrawGodResult(null);
+        setGodDrawLoading(true); setDrawGodResult(null); setGodError(null);
 
+        setRpcPending?.(true);
         setTimeout(async () => {
-            const { data, error } = await supabase.rpc('secure_draw_god');
+            try {
+                const { data, error } = await supabase.rpc('secure_draw_god');
+                if (error) throw error;
 
-            if (error) {
-                console.error('Draw god error:', error);
+                if (data) {
+                    if (data.updated_profile) {
+                        onUpdatePlayer(mapServerProfile(data.updated_profile));
+                    }
+                    if (data.god) {
+                        setDrawGodResult(data.god);
+                    } else {
+                        setGodError("招募失敗：神明不為所動，香火消散於風中。");
+                    }
+                }
+            } catch (err: any) {
+                console.error('Draw god error:', err);
+                setGodError('儀式中斷：' + (err.message || '未知錯誤'));
+            } finally {
                 setGodDrawLoading(false);
-                return;
+                setRpcPending?.(false);
             }
-
-            if (data && data.updated_profile) {
-                onUpdatePlayer(mapServerProfile(data.updated_profile));
-                setDrawGodResult(data.god);
-            }
-            setGodDrawLoading(false);
         }, 3000);
     };
 
@@ -174,19 +187,25 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
         if (player.gold < 100) { alert('金幣不足！需要 100 金幣'); return; }
         setAnim(true); setDrawn(null);
 
+        setRpcPending?.(true);
         setTimeout(async () => {
-            const { data, error } = await supabase.rpc('secure_gacha', { p_count: 1 });
-            if (error) {
-                console.error('Gacha error:', error);
-                setAnim(false);
-                return;
-            }
+            try {
+                const { data, error } = await supabase.rpc('secure_gacha', { p_count: 1 });
+                if (error) throw error;
 
-            if (data && data.updated_profile) {
-                onUpdatePlayer(mapServerProfile(data.updated_profile));
-                setDrawn(data.results || []);
+                if (data) {
+                    if (data.results) setDrawn(data.results);
+                    if (data.updated_profile) {
+                        onUpdatePlayer(mapServerProfile(data.updated_profile));
+                    }
+                }
+            } catch (err: any) {
+                console.error('Gacha error:', err);
+                alert('召喚儀式中斷：' + (err.message || '未知錯誤'));
+            } finally {
+                setAnim(false);
+                setRpcPending?.(false);
             }
-            setAnim(false);
         }, 1500);
     };
 
@@ -194,19 +213,25 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
         if (player.gold < 1000) { alert('金幣不足！需要 1000 金幣'); return; }
         setAnim(true); setDrawn(null);
 
+        setRpcPending?.(true);
         setTimeout(async () => {
-            const { data, error } = await supabase.rpc('secure_gacha', { p_count: 10 });
-            if (error) {
-                console.error('Gacha x10 error:', error);
-                setAnim(false);
-                return;
-            }
+            try {
+                const { data, error } = await supabase.rpc('secure_gacha', { p_count: 10 });
+                if (error) throw error;
 
-            if (data && data.updated_profile) {
-                onUpdatePlayer(mapServerProfile(data.updated_profile));
-                setDrawn(data.results || []);
+                if (data) {
+                    if (data.results) setDrawn(data.results);
+                    if (data.updated_profile) {
+                        onUpdatePlayer(mapServerProfile(data.updated_profile));
+                    }
+                }
+            } catch (err: any) {
+                console.error('Gacha x10 error:', err);
+                alert('召喚儀式中斷：' + (err.message || '未知錯誤'));
+            } finally {
+                setAnim(false);
+                setRpcPending?.(false);
             }
-            setAnim(false);
         }, 2000);
     };
 
@@ -869,7 +894,35 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
                                         {godDrawLoading ? '儀式進行中...' : <><Sparkles size={16} /> 開始招募</>}
                                     </button>
 
+                                    {godError && (
+                                        <div className="mt-4 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-bold animate-in fade-in slide-in-from-top-2 duration-300">
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <ShieldAlert size={14} />
+                                                招募失敗
+                                            </div>
+                                            {godError}
+                                        </div>
+                                    )}
+
                                     {drawGodResult && (
+                                        <div className="mt-4 p-5 rounded-2xl bg-amber-500/10 border-2 border-amber-400 animate-in zoom-in duration-500 shadow-[0_0_40px_rgba(251,191,36,0.2)]">
+                                            <div className="flex items-center gap-4">
+                                                <div className="text-5xl drop-shadow-lg">{drawGodResult.avatar}</div>
+                                                <div>
+                                                    <div className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-1">獲得新守護神</div>
+                                                    <div className="text-xl font-black text-white">{drawGodResult.name}</div>
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={() => setDrawGodResult(null)}
+                                                className="mt-4 w-full py-2 bg-amber-400 hover:bg-white text-black font-black rounded-xl text-xs transition-all active:scale-95"
+                                            >
+                                                確認
+                                            </button>
+                                        </div>
+                                    )}
+
+                                    {!godError && !drawGodResult && (
                                         <div className="mt-2 text-[11px] text-gray-600 font-bold border border-white/5 p-3 rounded-xl bg-black/20 italic">
                                             "信仰本無蹤，唯心誠則靈"
                                         </div>

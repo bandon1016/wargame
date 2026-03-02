@@ -854,3 +854,75 @@ BEGIN
     END IF;
     RETURN jsonb_build_object('result', v_res, 'weather', p_weather);
 END; $$;
+-- 8. SECURE ITEM SELLING
+-- Logic: Verify item quantities, update gold and item lists on server.
+CREATE OR REPLACE FUNCTION public.secure_sell_item(p_item_id text, p_quantity integer DEFAULT 1)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_user_id uuid := auth.uid();
+    v_profile public.profiles;
+    v_item jsonb;
+    v_item_type text;
+    v_unit_price integer := 10;
+    v_total_price integer;
+BEGIN
+    SELECT * INTO v_profile FROM public.profiles WHERE id = v_user_id;
+    IF NOT FOUND THEN RAISE EXCEPTION '未找到存檔'; END IF;
+
+    -- Find item in inventory
+    SELECT elem INTO v_item 
+    FROM jsonb_array_elements(v_profile.items) AS elem 
+    WHERE elem->>'id' = p_item_id;
+
+    IF v_item IS NULL OR (v_item->>'quantity')::integer < p_quantity THEN
+        RAISE EXCEPTION '物品數量不足或不存在';
+    END IF;
+
+    -- Pricing logic (Matching App.tsx handleSellItem)
+    v_item_type := v_item->>'type';
+    IF v_item_type = 'gem' THEN v_unit_price := 200;
+    ELSIF v_item_type = 'material' THEN v_unit_price := 15;
+    ELSIF v_item_type = 'potion' THEN v_unit_price := 50;
+    ELSIF v_item_id = 'item_revive_pot' THEN v_unit_price := 500;
+    END IF;
+
+    v_total_price := v_unit_price * p_quantity;
+
+    -- Update DB
+    UPDATE public.profiles
+    SET 
+        gold = gold + v_total_price,
+        items = (
+            SELECT COALESCE(jsonb_agg(
+                CASE 
+                    WHEN elem->>'id' = p_item_id THEN 
+                        jsonb_set(elem, '{quantity}', to_jsonb((elem->>'quantity')::integer - p_quantity))
+                    ELSE elem 
+                END
+            ), '[]'::jsonb)
+            FROM jsonb_array_elements(v_profile.items) AS elem
+        ),
+        updated_at = now()
+    WHERE id = v_user_id;
+
+    -- Cleanup items with 0 quantity
+    UPDATE public.profiles
+    SET items = (
+        SELECT COALESCE(jsonb_agg(elem), '[]'::jsonb)
+        FROM jsonb_array_elements(items) AS elem
+        WHERE (elem->>'quantity')::integer > 0
+    )
+    WHERE id = v_user_id;
+
+    SELECT * INTO v_profile FROM public.profiles WHERE id = v_user_id;
+
+    RETURN jsonb_build_object(
+        'success', true,
+        'gold_gained', v_total_price,
+        'updated_profile', row_to_json(v_profile)
+    );
+END;
+$$;

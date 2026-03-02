@@ -298,6 +298,7 @@ const App: React.FC = () => {
   const [copiedUid, setCopiedUid] = useState(false);
   const [isDoubleTabbed, setIsDoubleTabbed] = useState(false);
   const isDoubleTabbedRef = React.useRef(isDoubleTabbed);
+  const isRpcPendingRef = React.useRef(false); // New flag to block auto-save during RPCs
   useEffect(() => { isDoubleTabbedRef.current = isDoubleTabbed; }, [isDoubleTabbed]);
   const [showGuide, setShowGuide] = useState(false);
   const [mySessionId] = useState(() => crypto.randomUUID());
@@ -852,7 +853,7 @@ const App: React.FC = () => {
 
   // Sync to database
   const saveProfile = useCallback(async (newState?: CharacterStats, forceLocation?: [number, number]) => {
-    if (loading || isDoubleTabbedRef.current) return;
+    if (loading || isDoubleTabbedRef.current || isRpcPendingRef.current) return;
     const p = newState || playerRef.current;
     if (!p || !session?.user?.id) return;
 
@@ -1287,6 +1288,7 @@ const App: React.FC = () => {
     // Call Backend to resolve rewards securely
     const lvRewards = getRewardsByLevel((currentEnemy as any).baseLv || player.level);
 
+    isRpcPendingRef.current = true;
     const { data: result, error } = await supabase.rpc('secure_resolve_combat', {
       p_monster_name: currentEnemy.name,
       p_is_elite: (currentEnemy as any).isElite || false,
@@ -1307,6 +1309,7 @@ const App: React.FC = () => {
       alert(`戰鬥結算失敗: ${error.message || '未知錯誤'}`);
       setIsCombatAction(false);
       setCurrentEnemy(null);
+      isRpcPendingRef.current = false;
       return;
     }
 
@@ -1314,8 +1317,12 @@ const App: React.FC = () => {
       console.error('❌ [Combat result empty]');
       setIsCombatAction(false);
       setCurrentEnemy(null);
+      isRpcPendingRef.current = false;
       return;
     }
+
+    // After success logic...
+    // (Wait, I need to make sure I reset it at the end of the function too)
 
     console.log('✅ [Combat RPC Success]:', result);
 
@@ -1378,8 +1385,10 @@ const App: React.FC = () => {
       await supabase.rpc('resolve_poi_combat', { p_poi_id: activePoiRef.current, p_win: true });
       setPois(prev => prev.filter(p => p.id !== activePoiRef.current));
       setActivePoiCombat(null);
-      fetchPois();
+      isRpcPendingRef.current = false;
     }
+
+    isRpcPendingRef.current = false;
   }, [player, currentEnemy, fetchPois, session, saveProfile, mapServerProfile]);
 
   // ─── Weather Effects & Encounter Rate Logic ───
@@ -1558,6 +1567,7 @@ const App: React.FC = () => {
     if (!player) return;
     setForgingRecipeId(recipe.id);
 
+    isRpcPendingRef.current = true;
     const { data, error } = await supabase.rpc('secure_craft_equipment', {
       p_recipe_id: recipe.id
     });
@@ -1565,6 +1575,7 @@ const App: React.FC = () => {
     if (error) {
       alert('鍛造失敗: ' + error.message);
       setForgingRecipeId(null);
+      isRpcPendingRef.current = false;
       return;
     }
 
@@ -1573,6 +1584,7 @@ const App: React.FC = () => {
     }
 
     setForgingRecipeId(null);
+    isRpcPendingRef.current = false;
     const newEquip = data.equipment;
 
     // Show completion popup
@@ -1594,32 +1606,34 @@ const App: React.FC = () => {
     }
   }, [player, session]);
 
-  const handleSellItem = useCallback((item: GameItem) => {
+  const handleSellItem = useCallback(async (item: GameItem) => {
     if (!player) return;
 
-    // Define simple sell prices (30% of relative value)
-    let sellPrice = 10;
-    if (item.type === 'gem') sellPrice = 200;
-    if (item.type === 'material') sellPrice = 15;
-    if (item.type === 'potion') sellPrice = 50;
-    if (item.id === 'item_revive_pot') sellPrice = 500;
+    isRpcPendingRef.current = true;
+    const { data: result, error } = await supabase.rpc('secure_sell_item', {
+      p_item_id: item.id,
+      p_quantity: 1
+    });
 
-    const newItems = player.items.map(i => i.id === item.id ? { ...i, quantity: (i.quantity ?? 1) - 1 } : i).filter(i => (i.quantity ?? 1) > 0);
-    const nextState = { ...player, gold: player.gold + sellPrice, items: newItems };
-
-    setPlayer(nextState);
-    saveProfile(nextState);
-  }, [player, saveProfile]);
+    if (error) {
+      alert(`交易失敗: ${error.message}`);
+    } else if (result?.updated_profile) {
+      setPlayer(mapServerProfile(result.updated_profile));
+    }
+    isRpcPendingRef.current = false;
+  }, [player, mapServerProfile]);
 
   const handleSellEquipment = useCallback(async (equipment: Equipment) => {
     if (!player || !session?.user?.id) return;
 
+    isRpcPendingRef.current = true;
     const { data: result, error } = await supabase.rpc('secure_sell_equipment', {
       p_equipment_id: equipment.id
     });
 
     if (error) {
       alert(`交易失敗: ${error.message}`);
+      isRpcPendingRef.current = false;
       return;
     }
 
@@ -1627,6 +1641,7 @@ const App: React.FC = () => {
       setPlayer(mapServerProfile(result.updated_profile));
       console.log(`Successfully sold ${equipment.name} for ${result.gold_gained} gold`);
     }
+    isRpcPendingRef.current = false;
   }, [player, session?.user?.id]);
 
   const handleUpgradeSkill = useCallback(async (skillId: string) => {
@@ -1635,12 +1650,14 @@ const App: React.FC = () => {
     const skillIdx = player.skills.findIndex(s => s.id === skillId);
     if (skillIdx < 0) return;
 
+    isRpcPendingRef.current = true;
     const { data: result, error } = await supabase.rpc('secure_upgrade_skill', {
       p_skill_id: skillId
     });
 
     if (error) {
       alert(`升級請求失敗: ${error.message}`);
+      isRpcPendingRef.current = false;
       return;
     }
 
@@ -1659,6 +1676,7 @@ const App: React.FC = () => {
         alert(result?.message || '升級失敗，運氣不佳...');
       }
     }
+    isRpcPendingRef.current = false;
   }, [player, session?.user?.id]);
 
   const handleTravel = useCallback(async (destinationTown: Town) => {
@@ -2559,7 +2577,7 @@ const App: React.FC = () => {
         )}
 
         {/* ─── PARTNERS ─── */}
-        {activeTab === 'partners' && <PartnersTab player={player!} onUpdatePlayer={setPlayer as any} saveProfile={saveProfile} isCombatAction={isCombatAction} mapServerProfile={mapServerProfile} />}
+        {activeTab === 'partners' && <PartnersTab player={player!} onUpdatePlayer={setPlayer as any} saveProfile={saveProfile} isCombatAction={isCombatAction} mapServerProfile={mapServerProfile} setRpcPending={(val: boolean) => { isRpcPendingRef.current = val; }} />}
 
         {activeTab === 'home' && <HomeTab player={player!} onUpdatePlayer={setPlayer as any} saveProfile={saveProfile} />}
 
