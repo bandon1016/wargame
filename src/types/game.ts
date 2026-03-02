@@ -440,6 +440,10 @@ export const MONSTER_DATABASE = [
     { name: '暗影狼', avatar: '🐺', element: 'dark' as ElementType, minLv: 12, maxLv: 30, baseHp: 90, baseAtk: 22, baseDef: 7, baseExp: 180, baseGold: 150 },
     { name: '冰霜巨人', avatar: '🧊', element: 'water' as ElementType, minLv: 20, maxLv: 40, baseHp: 200, baseAtk: 25, baseDef: 15, baseExp: 350, baseGold: 300 },
     { name: '黑龍', avatar: '🐉', element: 'dark' as ElementType, minLv: 30, maxLv: 50, baseHp: 350, baseAtk: 40, baseDef: 20, baseExp: 800, baseGold: 1200 },
+    { name: '機甲衛兵', avatar: '🤖', element: 'lightning' as ElementType, minLv: 45, maxLv: 65, baseHp: 500, baseAtk: 55, baseDef: 35, baseExp: 1500, baseGold: 2000 },
+    { name: '奇美拉', avatar: '🦁', element: 'fire' as ElementType, minLv: 60, maxLv: 85, baseHp: 750, baseAtk: 80, baseDef: 50, baseExp: 2800, baseGold: 3500 },
+    { name: '墮落天使', avatar: '👼', element: 'dark' as ElementType, minLv: 80, maxLv: 100, baseHp: 1200, baseAtk: 110, baseDef: 70, baseExp: 5000, baseGold: 6000 },
+    { name: '虛空主宰', avatar: '👁️', element: 'dark' as ElementType, minLv: 95, maxLv: 150, baseHp: 2500, baseAtk: 180, baseDef: 120, baseExp: 12000, baseGold: 15000 },
 ];
 
 export const SKILL_DATABASE: Skill[] = [

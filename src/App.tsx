@@ -1222,7 +1222,9 @@ const App: React.FC = () => {
     console.log('Starting hunt...', { level: p.level, isElite, isWeatherSpecial });
     const lv = p.level;
     const pool = MONSTER_DATABASE.filter(m => lv >= m.minLv && lv <= m.maxLv + 5);
-    const template = pool.length > 0 ? pool[Math.floor(Math.random() * pool.length)] : MONSTER_DATABASE[0];
+    const template = pool.length > 0
+      ? pool[Math.floor(Math.random() * pool.length)]
+      : [...MONSTER_DATABASE].sort((a, b) => Math.abs(a.maxLv - lv) - Math.abs(b.maxLv - lv))[0];
 
     const isBoss = isElite && template.name.includes('黑龍');
     // Weather Special enemies are roughly 2x stronger than normal

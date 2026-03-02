@@ -204,7 +204,58 @@ BEGIN
         v_loots := v_loots || jsonb_build_array(jsonb_build_object('id', v_sid, 'name', v_sn, 'icon', v_sic, 'type', 'consumable', 'description', v_sd, 'quantity', 1));
     END IF;
 
-    -- 5. 更新玩家資料
+    -- 5. 區域掉落材料 (一般 20%, 菁英 100%)
+    DECLARE
+        v_reg text;
+        v_reg_sid text;
+        v_reg_sn text;
+        v_reg_sic text;
+        v_reg_sd text;
+        v_reg_q int := 1;
+    BEGIN
+        IF p_lat IS NOT NULL AND p_lng IS NOT NULL THEN
+            -- Determine Region
+            IF (p_lng > 121.0 AND p_lat <= 24.5) THEN v_reg := 'east';
+            ELSIF (p_lat > 24.5) THEN v_reg := 'north';
+            ELSIF (p_lat > 23.5) THEN v_reg := 'central';
+            ELSIF (p_lat > 21.8) THEN v_reg := 'south';
+            ELSE v_reg := 'unknown';
+            END IF;
+
+            IF v_reg != 'unknown' AND (random() < 0.2 OR p_is_elite OR p_is_boss) THEN
+                IF (p_is_elite OR p_is_boss) THEN v_reg_q := floor(random() * 2 + 1); END IF;
+                
+                CASE v_reg
+                    WHEN 'north' THEN
+                        v_reg_sid := (ARRAY['mat_north_tech', 'mat_north_glass'])[floor(random() * 2 + 1)];
+                        v_reg_sn := CASE v_reg_sid WHEN 'mat_north_tech' THEN '科技廢料' ELSE '魔法玻璃' END;
+                        v_reg_sic := CASE v_reg_sid WHEN 'mat_north_tech' THEN '⚙️' ELSE '🪷' END;
+                        v_reg_sd := CASE v_reg_sid WHEN 'mat_north_tech' THEN '北部特產：沾染微弱魔力的報廢電路板。' ELSE '北部特產：折射著奇幻光芒的玻璃碎片。' END;
+                    WHEN 'central' THEN
+                        v_reg_sid := (ARRAY['mat_central_iron', 'mat_central_wood', 'mat_ancient_wood'])[floor(random() * 3 + 1)];
+                        v_reg_sn := CASE v_reg_sid WHEN 'mat_central_iron' THEN '高山鐵礦' WHEN 'mat_central_wood' THEN '神木枝枒' ELSE '太古神木' END;
+                        v_reg_sic := CASE v_reg_sid WHEN 'mat_central_iron' THEN '⛰️' WHEN 'mat_central_wood' THEN '🍃' ELSE '🌲' END;
+                        v_reg_sd := CASE v_reg_sid WHEN 'mat_central_iron' THEN '中部特產：中央山脈深處才挖得到的極堅硬礦石。' WHEN 'mat_central_wood' THEN '中部特產：受到古老森林魔力滋養的樹枝。' ELSE '台中稀有：高品質的千年神木原木。' END;
+                    WHEN 'south' THEN
+                        v_reg_sid := (ARRAY['mat_south_sand', 'mat_south_pearl', 'mat_lava_sand', 'mat_coral'])[floor(random() * 4 + 1)];
+                        v_reg_sn := CASE v_reg_sid WHEN 'mat_south_sand' THEN '炎漠紅砂' WHEN 'mat_south_pearl' THEN '海淵珍珠' WHEN 'mat_lava_sand' THEN '熔岩紅砂' ELSE '珊瑚碎片' END;
+                        v_reg_sic := CASE v_reg_sid WHEN 'mat_south_sand' THEN '🏜️' WHEN 'mat_south_pearl' THEN '🦪' WHEN 'mat_lava_sand' THEN '🌋' ELSE '🌺' END;
+                        v_reg_sd := CASE v_reg_sid WHEN 'mat_south_sand' THEN '南部特產：蘊含濃烈火屬性魔力的紅色砂礫。' WHEN 'mat_south_pearl' THEN '南部特產：凝聚大洋水屬性精華的璀璨珍珠。' WHEN 'mat_lava_sand' THEN '台南稀有：極品火屬性砂礫。' ELSE '屏東特產：沾著濃厚海洋魔力的礁石碎片。' END;
+                    WHEN 'east' THEN
+                        v_reg_sid := (ARRAY['mat_east_crystal', 'mat_basalt'])[floor(random() * 2 + 1)];
+                        v_reg_sn := CASE v_reg_sid WHEN 'mat_east_crystal' THEN '花東水晶' ELSE '玄武岩礦石' END;
+                        v_reg_sic := CASE v_reg_sid WHEN 'mat_east_crystal' THEN '💠' ELSE '🌑' END;
+                        v_reg_sd := CASE v_reg_sid WHEN 'mat_east_crystal' THEN '東部特產：純淨無瑕的天然水晶。' ELSE '台東特產：花東縱谷出產的堅硬黑色岩石。' END;
+                END CASE;
+                
+                v_loots := v_loots || jsonb_build_array(jsonb_build_object(
+                    'id', v_reg_sid, 'name', v_reg_sn, 'icon', v_reg_sic, 'type', 'material', 'description', v_reg_sd, 'quantity', v_reg_q
+                ));
+            END IF;
+        END IF;
+    END;
+
+    -- 6. 更新玩家資料
     UPDATE public.profiles SET 
         level=v_lv, exp=v_ex, max_exp=v_mx, hp=v_hp, max_hp=v_mhp, mp=v_mp, max_mp=v_mmp, gold=gold+v_g, updated_at=now(),
         items = (
@@ -217,7 +268,7 @@ BEGIN
         )
     WHERE id = v_u;
 
-    -- 6. 同步任務進度
+    -- 7. 同步任務進度
     IF (p_is_elite OR p_is_weather_special OR p_is_boss) THEN
         UPDATE public.player_quests SET progress = LEAST(progress + 1, required) WHERE user_id = v_u AND quest_id = 'wq_kill_boss' AND assigned_date = v_ws AND claimed = false;
     END IF;
