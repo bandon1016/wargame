@@ -1146,6 +1146,27 @@ const App: React.FC = () => {
     return activeGod.resistanceType === type || activeGod.resistanceType === 'all';
   }, [activeGod]);
 
+  // ⚡ Stormy weather: drain 1% max HP every 10 seconds on the map
+  useEffect(() => {
+    const effect = WEATHER_TYPES[weather];
+    if (!effect || effect.envHpTickDmg <= 0) return;
+    if (activeTab !== 'explore' || !!inTown || !!activePoiCombat || isTraveling || !player) return;
+
+    const interval = setInterval(() => {
+      if (hasWeatherResistance(weather)) return; // God protection
+      setPlayer(prev => {
+        if (!prev) return prev;
+        const effectiveMaxHp = prev.maxHp + totalEquipHp(prev) + totalPartnerHp(prev);
+        const drain = Math.max(1, Math.floor(effectiveMaxHp * effect.envHpTickDmg));
+        const newHp = Math.max(0, prev.hp - drain);
+        return { ...prev, hp: newHp };
+      });
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [weather, activeTab, inTown, activePoiCombat, isTraveling, player, hasWeatherResistance]);
+
+
   // Auto-Interaction detection when moving near Towns or POIs
   useEffect(() => {
     if (isTraveling || inTown || activePoiCombat || activeTab !== 'explore' || !player) return;
