@@ -370,9 +370,7 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
                         {[0, 1, 2, 3, 4].map(idx => {
                             const p = currentDeployed[idx];
                             return (
-                                <div key={idx}
-                                    onClick={() => p && !isCombatAction && toggleDeploy(p.id)}
-                                    className={`rounded-xl lg:rounded-[20px] border-2 flex flex-col lg:flex-row items-center justify-center lg:justify-start p-2 lg:p-3 transition-all relative group ${p ? `${RARITY_COLORS[p.rarity].border} ${RARITY_COLORS[p.rarity].bg} ${RARITY_COLORS[p.rarity].glow} cursor-pointer hover:brightness-110 active:scale-95` : 'border-dashed border-white/10 bg-black/20 text-gray-700'}`}>
+                                <div key={idx} className={`rounded-xl lg:rounded-[20px] border-2 flex flex-col lg:flex-row items-center justify-center lg:justify-start p-2 lg:p-3 transition-all relative group ${p ? `${RARITY_COLORS[p.rarity].border} ${RARITY_COLORS[p.rarity].bg} ${RARITY_COLORS[p.rarity].glow}` : 'border-dashed border-white/10 bg-black/20 text-gray-700'}`}>
                                     {p ? (
                                         <>
                                             <button
