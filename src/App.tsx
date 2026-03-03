@@ -1377,7 +1377,8 @@ const App: React.FC = () => {
       p_skill_reward_id: randomSkill.id,
       p_skill_reward_name: randomSkill.name,
       p_lat: positionRef.current[0],
-      p_lng: positionRef.current[1]
+      p_lng: positionRef.current[1],
+      p_monster_level: currentEnemy.level
     });
 
     if (error) {

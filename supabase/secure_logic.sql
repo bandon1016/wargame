@@ -165,7 +165,8 @@ CREATE OR REPLACE FUNCTION public.secure_resolve_combat(
     p_monster_name text,
     p_player_hp integer, p_player_mp float8,
     p_skill_reward_id text DEFAULT null, p_skill_reward_name text DEFAULT null,
-    p_lat float8 DEFAULT null, p_lng float8 DEFAULT null
+    p_lat float8 DEFAULT null, p_lng float8 DEFAULT null,
+    p_monster_level integer DEFAULT null
 ) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER AS $$
 DECLARE
     v_u uuid := auth.uid(); v_p public.profiles;
@@ -179,14 +180,22 @@ DECLARE
     v_is_elite boolean := p_monster_name LIKE '%【菁英】%';
     v_is_boss boolean := p_monster_name LIKE '%【首領】%';
     v_is_weather_special boolean := p_monster_name LIKE '%【掩人耳目】%';
+    v_calc_lv int;
 BEGIN
     SELECT * INTO v_p FROM public.profiles WHERE id = v_u;
     IF NOT FOUND THEN RAISE EXCEPTION 'No profile'; END IF;
 
-    -- 安全：由後端依玩家等級計算基礎獎勵，不信任前端傳入值
+    -- 安全驗證：p_monster_level 必須在玩家等級 +/- 20 範圍內，否則回退到玩家等級
+    IF p_monster_level IS NOT NULL AND ABS(p_monster_level - v_p.level) <= 20 THEN
+        v_calc_lv := p_monster_level;
+    ELSE
+        v_calc_lv := v_p.level;
+    END IF;
+
+    -- 安全：由後端依計算等級計算基礎獎勵，不信任前端原始傳入值
     DECLARE
-        v_base_exp int := 15 + (v_p.level - 1) * 10;
-        v_base_gold int := 10 + (v_p.level - 1) * 5;
+        v_base_exp int := 15 + (v_calc_lv - 1) * 10;
+        v_base_gold int := 10 + (v_calc_lv - 1) * 5;
     BEGIN
         v_e := floor(v_base_exp * (CASE WHEN v_is_elite OR v_is_boss THEN 2.5 ELSE 1 END));
         v_g := floor(v_base_gold * (CASE WHEN v_is_elite OR v_is_boss THEN 2.5 ELSE 1 END));
