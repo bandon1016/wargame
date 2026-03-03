@@ -159,14 +159,13 @@ END;
 $$;
 
 
--- 3. SECURE COMBAT RESOLVE (LOOT DROP & PROGRESSION)
--- 3. SECURE COMBAT RESOLVE (COMPLETE)
+-- 3. SECURE COMBAT RESOLVE (DEFINITIVE VERSION - server-side reward calculation)
+-- Security: no longer trusts frontend for exp/gold/elite status. All derived server-side.
 CREATE OR REPLACE FUNCTION public.secure_resolve_combat(
-    p_monster_name text, p_is_elite boolean, p_is_boss boolean,
-    p_lv_at_combat int, p_player_hp int, p_player_mp float8,
-    p_base_exp int DEFAULT 20, p_base_gold int DEFAULT 10,
-    p_skill_reward_id text DEFAULT null, p_skill_reward_name text DEFAULT null, p_lat float8 DEFAULT null,
-    p_lng float8 DEFAULT null, p_is_weather_special boolean DEFAULT false
+    p_monster_name text,
+    p_player_hp integer, p_player_mp float8,
+    p_skill_reward_id text DEFAULT null, p_skill_reward_name text DEFAULT null,
+    p_lat float8 DEFAULT null, p_lng float8 DEFAULT null
 ) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER AS $$
 DECLARE
     v_u uuid := auth.uid(); v_p public.profiles;
@@ -176,14 +175,23 @@ DECLARE
     v_incense_gain int := 0; v_reg text := 'unknown';
     v_skill_drop bool := false; v_has_skill bool := false; v_skill_idx int;
     v_p_exp int := 0;
+    -- 安全：由後端從怪物名稱推斷狀態
+    v_is_elite boolean := p_monster_name LIKE '%【菁英】%';
+    v_is_boss boolean := p_monster_name LIKE '%【首領】%';
+    v_is_weather_special boolean := p_monster_name LIKE '%【掩人耳目】%';
 BEGIN
     SELECT * INTO v_p FROM public.profiles WHERE id = v_u;
     IF NOT FOUND THEN RAISE EXCEPTION 'No profile'; END IF;
-    
-    -- 1. 獎勵計算
-    v_e := floor(p_base_exp * (CASE WHEN p_is_elite OR p_is_boss THEN 2.5 ELSE 1 END));
-    v_g := floor(p_base_gold * (CASE WHEN p_is_elite OR p_is_boss THEN 2.5 ELSE 1 END));
-    IF p_is_weather_special THEN v_e := v_e * 3; v_g := v_g * 3; END IF;
+
+    -- 安全：由後端依玩家等級計算基礎獎勵，不信任前端傳入值
+    DECLARE
+        v_base_exp int := 15 + (v_p.level - 1) * 10;
+        v_base_gold int := 10 + (v_p.level - 1) * 5;
+    BEGIN
+        v_e := floor(v_base_exp * (CASE WHEN v_is_elite OR v_is_boss THEN 2.5 ELSE 1 END));
+        v_g := floor(v_base_gold * (CASE WHEN v_is_elite OR v_is_boss THEN 2.5 ELSE 1 END));
+        IF v_is_weather_special THEN v_e := v_e * 3; v_g := v_g * 3; END IF;
+    END;
 
     -- 2. 成長與升級 (平滑曲線)
     v_lv := v_p.level; v_ex := v_p.exp + v_e; v_mhp := v_p.max_hp; v_mmp := v_p.max_mp;
@@ -195,11 +203,11 @@ BEGIN
     END LOOP;
 
     -- 3. 恢復與屬性校正
-    v_hp := CASE WHEN v_up THEN v_mhp WHEN (p_is_elite OR p_is_boss OR p_is_weather_special) THEN LEAST(v_mhp, p_player_hp + floor(v_mhp * 0.3)) ELSE p_player_hp END;
-    v_mp := CASE WHEN v_up THEN v_mmp WHEN (p_is_elite OR p_is_boss OR p_is_weather_special) THEN LEAST(v_mmp, p_player_mp + (v_mmp * 0.3)) ELSE LEAST(v_mmp, p_player_mp + (v_mmp * 0.1)) END;
+    v_hp := CASE WHEN v_up THEN v_mhp WHEN (v_is_elite OR v_is_boss OR v_is_weather_special) THEN LEAST(v_mhp, p_player_hp + floor(v_mhp * 0.3)) ELSE p_player_hp END;
+    v_mp := CASE WHEN v_up THEN v_mmp WHEN (v_is_elite OR v_is_boss OR v_is_weather_special) THEN LEAST(v_mmp, p_player_mp + (v_mmp * 0.3)) ELSE LEAST(v_mmp, p_player_mp + (v_mmp * 0.1)) END;
 
     -- 4. 氣候強敵稀有掉落 (1% 機率)
-    IF p_is_weather_special AND random() < 0.01 THEN
+    IF v_is_weather_special AND random() < 0.01 THEN
         v_sid := (ARRAY['item_str_seed', 'item_def_seed', 'item_hp_seed'])[floor(random() * 3 + 1)];
         v_sn := CASE v_sid WHEN 'item_str_seed' THEN '力量種子' WHEN 'item_def_seed' THEN '鐵壁種子' ELSE '生命之果' END;
         v_sic := CASE v_sid WHEN 'item_str_seed' THEN '💪' WHEN 'item_def_seed' THEN '🛡️' ELSE '🍎' END;
@@ -208,25 +216,20 @@ BEGIN
     END IF;
 
     -- 5. 區域掉落材料 (一般 20%, 菁英 100%)
-    DECLARE
-        v_reg text;
-        v_reg_sid text;
-        v_reg_sn text;
-        v_reg_sic text;
-        v_reg_sd text;
-        v_reg_q int := 1;
-    BEGIN
-        IF p_lat IS NOT NULL AND p_lng IS NOT NULL THEN
-            -- Determine Region
-            IF (p_lng > 121.0 AND p_lat <= 24.5) THEN v_reg := 'east';
-            ELSIF (p_lat > 24.5) THEN v_reg := 'north';
-            ELSIF (p_lat > 23.5) THEN v_reg := 'central';
-            ELSIF (p_lat > 21.8) THEN v_reg := 'south';
-            ELSE v_reg := 'unknown';
-            END IF;
+    IF p_lat IS NOT NULL AND p_lng IS NOT NULL THEN
+        -- Determine Region
+        IF (p_lng > 121.0 AND p_lat <= 24.5) THEN v_reg := 'east';
+        ELSIF (p_lat > 24.5) THEN v_reg := 'north';
+        ELSIF (p_lat > 23.5) THEN v_reg := 'central';
+        ELSIF (p_lat > 21.8) THEN v_reg := 'south';
+        ELSE v_reg := 'unknown';
+        END IF;
 
-            IF v_reg != 'unknown' AND (random() < 0.2 OR p_is_elite OR p_is_boss) THEN
-                IF (p_is_elite OR p_is_boss) THEN v_reg_q := floor(random() * 2 + 1); END IF;
+        IF v_reg != 'unknown' AND (random() < 0.2 OR v_is_elite OR v_is_boss) THEN
+            DECLARE
+                v_reg_sid text; v_reg_sn text; v_reg_sic text; v_reg_sd text; v_reg_q int := 1;
+            BEGIN
+                IF (v_is_elite OR v_is_boss) THEN v_reg_q := floor(random() * 2 + 1); END IF;
                 
                 CASE v_reg
                     WHEN 'north' THEN
@@ -254,13 +257,13 @@ BEGIN
                 v_loots := v_loots || jsonb_build_array(jsonb_build_object(
                     'id', v_reg_sid, 'name', v_reg_sn, 'icon', v_reg_sic, 'type', 'material', 'description', v_reg_sd, 'quantity', v_reg_q
                 ));
-            END IF;
+            END;
         END IF;
 
         -- 5.5 台灣範圍「香火」隨機掉落
         IF v_reg != 'unknown' THEN
             -- 一般、掩人耳目: 10% 機率 (1~3個); 菁英、首領: 20% 機率 (2~5個)
-            IF (p_is_elite OR p_is_boss) THEN
+            IF (v_is_elite OR v_is_boss) THEN
                 IF random() < 0.20 THEN
                     v_incense_gain := floor(random() * 4 + 2)::int;
                     v_loots := v_loots || jsonb_build_array(jsonb_build_object(
@@ -278,56 +281,63 @@ BEGIN
                 END IF;
             END IF;
         END IF;
-        END IF;
+    END IF;
 
-        -- 5.6 技能與碎片掉落邏輯
-        -- 機率：一般怪 5%, 菁英怪 15%, 首領怪 30%
-        IF p_skill_reward_id IS NOT NULL THEN
-            DECLARE
-                v_drop_roll float := random();
-                v_drop_chance float := 0.05;
-            BEGIN
-                IF p_is_boss THEN v_drop_chance := 0.30;
-                ELSIF p_is_elite OR p_is_weather_special THEN v_drop_chance := 0.15;
+    -- 5.6 技能與碎片掉落邏輯
+    -- 機率：一般怪 5%, 菁英怪 15%, 首領怪 30%
+    IF p_skill_reward_id IS NOT NULL THEN
+        DECLARE
+            v_drop_roll float := random();
+            v_drop_chance float := 0.05;
+        BEGIN
+            IF v_is_boss THEN v_drop_chance := 0.30;
+            ELSIF v_is_elite OR v_is_weather_special THEN v_drop_chance := 0.15;
+            END IF;
+
+            IF v_drop_roll < v_drop_chance THEN
+                v_skill_drop := true;
+                -- 檢查是否已持有該技能
+                SELECT (idx - 1) INTO v_skill_idx
+                FROM jsonb_array_elements(v_p.skills) WITH ORDINALITY AS t(elem, idx)
+                WHERE elem->>'id' = p_skill_reward_id;
+
+                IF v_skill_idx IS NOT NULL THEN
+                    v_has_skill := true;
+                    -- 已持有：增加碎片
+                    v_p.skills := jsonb_set(
+                        v_p.skills,
+                        ARRAY[v_skill_idx::text, 'fragments'],
+                        ((COALESCE(v_p.skills->v_skill_idx->>'fragments', '0')::int) + 1)::text::jsonb
+                    );
+                    v_loots := v_loots || jsonb_build_array(jsonb_build_object(
+                        'id', 'frag_' || p_skill_reward_id, 'name', p_skill_reward_name || '碎片', 
+                        'icon', '💎', 'type', 'material', 'description', '用於強化技能的碎片。', 'quantity', 1
+                    ));
+                ELSE
+                    -- 未持有：習得技能
+                    v_p.skills := v_p.skills || jsonb_build_array(jsonb_build_object(
+                        'id', p_skill_reward_id, 'level', 1, 'fragments', 0
+                    ));
+                    v_loots := v_loots || jsonb_build_array(jsonb_build_object(
+                        'id', 'skill_' || p_skill_reward_id, 'name', '技能：' || p_skill_reward_name, 
+                        'icon', '✨', 'type', 'material', 'description', '全新的技能！', 'quantity', 1
+                    ));
                 END IF;
+            END IF;
+        END;
+    END IF;
 
-                IF v_drop_roll < v_drop_chance THEN
-                    v_skill_drop := true;
-                    -- 檢查是否已持有該技能
-                    SELECT (idx - 1) INTO v_skill_idx
-                    FROM jsonb_array_elements(v_p.skills) WITH ORDINALITY AS t(elem, idx)
-                    WHERE elem->>'id' = p_skill_reward_id;
+    -- 5.7 夥伴經驗值邏輯 (必定回傳供前端顯示)
+    v_p_exp := GREATEST(1, floor(v_e * 0.2));
+    IF v_e > 0 THEN
+        v_loots := v_loots || jsonb_build_array(jsonb_build_object(
+            'id', 'p_exp', 'name', '夥伴經驗', 'icon', '⭐', 'type', 'material', 
+            'quantity', v_p_exp
+        ));
+    END IF;
 
-                    IF v_skill_idx IS NOT NULL THEN
-                        v_has_skill := true;
-                        -- 已持有：增加碎片
-                        v_p.skills := jsonb_set(
-                            v_p.skills,
-                            ARRAY[v_skill_idx::text, 'fragments'],
-                            ((COALESCE(v_p.skills->v_skill_idx->>'fragments', '0')::int) + 1)::text::jsonb
-                        );
-                        v_loots := v_loots || jsonb_build_array(jsonb_build_object(
-                            'id', 'frag_' || p_skill_reward_id, 'name', p_skill_reward_name || '碎片', 
-                            'icon', '💎', 'type', 'material', 'description', '用於強化技能的碎片。', 'quantity', 1
-                        ));
-                    ELSE
-                        -- 未持有：習得技能
-                        v_p.skills := v_p.skills || jsonb_build_array(jsonb_build_object(
-                            'id', p_skill_reward_id, 'level', 1, 'fragments', 0
-                        ));
-                        v_loots := v_loots || jsonb_build_array(jsonb_build_object(
-                            'id', 'skill_' || p_skill_reward_id, 'name', '技能：' || p_skill_reward_name, 
-                            'icon', '✨', 'type', 'material', 'description', '全新的技能！', 'quantity', 1
-                        ));
-                    END IF;
-                END IF;
-            END;
-        END IF;
-    END;
-
-    -- 5.7 夥伴經驗值邏輯 (戰鬥經驗的 20%)
-    v_p_exp := floor(v_e * 0.2);
-    IF v_p_exp > 0 AND v_p.partners IS NOT NULL THEN
+    -- 只有真正有上陣夥伴時才執行資料庫更新
+    IF v_p_exp > 0 AND v_p.partners IS NOT NULL AND jsonb_array_length(v_p.partners) > 0 THEN
         v_p.partners := (
             SELECT jsonb_agg(
                 CASE 
@@ -381,14 +391,16 @@ BEGIN
                 SELECT id, name, icon, type, description, SUM(quantity)::int as quantity FROM (
                     SELECT (elem->>'id') as id, (elem->>'name') as name, (elem->>'icon') as icon, (elem->>'type') as type, (elem->>'description') as description, (elem->>'quantity')::int as quantity
                     FROM jsonb_array_elements(COALESCE(v_p.items, '[]'::jsonb) || v_loots) AS elem
-                    WHERE (elem->>'id') != 'currency_incense' -- Don't add fake currency item to real inventory
+                    WHERE (elem->>'id') NOT IN ('currency_incense', 'p_exp') 
+                      AND (elem->>'id') NOT LIKE 'frag_%' 
+                      AND (elem->>'id') NOT LIKE 'skill_%'
                 ) t GROUP BY id, name, icon, type, description
             ) m
         )
     WHERE id = v_u;
 
     -- 7. 同步任務進度
-    IF (p_is_elite OR p_is_weather_special OR p_is_boss) THEN
+    IF (v_is_elite OR v_is_weather_special OR v_is_boss) THEN
         UPDATE public.player_quests SET progress = LEAST(progress + 1, required) WHERE user_id = v_u AND quest_id = 'wq_kill_boss' AND assigned_date = v_ws AND claimed = false;
     END IF;
     IF p_monster_name LIKE '%史萊姆%' THEN

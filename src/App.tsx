@@ -227,6 +227,7 @@ interface CombatLog {
   enemyName: string;
   exp?: number;
   gold?: number;
+  partnerExp?: number;
   items?: { name: string; quantity: number; icon: string }[];
   message?: string;
 }
@@ -750,8 +751,6 @@ const App: React.FC = () => {
         const { error: sessionError } = await supabase.from('profiles').update({ session_id: mySessionId }).eq('id', userId);
         if (sessionError) {
           console.error("Failed to claim session:", sessionError);
-        } else {
-          console.log("Session claimed successfully:", mySessionId);
         }
       }
 
@@ -819,7 +818,6 @@ const App: React.FC = () => {
         : (dist / getCurrentSpeedPerSec());
 
       if (elapsedSec >= durationSec) {
-        console.log('步行任務離線歸位:', { elapsedSec, durationSec, targetLat, targetLng });
         setPosition([targetLat, targetLng]);
         positionRef.current = [targetLat, targetLng];
         setTargetPosition(null);
@@ -1267,7 +1265,6 @@ const App: React.FC = () => {
     const p = playerRef.current;
     if (!p) return;
 
-    console.log('Starting hunt...', { level: p.level, isElite, isWeatherSpecial });
     const lv = p.level;
 
     // Helper: get prefix based on monster level (not player level)
@@ -1349,13 +1346,13 @@ const App: React.FC = () => {
 
   // Auto Explore Logic
   useEffect(() => {
-    console.log('AutoExplore Effect Sync:', { autoExplore, isCombatAction, activeTab, isTraveling });
     if (!autoExplore || isCombatAction || isTraveling || inTown) return;
+
 
     // Movement & Encounter cycle
     const encounterMover = setInterval(() => {
-      console.log('AutoExplore Interval Tick...');
       if (isDoubleTabbedRef.current) return;
+
       // Pick random direction
       const dirs: ('n' | 's' | 'e' | 'w')[] = ['n', 's', 'e', 'w'];
       const d = dirs[Math.floor(Math.random() * dirs.length)];
@@ -1370,20 +1367,11 @@ const App: React.FC = () => {
   const handleCombatWin = useCallback(async (_expReward: number, _goldReward: number, _learnedSkill?: Skill, _lootList?: GameItem[], _droppedEq?: Equipment, finalHp?: number, finalMp?: number) => {
     if (!player || !currentEnemy) return;
 
-    // Call Backend to resolve rewards securely
-    const lvRewards = getRewardsByLevel((currentEnemy as any).baseLv || player.level);
-
     const randomSkill = SKILL_DATABASE[Math.floor(Math.random() * SKILL_DATABASE.length)];
 
     isRpcPendingRef.current = true;
     const { data: result, error } = await supabase.rpc('secure_resolve_combat', {
       p_monster_name: currentEnemy.name,
-      p_is_elite: (currentEnemy as any).isElite || false,
-      p_is_boss: (currentEnemy as any).isBoss || false,
-      p_is_weather_special: (currentEnemy as any).isWeatherSpecial || false,
-      p_lv_at_combat: (currentEnemy as any).baseLv || player.level,
-      p_base_exp: lvRewards.exp,
-      p_base_gold: lvRewards.gold,
       p_player_hp: finalHp ?? player.hp,
       p_player_mp: finalMp ?? player.mp,
       p_skill_reward_id: randomSkill.id,
@@ -1412,8 +1400,6 @@ const App: React.FC = () => {
     // After success logic...
     // (Wait, I need to make sure I reset it at the end of the function too)
 
-    console.log('✅ [Combat RPC Success]:', result);
-
     if (result.updated_profile) {
       // 🚀 AUTHORITATIVE STATE SYNC
       setPlayer(mapServerProfile(result.updated_profile));
@@ -1429,10 +1415,14 @@ const App: React.FC = () => {
     }
 
     // Process result for UI display
-    const sLoots = result.loots || [];
+    // NOTE: Supabase RPC can return JSONB as a string - force parse it
+    let rawLoots = result.loots;
+    const sLoots: any[] = Array.isArray(rawLoots)
+      ? rawLoots
+      : (typeof rawLoots === 'string' ? JSON.parse(rawLoots) : []);
     const sEquip = result.equipment;
 
-    const rewardItems = [...sLoots];
+    const rewardItems = sLoots.filter((l: any) => l.id !== 'currency_incense' && l.id !== 'p_exp' && l.id !== 'partner_exp');
     if (sEquip) rewardItems.push({ name: sEquip.name, quantity: 1, icon: sEquip.icon || '🛡️' });
 
     // Rewards are now only displayed in the bottom-right combat logs, as requested.
@@ -1440,6 +1430,10 @@ const App: React.FC = () => {
     // AUTHORITATIVE LOGGING
     const finalExp = result?.exp ?? _expReward;
     const finalGold = result?.gold ?? _goldReward;
+
+    // Explicitly grab partner exp from loots for logging & stats
+    const pExpLoot = sLoots.find((l: any) => l.id === 'p_exp' || l.id === 'partner_exp' || l.name?.includes('夥伴經驗'));
+    const partnerExpAmount = pExpLoot ? (Number(pExpLoot.quantity) || 0) : 0;
 
     // --- Update Session Stats ---
     setSessionStats(prev => {
@@ -1488,7 +1482,8 @@ const App: React.FC = () => {
       enemyName: currentEnemy.name,
       exp: finalExp,
       gold: finalGold,
-      items: rewardItems.map(i => ({ name: i.name, quantity: i.quantity || 1, icon: i.icon || '📦' }))
+      partnerExp: partnerExpAmount,
+      items: rewardItems.map((i: any) => ({ name: i.name, quantity: i.quantity || 1, icon: i.icon || '📦' }))
     };
     setCombatLogs(prev => [newLog, ...prev].slice(0, 10)); // Keep more logs for debugging
 
@@ -2653,6 +2648,14 @@ const App: React.FC = () => {
                             <span className="text-sky-300 whitespace-nowrap">+{log.exp} EXP</span>
                             <span className="text-gray-400">|</span>
                             <span className="text-game-gold whitespace-nowrap">+{log.gold} 金幣</span>
+                            {log.partnerExp !== undefined && log.partnerExp > 0 && (
+                              <>
+                                <span className="text-gray-400">|</span>
+                                <span className="text-amber-300 whitespace-nowrap bg-amber-400/10 px-1 rounded border border-amber-400/20 shadow-[0_0_10px_rgba(251,191,36,0.1)] flex items-center gap-0.5">
+                                  <span className="text-[10px] animate-pulse">⭐</span> 夥伴 +{log.partnerExp}
+                                </span>
+                              </>
+                            )}
                             {log.items && log.items.length > 0 && (
                               <>
                                 <span className="text-gray-400">|</span>
