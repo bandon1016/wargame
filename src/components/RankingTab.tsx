@@ -16,29 +16,51 @@ const RankingTab: React.FC<RankingTabProps> = ({ player }) => {
     const fetchRankings = async (type: string) => {
         setLoading(true);
         try {
-            // 獲取前 50 名
-            const { data, error } = await supabase
+            // 1. 先獲取最新的快照日期
+            const { data: dateData } = await supabase
+                .from('leaderboard_snapshots')
+                .select('snapshot_date')
+                .order('snapshot_date', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+            const latestDate = dateData?.snapshot_date;
+
+            // 2. 獲取該次快照的前 50 名
+            let rankingQuery = supabase
                 .from('leaderboard_snapshots')
                 .select('*')
                 .eq('rank_type', type)
                 .order('rank_position', { ascending: true })
                 .limit(50);
 
+            if (latestDate) {
+                rankingQuery = rankingQuery.eq('snapshot_date', latestDate);
+            }
+
+            const { data, error } = await rankingQuery;
             if (error) throw error;
             setRankings(data || []);
 
-            // 嘗試獲取玩家自己的排名
-            const { data: myData, error: myError } = await supabase
-                .from('leaderboard_snapshots')
-                .select('*')
-                .eq('rank_type', type)
-                .eq('user_id', (await supabase.auth.getUser()).data.user?.id)
-                .single();
+            // 3. 嘗試獲取玩家自己在該次快照的排名
+            const user = (await supabase.auth.getUser()).data.user;
+            if (user) {
+                let myRankQuery = supabase
+                    .from('leaderboard_snapshots')
+                    .select('*')
+                    .eq('rank_type', type)
+                    .eq('user_id', user.id);
 
-            if (!myError && myData) {
-                setMyRank(myData);
-            } else {
-                setMyRank(null);
+                if (latestDate) {
+                    myRankQuery = myRankQuery.eq('snapshot_date', latestDate);
+                }
+
+                const { data: myData, error: myError } = await myRankQuery.maybeSingle();
+                if (!myError && myData) {
+                    setMyRank(myData);
+                } else {
+                    setMyRank(null);
+                }
             }
         } catch (err) {
             console.error('Error fetching rankings:', err);
