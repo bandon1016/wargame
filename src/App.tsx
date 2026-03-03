@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+﻿import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap, Circle, Polyline, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Compass, Sword, Home, Users, Package, Settings as SettingsIcon, Book, Heart, Shield, Zap, ChevronRight, MapPin, Loader2, X, PlusCircle, ShieldAlert, TrainFront, Coins, Sparkles, Cpu, Flame, Waves, Diamond, Trophy, Copy, Check, ScrollText, TrendingUp } from 'lucide-react';
@@ -324,6 +324,7 @@ const App: React.FC = () => {
   const activePoiRef = React.useRef<string | null>(null);
   const activeMerchantPoiRef = React.useRef<string | null>(null);
   const eliteCooldownsRef = React.useRef<Record<string, number>>({});
+  const lastDismissedIdRef = React.useRef<string | null>(null);
   const [interactingLocation, setInteractingLocation] = useState<{ type: 'town', town: Town } | { type: 'poi', poi: MapPOI } | null>(null);
 
   useEffect(() => { activePoiRef.current = activePoiCombat; }, [activePoiCombat]);
@@ -1144,6 +1145,41 @@ const App: React.FC = () => {
     if (!activeGod) return false;
     return activeGod.resistanceType === type || activeGod.resistanceType === 'all';
   }, [activeGod]);
+
+  // Auto-Interaction detection when moving near Towns or POIs
+  useEffect(() => {
+    if (isTraveling || inTown || activePoiCombat || activeTab !== 'explore' || !player) return;
+
+    // 1. Gather candidates (POIs prioritized over towns as they are more specific)
+    const nearbyPoi = pois.find(p => getDistance(position[0], position[1], p.lat, p.lng) <= 400);
+    const nearbyTown = TOWN_DATABASE.find(t => getDistance(position[0], position[1], t.lat, t.lng) <= t.radius);
+
+    // 2. Decide what to show
+    let target: { type: 'poi', poi: MapPOI } | { type: 'town', town: Town } | null = null;
+
+    if (nearbyPoi && lastDismissedIdRef.current !== nearbyPoi.id) {
+      target = { type: 'poi', poi: nearbyPoi };
+    } else if (nearbyTown && lastDismissedIdRef.current !== nearbyTown.id) {
+      target = { type: 'town', town: nearbyTown };
+    }
+
+    // 3. Update local state
+    if (target) {
+      const isDifferent = !interactingLocation ||
+         (target.type === 'poi' && (interactingLocation.type !== 'poi' || interactingLocation.poi.id !== target.poi.id)) ||
+         (target.type === 'town' && (interactingLocation.type !== 'town' || interactingLocation.town.id !== target.town.id));
+      if (isDifferent) setInteractingLocation(target);
+    } else {
+      if (interactingLocation) {
+        const stillNear = interactingLocation.type === 'poi'
+          ? getDistance(position[0], position[1], interactingLocation.poi.lat, interactingLocation.poi.lng) <= 450
+          : getDistance(position[0], position[1], interactingLocation.town.lat, interactingLocation.town.lng) <= interactingLocation.town.radius + 100;
+        if (!stillNear) { setInteractingLocation(null); lastDismissedIdRef.current = null; }
+      } else {
+        lastDismissedIdRef.current = null;
+      }
+    }
+  }, [position, pois, isTraveling, inTown, activePoiCombat, activeTab, player, interactingLocation]);
 
   // Click-to-Move Walking Animation (Time-based for persistence)
   useEffect(() => {
@@ -2071,8 +2107,8 @@ const App: React.FC = () => {
     const poi = pois.find(p => p.id === id);
     if (poi) {
       label = POI_NAMES[poi.type] || '神秘地點';
-      // Allow interaction if within 250 meters
       if (getDistance(positionRef.current[0], positionRef.current[1], poi.lat, poi.lng) <= 250) {
+        lastDismissedIdRef.current = null; // Reset dismissal on manual click
         setInteractingLocation({ type: 'poi', poi });
       } else {
         setPendingTarget({ lat, lng, label });
@@ -2780,7 +2816,14 @@ const App: React.FC = () => {
                             {interactingLocation.type === 'town' ? interactingLocation.town.name : POI_NAMES[interactingLocation.poi.type] || '未知點'}
                           </span>
                         </div>
-                        <button onClick={() => setInteractingLocation(null)} className="p-1 hover:bg-white/10 rounded-full text-gray-400 hover:text-white transition-colors">
+                        <button
+                          onClick={() => {
+                            const id = interactingLocation.type === 'town' ? interactingLocation.town.id : interactingLocation.poi.id;
+                            lastDismissedIdRef.current = id;
+                            setInteractingLocation(null);
+                          }}
+                          className="p-1 hover:bg-white/10 rounded-full text-gray-400 hover:text-white transition-colors"
+                        >
                           <X size={16} />
                         </button>
                       </div>
