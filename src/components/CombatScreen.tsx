@@ -531,9 +531,9 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({
                                 <div className="w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-gradient-to-br from-slate-700 to-slate-900 border-2 border-game-accent/60 flex items-center justify-center text-3xl md:text-4xl mb-2 anim-pulse-glow relative">
                                     🧙‍♂️
                                     {activeBuffs.length > 0 && (
-                                        <div className="absolute -bottom-2 flex gap-0.5 justify-center w-full">
+                                        <div className="absolute -bottom-3 flex gap-1 justify-center w-full">
                                             {activeBuffs.map((b, i) => (
-                                                <div key={i} className="text-[10px] bg-black/80 border border-white/20 rounded px-1 flex items-center gap-0.5" title={`${b.name} (${b.turns}回合)`}>
+                                                <div key={i} className="text-sm bg-black/90 border border-white/30 rounded-md px-1.5 py-0.5 flex items-center gap-1 shadow-xl" title={`${b.name} (${b.turns}回合)`}>
                                                     {b.icon}
                                                 </div>
                                             ))}
@@ -568,9 +568,9 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({
                                 <div className="w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-gradient-to-br from-red-900/40 to-slate-900 border-2 border-game-danger/60 flex items-center justify-center text-4xl md:text-5xl mb-2 anim-float anim-pulse-danger relative">
                                     {enemy.avatar}
                                     {enemyDebuffs.length > 0 && (
-                                        <div className="absolute -bottom-2 flex gap-0.5 justify-center w-full">
+                                        <div className="absolute -bottom-3 flex gap-1 justify-center w-full">
                                             {enemyDebuffs.map((d, i) => (
-                                                <div key={i} className="text-[10px] bg-black/80 border border-white/20 rounded px-1 flex items-center gap-0.5" title={`${d.name} (${d.turns}回合)`}>
+                                                <div key={i} className="text-sm bg-black/90 border border-white/30 rounded-md px-1.5 py-0.5 flex items-center gap-1 shadow-xl" title={`${d.name} (${d.turns}回合)`}>
                                                     {d.icon}
                                                 </div>
                                             ))}
