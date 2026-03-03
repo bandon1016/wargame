@@ -2687,38 +2687,53 @@ const App: React.FC = () => {
             {/* Bottom Left Area - Area Card */}
             <div className="absolute bottom-8 left-6 z-[1000] flex flex-col gap-3 pointer-events-none items-start">
 
-              {/* Area Card */}
-              <div className="max-w-[calc(100vw-3rem)] sm:w-72 glass-panel p-4 rounded-2xl anim-fade-in-up pointer-events-auto border-t-2 border-t-game-accent/50 shadow-2xl">
-                <div className="flex items-center gap-1.5 mb-3">
-                  <MapPin size={16} className="text-game-accent flex-shrink-0" />
-                  <span className="font-bold text-sm text-game-accent tracking-wide flex-shrink-0">探索區域</span>
-                  <span className="ml-auto text-[9px] bg-game-accent/10 text-game-accent px-1.5 py-0.5 rounded-full border border-game-accent/30 flex-shrink-0">Lv.{Math.max(1, player!.level - 2)}~{player!.level + 3}</span>
-                  <button
-                    onClick={() => setLogOpacity(o => o === 1 ? 0.7 : o === 0.7 ? 0.3 : o === 0.3 ? 0 : 1)}
-                    className="ml-1 px-1.5 py-0.5 text-[9px] font-bold rounded-lg bg-white/5 border border-white/20 text-gray-400 hover:text-white hover:bg-white/10 transition-colors flex-shrink-0 cursor-pointer"
-                    title="日誌透明度"
-                  >
-                    {logOpacity === 1 ? '👁️ 100%' : logOpacity === 0.7 ? '🌫️ 70%' : logOpacity === 0.3 ? '👻 30%' : '🙈 隱蔽'}
-                  </button>
+              {/* Simplified Exploration Card */}
+              <div className="w-fit max-w-[260px] glass-panel p-3 rounded-2xl anim-fade-in-up pointer-events-auto border-t-2 border-t-game-accent/50 shadow-2xl">
+                <div className="flex items-center justify-between mb-2 gap-4">
+                  <div className="flex items-center gap-1.5">
+                    <Compass size={14} className="text-game-accent animate-spin-slow" />
+                    <span className="font-black text-[10px] text-game-accent uppercase tracking-wider">探索區域</span>
+                  </div>
+                  <span className="text-[9px] font-black bg-game-accent/10 text-game-accent px-2 py-0.5 rounded-full border border-game-accent/20">
+                    Lv.{Math.max(1, player!.level - 2)}~{player!.level + 3}
+                  </span>
                 </div>
-                <p className="text-base font-bold mb-1">{areaName}</p>
-                <p className="text-xs text-gray-400 mb-4">這片區域潛伏著各種危險的生物...</p>
-                <div className="flex flex-col gap-2">
-                  {nearestTown && (
-                    <button onClick={() => setInTown(nearestTown)} className="w-full h-10 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-400 hover:to-purple-400 text-white font-bold rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20 px-3 text-sm">
-                      <Home size={18} /> 進入 {nearestTown.name}
-                    </button>
-                  )}
-                  <div className="flex gap-2">
-                    {nearestPoi ? (
-                      <button onClick={() => handlePoiInteract(nearestPoi)} disabled={isTraveling} className={`flex-1 h-10 bg-gradient-to-r from-emerald-500 to-teal-500 ${isTraveling ? 'opacity-50 grayscale cursor-not-allowed' : 'hover:from-emerald-400 hover:to-teal-400'} text-white font-bold rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 px-3 text-sm`}>
-                        <MapPin size={18} /> 互動 ({POI_NAMES[nearestPoi.type] || '未知'})
-                      </button>
-                    ) : (
-                      <button onClick={() => startHunt(false)} disabled={autoExplore || isTraveling} className={`flex-1 h-10 ${autoExplore || isTraveling ? 'bg-gray-600/50 cursor-not-allowed text-gray-400' : 'bg-gradient-to-r from-game-accent to-indigo-500 hover:from-sky-400 hover:to-indigo-400 text-white shadow-game-accent/20'} font-bold rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg px-3 text-sm`}>
-                        <Sword size={18} /> {autoExplore ? '自動探索' : isTraveling ? '火車旅途中' : '自由狩獵'}
+
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <MapPin size={10} className="text-gray-500" />
+                      <p className="text-[10px] text-gray-500 font-bold uppercase tracking-tighter">當前位置</p>
+                    </div>
+                    <p className="text-sm font-black text-white truncate leading-tight">{areaName}</p>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    {/* Contextual Interaction (Town/POI) */}
+                    {(nearestTown || nearestPoi) && (
+                      <button
+                        onClick={() => nearestTown ? setInTown(nearestTown) : handlePoiInteract(nearestPoi!)}
+                        disabled={isTraveling && !nearestTown}
+                        className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all shadow-lg active:scale-90 ${nearestTown ? 'bg-indigo-600 text-white shadow-indigo-500/20 hover:bg-indigo-500' : 'bg-emerald-600 text-white shadow-emerald-500/20 hover:bg-emerald-500'}`}
+                        title={nearestTown ? `進入 ${nearestTown.name}` : `互動`}
+                      >
+                        {nearestTown ? <Home size={18} /> : <MapPin size={18} />}
                       </button>
                     )}
+
+                    {/* Manual Hunt (Icon only) */}
+                    {!nearestPoi && !autoExplore && (
+                      <button
+                        onClick={() => startHunt(false)}
+                        disabled={isTraveling}
+                        className="w-9 h-9 rounded-xl bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10 hover:text-white transition-all active:scale-90"
+                        title="自由狩獵"
+                      >
+                        <Sword size={18} />
+                      </button>
+                    )}
+
+                    {/* Auto Explore Toggle (The Main Zap Button) */}
                     <button
                       onClick={() => {
                         if (!isTraveling) {
@@ -2731,7 +2746,8 @@ const App: React.FC = () => {
                         }
                       }}
                       disabled={isTraveling}
-                      className={`h-10 w-10 flex-shrink-0 rounded-xl flex items-center justify-center transition-all ${isTraveling ? 'bg-white/5 opacity-30 cursor-not-allowed' : autoExplore ? 'bg-green-500/20 text-green-400 border border-green-500/50 shadow-lg shadow-green-500/20' : 'bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10'}`}
+                      className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all shadow-lg active:scale-90 ${isTraveling ? 'bg-white/5 opacity-30 cursor-not-allowed' : autoExplore ? 'bg-game-accent text-white shadow-game-accent/30' : 'bg-white/10 text-gray-400 border border-white/5 hover:bg-white/20'}`}
+                      title={autoExplore ? '停止自動探索' : '開始自動探索'}
                     >
                       <Zap size={18} className={autoExplore && !isTraveling ? 'animate-pulse' : ''} />
                     </button>
