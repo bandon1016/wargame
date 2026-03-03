@@ -175,7 +175,13 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({
                 : 1.0;
             const enemyElemMod = weather ? (WEATHER_TYPES[weather].elementMods?.[enemy.element] ?? 1.0) : 1.0;
             const totalMod = skillElemMod * enemyElemMod;
-            const dmg = Math.max(1, Math.round((power + Math.floor((combatStats.attack + atkBuff) * 0.5) - enemy.defense + Math.floor(Math.random() * 10)) * totalMod));
+
+            // HP% 傷害計算 (對強敵有效)
+            const hpPercent = (skillDef.hpPercentDamage || 0) + (playerSkill.level - 1) * (skillDef.hpPercentGrowth || 0);
+            const hpDmg = Math.floor(enemy.maxHp * (hpPercent / 100));
+
+            const baseDmg = power + Math.floor((combatStats.attack + atkBuff) * 0.5) - enemy.defense + Math.floor(Math.random() * 10);
+            const dmg = Math.max(1, Math.round((baseDmg + hpDmg) * totalMod));
             currentEHp = Math.max(0, eHp - dmg);
             setEHp(currentEHp);
             setEShake(true); setTimeout(() => setEShake(false), 300);

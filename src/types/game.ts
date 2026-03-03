@@ -22,6 +22,10 @@ export interface Skill {
     baseMpCost: number;
     mpCostGrowth: number;
 
+    // HP% Damage (optional, for offensive skills)
+    hpPercentDamage?: number;   // Lv.1 基礎敵人最大 HP %
+    hpPercentGrowth?: number;   // 每級增加的 HP %
+
     // Buff 型態專用
     durationTurns?: number; // 持續回合
 
@@ -450,32 +454,36 @@ export const SKILL_DATABASE: Skill[] = [
     {
         id: 'sk_slash', name: '旋風斬', type: 'attack', description: '揮動武器造成範圍傷害', icon: '🌪️',
         element: 'neutral' as ElementType,
-        basePower: 25, powerGrowth: 10, baseMpCost: 15, mpCostGrowth: 2,
-        debuff: { type: 'rend', baseChance: 30, chanceGrowth: 2, baseDuration: 2, durationGrowth: 0, baseDamage: 10, damageGrowth: 4 }
+        basePower: 40, powerGrowth: 15, baseMpCost: 15, mpCostGrowth: 2,
+        hpPercentDamage: 2, hpPercentGrowth: 1,
+        debuff: { type: 'rend', baseChance: 30, chanceGrowth: 2, baseDuration: 2, durationGrowth: 0, baseDamage: 20, damageGrowth: 12 }
     },
     {
         id: 'sk_fireball', name: '火球術', type: 'attack', description: '召喚火焰轟擊敵人', icon: '🔥',
         element: 'fire' as ElementType,
-        basePower: 35, powerGrowth: 15, baseMpCost: 25, mpCostGrowth: 3,
-        debuff: { type: 'burn', baseChance: 40, chanceGrowth: 3, baseDuration: 3, durationGrowth: 0.1, baseDamage: 10, damageGrowth: 5 }
+        basePower: 60, powerGrowth: 25, baseMpCost: 25, mpCostGrowth: 3,
+        hpPercentDamage: 5, hpPercentGrowth: 2,
+        debuff: { type: 'burn', baseChance: 40, chanceGrowth: 3, baseDuration: 3, durationGrowth: 0.1, baseDamage: 35, damageGrowth: 20 }
     },
     {
         id: 'sk_heal', name: '治癒之光', type: 'heal', description: '恢復自身 HP', icon: '💚',
         element: 'light' as ElementType,
-        basePower: 30, powerGrowth: 12, baseMpCost: 20, mpCostGrowth: 2,
-        debuff: { type: 'regen', baseChance: 100, chanceGrowth: 0, baseDuration: 3, durationGrowth: 0, baseDamage: 15, damageGrowth: 5 }
+        basePower: 120, powerGrowth: 70, baseMpCost: 20, mpCostGrowth: 2,
+        debuff: { type: 'regen', baseChance: 100, chanceGrowth: 0, baseDuration: 3, durationGrowth: 0, baseDamage: 50, damageGrowth: 40 }
     },
     {
         id: 'sk_thunder', name: '雷擊', type: 'attack', description: '閃電從天而降', icon: '⚡',
         element: 'lightning' as ElementType,
-        basePower: 40, powerGrowth: 18, baseMpCost: 30, mpCostGrowth: 4,
-        debuff: { type: 'shock', baseChance: 25, chanceGrowth: 2, baseDuration: 2, durationGrowth: 0, baseDamage: 15, damageGrowth: 6 }
+        basePower: 80, powerGrowth: 45, baseMpCost: 30, mpCostGrowth: 4,
+        hpPercentDamage: 8, hpPercentGrowth: 3,
+        debuff: { type: 'shock', baseChance: 25, chanceGrowth: 2, baseDuration: 2, durationGrowth: 0, baseDamage: 55, damageGrowth: 35 }
     },
     {
         id: 'sk_iceblast', name: '冰爆', type: 'attack', description: '冰晶碎片刺穿敵人', icon: '❄️',
         element: 'water' as ElementType,
-        basePower: 30, powerGrowth: 15, baseMpCost: 20, mpCostGrowth: 3,
-        debuff: { type: 'freeze', baseChance: 20, chanceGrowth: 1.5, baseDuration: 1, durationGrowth: 0.2, baseDamage: 5, damageGrowth: 2 }
+        basePower: 50, powerGrowth: 22, baseMpCost: 20, mpCostGrowth: 3,
+        hpPercentDamage: 4, hpPercentGrowth: 1.5,
+        debuff: { type: 'freeze', baseChance: 20, chanceGrowth: 1.5, baseDuration: 1, durationGrowth: 0.2, baseDamage: 25, damageGrowth: 15 }
     },
     {
         id: 'sk_shield', name: '鐵壁', type: 'buff', description: '暫時提升防禦', icon: '🛡️',
