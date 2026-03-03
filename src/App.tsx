@@ -3,7 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup, useMap, Circle, Polyline, useMa
 import 'leaflet/dist/leaflet.css';
 import { Compass, Sword, Home, Users, Package, Settings as SettingsIcon, Book, Heart, Shield, Zap, ChevronRight, MapPin, Loader2, X, PlusCircle, ShieldAlert, TrainFront, Coins, Sparkles, Cpu, Flame, Waves, Diamond, Trophy, Copy, Check, ScrollText, TrendingUp } from 'lucide-react';
 import type { CharacterStats, Equipment, GameItem, Skill, MapPOI, Town, WeatherType, Enemy, AlchemyRecipe, BlacksmithRecipe, ElementType } from './types/game';
-import { MONSTER_DATABASE, SKILL_DATABASE, ITEM_DATABASE, EQUIPMENT_DATABASE, RARITY_COLORS, WEATHER_TYPES, getRegionByCityName, getRegionalMaterials, getRegionByCoordinates, TOWN_DATABASE, getPartnerAvatar, getRailwayPath, POI_NAMES, ELEMENT_META } from './types/game';
+import { MONSTER_DATABASE, SKILL_DATABASE, ITEM_DATABASE, EQUIPMENT_DATABASE, RARITY_COLORS, WEATHER_TYPES, TOWN_DATABASE, getPartnerAvatar, getRailwayPath, POI_NAMES, ELEMENT_META } from './types/game';
 import { CombatScreen } from './components/CombatScreen';
 import { PartnersTab } from './components/PartnersTab';
 import { HomeTab } from './components/HomeTab';
@@ -324,7 +324,7 @@ const App: React.FC = () => {
   const activePoiRef = React.useRef<string | null>(null);
   const activeMerchantPoiRef = React.useRef<string | null>(null);
   useEffect(() => { activePoiRef.current = activePoiCombat; }, [activePoiCombat]);
-  const [eliteCooldowns, setEliteCooldowns] = useState<Record<string, number>>({});
+
   const [combatLogs, setCombatLogs] = useState<CombatLog[]>([]);
   const [forgingRecipeId, setForgingRecipeId] = useState<string | null>(null);
   const [logOpacity, setLogOpacity] = useState(1);
@@ -1568,7 +1568,6 @@ const App: React.FC = () => {
     if (activePoiRef.current) {
       const poiId = activePoiRef.current;
       await supabase.rpc('resolve_poi_combat', { p_poi_id: poiId, p_win: false });
-      setEliteCooldowns(prev => ({ ...prev, [poiId]: Date.now() + 10000 }));
       setActivePoiCombat(null);
       fetchPois();
     }
@@ -1892,158 +1891,9 @@ const App: React.FC = () => {
   const effectiveMaxHp = player ? player.maxHp + totalEquipHp(player) + totalPartnerHp(player) : 0;
   const effectiveHeal = player ? totalPartnerHeal(player) : 0;
 
-  // Interaction Handler for POIs
-  const handlePoiInteract = useCallback(async (poi: MapPOI) => {
-    if (!session?.user?.id || isTraveling) return;
 
-    if (poi.type === 'elite') {
-      const cd = eliteCooldowns[poi.id];
-      if (cd && Date.now() < cd) {
-        alert(`剛從戰鬥中撤退，請等待 ${Math.ceil((cd - Date.now()) / 1000)} 秒後再重新挑戰！`);
-        return;
-      }
-      if (poi.lockedBy && poi.lockedBy !== session.user.id) {
-        alert('這名菁英怪正在與其他玩家戰鬥中！');
-        return;
-      }
-    }
 
-    // DB Check
-    const { data: success, error } = await supabase.rpc('interact_poi', { p_poi_id: poi.id });
-    if (error || !success) {
-      alert('這項事件已經消失，或是已經被其他人搶先觸發了！');
-      fetchPois(); // Refresh immediately
-      return;
-    }
 
-    // Success! Update local state
-    if (poi.type === 'chest') {
-      setPois(prev => prev.filter(p => p.id !== poi.id)); // Remove the POI locally
-    } else if (poi.type === 'elite') {
-      setPois(prev => prev.map(p => p.id === poi.id ? { ...p, lockedBy: session?.user?.id, lockedAt: Date.now() } : p));
-      setActivePoiCombat(poi.id);
-    }
-
-    if (!player) return;
-
-    if (poi.type === 'merchant') {
-      // 5% Chance for Regional Gift
-      if (Math.random() < 0.05) {
-        let region = getRegionByCoordinates(positionRef.current[0], positionRef.current[1]);
-        if (region === 'unknown') {
-          region = getRegionByCityName(areaName);
-        }
-        const mats = getRegionalMaterials(region);
-        if (mats.length > 0) {
-          const targetId = mats[Math.floor(Math.random() * mats.length)];
-          const itemDef = ITEM_DATABASE.find(i => i.id === targetId);
-          if (itemDef) {
-            const currentList = [...player.items];
-            const existing = currentList.find(i => i.id === targetId);
-            if (existing) existing.quantity = (existing.quantity || 1) + 2;
-            else currentList.push({ ...itemDef, quantity: 2 } as GameItem);
-
-            setLootMessage({
-              title: '商人好感贈禮！',
-              items: [{ name: itemDef.name, quantity: 2, icon: itemDef.icon }]
-            });
-            const nextState = { ...player, items: currentList };
-            setPlayer(nextState);
-            saveProfile(nextState);
-          }
-        }
-      }
-      activeMerchantPoiRef.current = poi.id;
-      setIsMerchantOpen(true);
-    } else if (poi.type === 'chest') {
-      const goldBounty = 100 + player.level * 20;
-      let newItems = [...player.items];
-      const itemsGot: { name: string; quantity: number; icon: string }[] = [];
-
-      itemsGot.push({ name: '金幣', quantity: goldBounty, icon: '💰' });
-
-      const rand = Math.random();
-      // 10% chance for 3 herbs
-      if (rand < 0.1) {
-        const herbDef = ITEM_DATABASE.find(i => i.id === 'item_herb');
-        if (herbDef) {
-          const existing = newItems.find(i => i.id === 'item_herb');
-          if (existing) existing.quantity = (existing.quantity ?? 1) + 3;
-          else newItems.push({ ...herbDef, quantity: 3 } as GameItem);
-          itemsGot.push({ name: herbDef.name, quantity: 3, icon: herbDef.icon });
-        }
-      }
-      // 1% chance to drop a revive potion (calculated independently or separately, 
-      // here we use a separate roll for the 1% chance to allow both or exclusive)
-      // User said "10% herb 3, 1% revive", usually means separate chances.
-      if (Math.random() < 0.01) {
-        const potDef = ITEM_DATABASE.find(i => i.id === 'item_revive_pot');
-        if (potDef) {
-          const existingPot = newItems.find(i => i.id === 'item_revive_pot');
-          if (existingPot) existingPot.quantity = (existingPot.quantity ?? 1) + 1;
-          else newItems.push({ ...potDef, quantity: 1 } as GameItem);
-          itemsGot.push({ name: potDef.name, quantity: 1, icon: potDef.icon });
-        }
-      }
-
-      // 1% 機率獲得靈石 (Premium Gems)
-      let gemBounty = 0;
-      if (Math.random() < 0.01) {
-        gemBounty = Math.floor(Math.random() * 2) + 1; // 1-2 顆
-        itemsGot.push({ name: '靈石', quantity: gemBounty, icon: '💎' });
-      }
-
-      setLootMessage({
-        title: '發現了物資箱！',
-        items: itemsGot
-      });
-
-      const nextState = {
-        ...player,
-        gold: player.gold + goldBounty,
-        premiumGems: (player.premiumGems ?? 0) + gemBounty,
-        items: newItems
-      };
-      setPlayer(nextState);
-      saveProfile(nextState);
-
-      // Quest: collect progress tracking
-      if (session?.user?.id) {
-        supabase.rpc('increment_collect_quests', {
-          p_user_id: session.user.id,
-          p_increment: 1
-        }).then();
-      }
-    } else if (poi.type === 'altar') {
-      // Heal both HP and MP to full, and gain Incense
-      const currentMaxHp = player.maxHp + totalEquipHp(player) + totalPartnerHp(player);
-      const incenseGain = Math.floor(Math.random() * 6) + 5; // 5-10 incense
-      const nextState = {
-        ...player,
-        hp: currentMaxHp,
-        mp: player.maxMp,
-        incense: (player.incense ?? 0) + incenseGain
-      };
-      setLootMessage({
-        title: '虔誠供奉',
-        items: [{ name: '香火', quantity: incenseGain, icon: '🏮' }]
-      });
-      setPlayer(nextState);
-      saveProfile(nextState);
-
-      // Quest: Explore progress
-      if (session?.user?.id) {
-        supabase.rpc('increment_explore_quests', { p_user_id: session.user.id }).then();
-      }
-    }
-
-    if (poi.type === 'elite') {
-      startHunt(true);
-    }
-  }, [startHunt, session, fetchPois, player, saveProfile, areaName]);
-
-  const nearestTown = TOWN_DATABASE.find(t => getDistance(position[0], position[1], t.lat, t.lng) <= t.radius);
-  const nearestPoi = pois.find(p => getDistance(position[0], position[1], p.lat, p.lng) <= 200);
 
   // Handle clicking on POIs or Towns (require 2 clicks to move)
   const handleMarkClick = useCallback((id: string, lat: number, lng: number) => {
