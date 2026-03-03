@@ -1,4 +1,4 @@
--- ==========================================
+﻿-- ==========================================
 -- SECURITY MIGRATION: MOVING GAME LOGIC TO BACKEND
 -- ==========================================
 
@@ -251,6 +251,26 @@ BEGIN
                 v_loots := v_loots || jsonb_build_array(jsonb_build_object(
                     'id', v_reg_sid, 'name', v_reg_sn, 'icon', v_reg_sic, 'type', 'material', 'description', v_reg_sd, 'quantity', v_reg_q
                 ));
+            END IF;
+        END IF;
+
+        -- 5.5 台灣範圍「香火」隨機掉落
+        IF v_reg != 'unknown' THEN
+            -- 一般、掩人耳目: 10% 機率 (1~3個); 菁英、首領: 20% 機率 (2~5個)
+            IF (p_is_elite OR p_is_boss) THEN
+                IF random() < 0.20 THEN
+                    v_loots := v_loots || jsonb_build_array(jsonb_build_object(
+                        'id', 'item_incense', 'name', '香火', 'icon', '🕯️', 'type', 'material', 
+                        'description', '台灣地區特有物品，打敗魔物後有機率獲得。', 'quantity', floor(random() * 4 + 2)::int
+                    ));
+                END IF;
+            ELSE
+                IF random() < 0.10 THEN
+                    v_loots := v_loots || jsonb_build_array(jsonb_build_object(
+                        'id', 'item_incense', 'name', '香火', 'icon', '🕯️', 'type', 'material', 
+                        'description', '台灣地區特有物品，打敗魔物後有機率獲得。', 'quantity', floor(random() * 3 + 1)::int
+                    ));
+                END IF;
             END IF;
         END IF;
     END;
@@ -601,19 +621,31 @@ BEGIN
 
     -- Recipes Library (Matching game.ts)
     v_recipe := CASE p_recipe_id
-        WHEN 'rec_hp_pot' THEN '{"id": "rec_hp_pot", "target": "item_hp_pot", "cost": 20, "mats": [{"id": "item_herb", "q": 2}]}'::jsonb
-        WHEN 'rec_mp_pot' THEN '{"id": "rec_mp_pot", "target": "item_mp_pot", "cost": 50, "mats": [{"id": "item_herb", "q": 2}, {"id": "item_magic_gem", "q": 1}]}'::jsonb
-        WHEN 'rec_hp_pot_m' THEN '{"id": "rec_hp_pot_m", "target": "item_hp_pot_m", "cost": 50, "mats": [{"id": "item_herb", "q": 4}, {"id": "item_hp_pot", "q": 1}]}'::jsonb
-        WHEN 'rec_revive_pot' THEN '{"id": "rec_revive_pot", "target": "item_revive_pot", "cost": 500, "mats": [{"id": "item_magic_gem", "q": 1}, {"id": "mat_north_glass", "q": 1}, {"id": "mat_south_pearl", "q": 1}]}'::jsonb
-        WHEN 'rec_tech_boost' THEN '{"id": "rec_tech_boost", "target": "item_str_seed", "cost": 80, "mats": [{"id": "mat_north_tech", "q": 3}, {"id": "mat_north_glass", "q": 1}]}'::jsonb
-        WHEN 'rec_optic_def' THEN '{"id": "rec_optic_def", "target": "item_def_seed", "cost": 120, "mats": [{"id": "mat_north_glass", "q": 3}, {"id": "item_herb", "q": 2}]}'::jsonb
-        WHEN 'rec_lava_boost' THEN '{"id": "rec_lava_boost", "target": "item_str_seed", "cost": 200, "mats": [{"id": "mat_lava_sand", "q": 2}, {"id": "mat_south_sand", "q": 3}]}'::jsonb
-        WHEN 'rec_sea_heal' THEN '{"id": "rec_sea_heal", "target": "item_hp_pot_m", "cost": 80, "mats": [{"id": "mat_south_pearl", "q": 1}, {"id": "item_herb", "q": 3}]}'::jsonb
-        WHEN 'rec_crystal_life' THEN '{"id": "rec_crystal_life", "target": "item_hp_seed", "cost": 150, "mats": [{"id": "mat_east_crystal", "q": 2}, {"id": "item_herb", "q": 2}]}'::jsonb
+        WHEN 'rec_hp_pot' THEN '{"id": "rec_hp_pot", "target": "item_hp_pot", "name": "小型生命藥水", "cost": 20, "mats": [{"id": "item_herb", "q": 2}]}'::jsonb
+        WHEN 'rec_mp_pot' THEN '{"id": "rec_mp_pot", "target": "item_mp_pot", "name": "魔力藥水", "icon": "💧", "type": "potion", "desc": "閃爍著幽藍光芒的藥水，能恢復 50 點魔力值。", "cost": 50, "mats": [{"id": "item_herb", "q": 2}, {"id": "item_magic_gem", "q": 1}]}'::jsonb
+        WHEN 'rec_hp_pot_m' THEN '{"id": "rec_hp_pot_m", "target": "item_hp_pot_m", "name": "中型生命藥水", "icon": "⚗️", "type": "potion", "desc": "濃郁的紅色藥劑，能恢復 200 點生命值。", "cost": 50, "mats": [{"id": "item_herb", "q": 4}, {"id": "item_hp_pot", "q": 1}]}'::jsonb
+        WHEN 'rec_hp_pot_l' THEN '{"id": "rec_hp_pot_l", "target": "item_hp_pot_l", "name": "大型生命藥水", "icon": "🍷", "type": "potion", "desc": "極其珍貴的高級藥品，能恢復 500 點生命值。", "cost": 200, "mats": [{"id": "item_herb", "q": 8}, {"id": "item_hp_pot_m", "q": 1}, {"id": "item_magic_gem", "q": 1}]}'::jsonb
+        WHEN 'rec_revive_pot' THEN '{"id": "rec_revive_pot", "target": "item_revive_pot", "name": "復甦精華", "icon": "💧", "type": "potion", "desc": "閃耀著奇蹟般光芒的泉水，能將角色滿血復活。", "cost": 500, "mats": [{"id": "item_magic_gem", "q": 1}, {"id": "mat_north_glass", "q": 1}, {"id": "mat_south_pearl", "q": 1}]}'::jsonb
+        WHEN 'rec_tech_boost' THEN '{"id": "rec_tech_boost", "target": "item_str_seed", "name": "力量種子", "icon": "💪", "type": "consumable", "desc": "服用後永久提升 2 點攻擊力。", "cost": 80, "mats": [{"id": "mat_north_tech", "q": 3}, {"id": "mat_north_glass", "q": 1}]}'::jsonb
+        WHEN 'rec_optic_def' THEN '{"id": "rec_optic_def", "target": "item_def_seed", "name": "鐵壁種子", "icon": "🛡️", "type": "consumable", "desc": "服用後永久提升 2 點防禦力。", "cost": 120, "mats": [{"id": "mat_north_glass", "q": 3}, {"id": "item_herb", "q": 2}]}'::jsonb
+        WHEN 'rec_lava_boost' THEN '{"id": "rec_lava_boost", "target": "item_str_seed", "name": "力量種子", "icon": "💪", "type": "consumable", "desc": "服用後永久提升 2 點攻擊力。", "cost": 200, "mats": [{"id": "mat_lava_sand", "q": 2}, {"id": "mat_south_sand", "q": 3}]}'::jsonb
+        WHEN 'rec_sea_heal' THEN '{"id": "rec_sea_heal", "target": "item_hp_pot_m", "name": "中型生命藥水", "icon": "⚗️", "type": "potion", "desc": "濃郁的紅色藥劑，能恢復 200 點生命值。", "cost": 80, "mats": [{"id": "mat_south_pearl", "q": 1}, {"id": "item_herb", "q": 3}]}'::jsonb
+        WHEN 'rec_crystal_life' THEN '{"id": "rec_crystal_life", "target": "item_hp_seed", "name": "生命之果", "icon": "🍎", "type": "consumable", "desc": "服用後永久提升 10 點最大生命值。", "cost": 150, "mats": [{"id": "mat_east_crystal", "q": 2}, {"id": "item_herb", "q": 2}]}'::jsonb
         ELSE NULL
     END;
 
     IF v_recipe IS NULL THEN RAISE EXCEPTION 'Invalid recipe ID'; END IF;
+
+    -- Daily limit check for seeds
+    IF v_recipe->>'target' IN ('item_str_seed', 'item_def_seed') THEN
+        INSERT INTO public.daily_craft_limits (user_id, item_id, craft_date, craft_count)
+        VALUES (v_profile.id, v_recipe->>'target', CURRENT_DATE, 0)
+        ON CONFLICT (user_id, item_id, craft_date) DO NOTHING;
+
+        IF (SELECT craft_count FROM public.daily_craft_limits WHERE user_id = v_profile.id AND item_id = v_recipe->>'target' AND craft_date = CURRENT_DATE) >= 2 THEN
+            RAISE EXCEPTION '該種子每日製作上限已達 (2個)';
+        END IF;
+    END IF;
 
     v_gold_cost := (v_recipe->>'cost')::integer;
     IF v_profile.gold < v_gold_cost THEN RAISE EXCEPTION 'Insufficient gold'; END IF;
@@ -667,7 +699,11 @@ BEGIN
                 UNION ALL
                 -- Add target item (placeholder values, in real app these should come from ITEM_DATABASE)
                 SELECT 
-                    v_recipe->>'target', 'Crafted Item', '🧪', 'potion', 1
+                    v_recipe->>'target', 
+                    COALESCE(v_recipe->>'name', '製作道具'), 
+                    COALESCE(v_recipe->>'icon', '🧪'), 
+                    COALESCE(v_recipe->>'type', 'potion'), 
+                    1
                 WHERE NOT EXISTS (SELECT 1 FROM deducted WHERE id = v_recipe->>'target')
             ),
             updated_list AS (
@@ -691,7 +727,13 @@ BEGIN
                     FROM jsonb_array_elements(v_recipe->'mats') AS r
                     UNION ALL
                     -- Add target item (quantity 1)
-                    SELECT v_recipe->>'target', '製作道具', '🧪', 'potion', '煉金產出的道具', 1
+                    SELECT 
+                        v_recipe->>'target', 
+                        COALESCE(v_recipe->>'name', '製作道具'), 
+                        COALESCE(v_recipe->>'icon', '🧪'), 
+                        COALESCE(v_recipe->>'type', 'potion'), 
+                        COALESCE(v_recipe->>'desc', '煉金產出的道具'), 
+                        1
                 ) t
                 GROUP BY id, name, icon, type, description
                 HAVING SUM(quantity) > 0
@@ -731,9 +773,9 @@ BEGIN
 
     -- Equipment Recipes (Subset for Example, in real app more would be added)
     v_recipe := CASE p_recipe_id
-        WHEN 'forge_wood_sword' THEN '{"cost": 200, "target": "eq_wood_sword", "mats": [{"id": "item_iron_ore", "q": 12}, {"id": "item_herb", "q": 5}]}'::jsonb
-        WHEN 'forge_iron_sword' THEN '{"cost": 1500, "target": "eq_iron_sword", "mats": [{"id": "item_iron_ore", "q": 35}, {"id": "mat_north_tech", "q": 12}]}'::jsonb
-        -- Add others as needed
+        WHEN 'forge_wood_sword' THEN '{"cost": 200, "target": "eq_wood_sword", "name": "木劍", "icon": "🗡️", "slot": "weapon", "rarity": 1, "atk": 5, "def": 0, "hp": 0, "desc": "用堅硬木頭削成的練習用劍。", "mats": [{"id": "item_iron_ore", "q": 12}, {"id": "item_herb", "q": 5}]}'::jsonb
+        WHEN 'forge_iron_sword' THEN '{"cost": 1500, "target": "eq_iron_sword", "name": "鐵劍", "icon": "🗡️", "slot": "weapon", "rarity": 1, "atk": 12, "def": 0, "hp": 0, "desc": "經過鍛造的鐵製長劍。", "mats": [{"id": "item_iron_ore", "q": 35}, {"id": "mat_north_tech", "q": 12}]}'::jsonb
+        WHEN 'forge_steel_sword' THEN '{"cost": 8500, "target": "eq_steel_sword", "name": "鋼劍", "icon": "⚔️", "slot": "weapon", "rarity": 2, "atk": 35, "def": 0, "hp": 0, "desc": "高等級鋼鐵打造的利刃。", "mats": [{"id": "item_iron_ore", "q": 70}, {"id": "mat_north_tech", "q": 25}, {"id": "item_magic_gem", "q": 6}]}'::jsonb
         ELSE NULL
     END;
 
@@ -760,14 +802,14 @@ BEGIN
     -- In a real production app, v_target_eq_id would look up EQUIPMENT_DATABASE
     v_new_eq := jsonb_build_object(
         'id', 'eq_forge_' || md5(random()::text),
-        'name', '製作裝備',
-        'slot', 'weapon',
-        'rarity', 1,
-        'attack', 5,
-        'defense', 0,
-        'hp', 0,
-        'icon', '🗡️',
-        'description', '經由鍛造產出的裝備'
+        'name', COALESCE(v_recipe->>'name', '製作裝備'),
+        'slot', COALESCE(v_recipe->>'slot', 'weapon'),
+        'rarity', COALESCE((v_recipe->>'rarity')::int, 1),
+        'attack', COALESCE((v_recipe->>'atk')::int, 5),
+        'defense', COALESCE((v_recipe->>'def')::int, 0),
+        'hp', COALESCE((v_recipe->>'hp')::int, 0),
+        'icon', COALESCE(v_recipe->>'icon', '🗡️'),
+        'description', COALESCE(v_recipe->>'desc', '經由鍛造產出的裝備')
     );
 
     -- Update Profile
@@ -838,7 +880,8 @@ BEGIN
 
     -- Determine effects based on ID
     IF p_item_id = 'item_hp_pot' OR p_item_id = 'it_01' THEN v_hp_recover := 50 * v_count;
-    ELSIF p_item_id = 'item_hp_pot_m' THEN v_hp_recover := 150 * v_count;
+    ELSIF p_item_id = 'item_hp_pot_m' THEN v_hp_recover := 200 * v_count;
+    ELSIF p_item_id = 'item_hp_pot_l' THEN v_hp_recover := 500 * v_count;
     ELSIF p_item_id = 'item_mp_pot' THEN v_mp_recover := 50 * v_count;
     ELSIF p_item_id = 'item_revive_pot' THEN v_hp_recover := 9999; v_count := 1; -- Revive is usually single use
     ELSIF p_item_id = 'item_str_seed' THEN v_str_increase := 2 * v_count;
@@ -878,6 +921,18 @@ BEGIN
         ),
         updated_at = now()
     WHERE id = v_user_id;
+
+    -- Increment daily craft count if applicable
+
+    IF v_recipe->>'target' IN ('item_str_seed', 'item_def_seed') THEN
+
+        UPDATE public.daily_craft_limits 
+
+        SET craft_count = craft_count + 1 
+
+        WHERE user_id = v_user_id AND item_id = v_recipe->>'target' AND craft_date = CURRENT_DATE;
+
+    END IF;
 
     -- Fetch final state for authoritative UI update
     SELECT * INTO v_profile FROM public.profiles WHERE id = v_user_id;
@@ -992,21 +1047,21 @@ END;
 $$;
 
 -- ==========================================
--- 10. �Ʀ�]�ַӨ�s�޿� (Leaderboard Refresh)
+-- 10. 排行榜數據重新整理 (Leaderboard Refresh)
 -- ==========================================
 CREATE OR REPLACE FUNCTION public.refresh_leaderboard_snapshots()
 RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
-AS c:\Users\werbo\Desktop\gravity\github\war-game
+AS $$
 DECLARE
     v_today text := current_date::text;
     v_count integer;
 BEGIN
-    -- 1. �M������w�s�b���ַ� (�קK���ư���ɲ��ͦh�l���)
+    -- 1. 清除舊的今日排行榜數據 (預防重複或舊數據殘留)
     DELETE FROM public.leaderboard_snapshots WHERE snapshot_date = v_today;
 
-    -- 2. ���J���ź] (Level Ranking)
+    -- 2. 插入等級排行 (Level Ranking)
     INSERT INTO public.leaderboard_snapshots (
         user_id, nickname, level, gold, power_score, rank_type, rank_position, snapshot_date
     )
@@ -1023,7 +1078,7 @@ BEGIN
     ORDER BY level DESC, exp DESC
     LIMIT 100;
 
-    -- 3. ���J�]�I�] (Gold Ranking)
+    -- 3. 插入金幣排行 (Gold Ranking)
     INSERT INTO public.leaderboard_snapshots (
         user_id, nickname, level, gold, power_score, rank_type, rank_position, snapshot_date
     )
@@ -1040,7 +1095,7 @@ BEGIN
     ORDER BY gold DESC
     LIMIT 100;
 
-    -- 4. ���J�ԤO�] (Power Ranking)
+    -- 4. 插入戰力排行 (Power Ranking)
     INSERT INTO public.leaderboard_snapshots (
         user_id, nickname, level, gold, power_score, rank_type, rank_position, snapshot_date
     )
@@ -1062,8 +1117,7 @@ BEGIN
     RETURN jsonb_build_object(
         'success', true,
         'snapshot_date', v_today,
-        'message', '�Ʀ�]�ַӤw��s�� ' || v_today
+        'message', '排行榜數據更新完成 ' || v_today
     );
 END;
-c:\Users\werbo\Desktop\gravity\github\war-game;
-
+$$;

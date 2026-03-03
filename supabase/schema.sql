@@ -250,15 +250,22 @@ begin
   -- 使用 floor 確保毫秒精度對齊
   v_db_updated_at_ms := floor(extract(epoch from v_profile.updated_at) * 1000);
   
-  -- 允許 50ms 的緩衝空間以應對網路延遲與運算時差
-  if p_last_updated_at is not null and v_db_updated_at_ms > (p_last_updated_at + 50) then
-    -- 只更新位置與屬性，保護夥伴、建築與金幣不被舊版本覆寫
+  -- 允許 5050ms 的緩衝空間以應對前端 5s 自動存檔延遲 + 網路延遲
+  if p_last_updated_at is not null and v_db_updated_at_ms > (p_last_updated_at + 5050) then
+    -- 版本衝突：只更新位置、HP/MP 與步行路徑，保護夥伴、建築與金幣不被舊版本覆寫
     update public.profiles
     set 
         current_location_lat = p_lat,
         current_location_lng = p_lng,
         hp = p_hp,
         mp = p_mp,
+        -- 同步步行路徑，避免玩家抵達目的地後位置被回滾
+        walk_target_lat = COALESCE((p_walk_data->>'target_lat')::double precision, walk_target_lat),
+        walk_target_lng = COALESCE((p_walk_data->>'target_lng')::double precision, walk_target_lng),
+        walk_start_lat = COALESCE((p_walk_data->>'start_lat')::double precision, walk_start_lat),
+        walk_start_lng = COALESCE((p_walk_data->>'start_lng')::double precision, walk_start_lng),
+        walk_started_at = COALESCE((p_walk_data->>'started_at')::timestamp with time zone, walk_started_at),
+        walk_duration_seconds = COALESCE((p_walk_data->>'duration')::double precision, walk_duration_seconds),
         updated_at = now()
     where id = auth.uid()
     returning * into v_profile;

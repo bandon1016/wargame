@@ -175,6 +175,12 @@ const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => 
   return R * c;
 };
 
+// ─── Fixed Rewards by Level (Authoritative Helper) ───
+const getRewardsByLevel = (lv: number) => ({
+  exp: 15 + (lv - 1) * 10,
+  gold: 10 + (lv - 1) * 5
+});
+
 const totalEquipAtk = (p: CharacterStats) => [p.equippedWeapon, p.equippedArmor, p.equippedHelmet, p.equippedBoots, p.equippedAccessory].reduce((s, e) => s + (e?.attack ?? 0), 0);
 const totalEquipDef = (p: CharacterStats) => [p.equippedWeapon, p.equippedArmor, p.equippedHelmet, p.equippedBoots, p.equippedAccessory].reduce((s, e) => s + (e?.defense ?? 0), 0);
 const totalEquipHp = (p: CharacterStats) => [p.equippedWeapon, p.equippedArmor, p.equippedHelmet, p.equippedBoots, p.equippedAccessory].reduce((s, e) => s + (e?.hp ?? 0), 0);
@@ -637,12 +643,16 @@ const App: React.FC = () => {
       equippedHelmet: data.equipped_helmet,
       equippedBoots: data.equipped_boots,
       equippedAccessory: data.equipped_accessory,
-      items: (data.items || []).map((it: any) => ({
-        ...it,
-        // Fallback for missing descriptions/icons from server logic merges
-        description: it.description || ITEM_DATABASE.find(d => d.id === it.id)?.description || '探險獲得的道具',
-        icon: it.icon || ITEM_DATABASE.find(d => d.id === it.id)?.icon || '🧪'
-      })),
+      items: (data.items || []).map((it: any) => {
+        const dbItem = ITEM_DATABASE.find(d => d.id === it.id);
+        return {
+          ...it,
+          name: dbItem?.name || it.name || '未知道具',
+          type: dbItem?.type || it.type || 'material',
+          description: dbItem?.description || it.description || '探險獲得的道具',
+          icon: dbItem?.icon || it.icon || '🧪'
+        };
+      }),
       skills: (data.skills || []).map((s: any) => ({
         id: s.id,
         level: s.level ?? 1,
@@ -792,6 +802,8 @@ const App: React.FC = () => {
         walkTargetRef.current = null;
         walkStartRef.current = null;
         walkStartedAtRef.current = null;
+        // 立即存入目的地，讓 DB 的 walk 欄位清空，避免下次刷新重複觸發
+        setTimeout(() => saveProfileRef.current?.(undefined, [targetLat, targetLng]), 500);
       } else {
         const currentProgress = elapsedSec / durationSec;
         const currentLat = startLat + dLat * currentProgress;
@@ -1140,7 +1152,8 @@ const App: React.FC = () => {
       const dLng = targetLng - startLng;
 
       if (durationSec <= 0 || elapsedSec >= durationSec) {
-        // Arrived
+        // Arrived — update positionRef FIRST before clearing walk refs
+        positionRef.current = [targetLat, targetLng];
         setPosition([targetLat, targetLng]);
         setTargetPosition(null);
         setIsWalking(false);
@@ -1148,6 +1161,7 @@ const App: React.FC = () => {
         walkStartRef.current = null;
         walkStartedAtRef.current = null;
         walkDurationSecRef.current = 0;
+        // Now save with forceLocation to guarantee the correct destination is written
         saveProfileRef.current?.(undefined, [targetLat, targetLng]);
         return;
       }
@@ -1262,8 +1276,8 @@ const App: React.FC = () => {
       hp, maxHp: hp,
       attack: eAtk,
       defense: eDef,
-      expReward: Math.floor((18 + lv * 6) * (isElite ? 2.5 : 1) * (isWeatherSpecial ? 3 : 1)),
-      goldReward: Math.floor((8 + lv * 3) * (isElite ? 2.5 : 1) * (isWeatherSpecial ? 3 : 1)),
+      expReward: Math.floor(getRewardsByLevel(lv).exp * (isElite ? 2.5 : 1) * (isWeatherSpecial ? 3 : 1)),
+      goldReward: Math.floor(getRewardsByLevel(lv).gold * (isElite ? 2.5 : 1) * (isWeatherSpecial ? 3 : 1)),
       lootTable: [],
       // Metadata for backend resolution
       isElite,
@@ -1407,11 +1421,6 @@ const App: React.FC = () => {
 
   // ─── Weather Effects & Encounter Rate Logic ───
 
-  // ─── Fixed Rewards by Level ───
-  const getRewardsByLevel = (lv: number) => ({
-    exp: 15 + (lv - 1) * 10,
-    gold: 10 + (lv - 1) * 5
-  });
 
   const handleCombatLose = useCallback(async (finalHp?: number, finalMp?: number) => {
     if (!player) return;

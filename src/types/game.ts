@@ -529,7 +529,8 @@ export const EQUIPMENT_DATABASE: Equipment[] = [
 
 export const ITEM_DATABASE: Omit<GameItem, 'quantity'>[] = [
     { id: 'item_hp_pot', name: '小型生命藥水', type: 'potion', icon: '🧪', description: '微微泛紅的初級藥水，能恢復 50 點生命值。' },
-    { id: 'item_hp_pot_m', name: '中型生命藥水', type: 'potion', icon: '⚗️', description: '濃郁的紅色藥劑，能恢復 150 點生命值。' },
+    { id: 'item_hp_pot_m', name: '中型生命藥水', type: 'potion', icon: '⚗️', description: '濃郁的紅色藥劑，能恢復 200 點生命值。' },
+    { id: 'item_hp_pot_l', name: '大型生命藥水', type: 'potion', icon: '🍷', description: '極其珍貴的高級藥品，能恢復 500 點生命值。' },
     { id: 'item_str_seed', name: '力量種子', type: 'consumable', icon: '💪', description: '蘊含神秘力量的種子，服用後永久提升 2 點攻擊力。' },
     { id: 'item_def_seed', name: '鐵壁種子', type: 'consumable', icon: '🛡️', description: '堅硬如鐵的種子，服用後永久提升 2 點防禦力。' },
     { id: 'item_hp_seed', name: '生命之果', type: 'consumable', icon: '🍎', description: '散發著生命氣息的果實，服用後永久提升 10 點最大生命值。' },
@@ -551,6 +552,7 @@ export const ITEM_DATABASE: Omit<GameItem, 'quantity'>[] = [
     { id: 'mat_basalt', name: '玄武岩礦石', type: 'material', icon: '🌑', description: '台東特產：花東縱谷出產的堅硬黑色岩石。' },
     { id: 'mat_ancient_wood', name: '太古神木', type: 'material', icon: '🌲', description: '台中稀有：更高品質的千年神木原木，蒸餾著古老欲力。' },
     { id: 'mat_lava_sand', name: '熔岩紅砂', type: 'material', icon: '🌋', description: '台南稀有：比炎漠紅砂更濃縮的極品火屬性砂礫。' },
+    { id: 'item_incense', name: '香火', type: 'material', icon: '🕯️', description: '台灣地區特有物品，打敗魔物後有機率獲得。' },
 ];
 
 // Crafting Recipes
@@ -639,6 +641,16 @@ export const ALCHEMY_RECIPES: AlchemyRecipe[] = [
             { id: 'item_hp_pot', name: '小型生命藥水', quantity: 1 }
         ],
         goldCost: 50
+    },
+    {
+        id: 'rec_hp_pot_l',
+        targetItemId: 'item_hp_pot_l',
+        materials: [
+            { id: 'item_herb', name: '藥草', quantity: 8 },
+            { id: 'item_hp_pot_m', name: '中型生命藥水', quantity: 1 },
+            { id: 'item_magic_gem', name: '魔力寶石', quantity: 1 }
+        ],
+        goldCost: 200
     },
     {
         id: 'rec_revive_pot',
