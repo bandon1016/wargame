@@ -48,7 +48,7 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({
     const [result, setResult] = useState<'win' | 'lose' | null>(null);
     const logRef = useRef<HTMLDivElement>(null);
     const [awaitingRevive, setAwaitingRevive] = useState(false);
-    const [activeBuffs, setActiveBuffs] = useState<{ id: string; name: string; turns: number; type: string; power: number }[]>([]);
+    const [activeBuffs, setActiveBuffs] = useState<{ id: string; name: string; turns: number; type: string; power: number; icon: string }[]>([]);
     const [enemyDebuffs, setEnemyDebuffs] = useState<{ id: string; name: string; type: string; turns: number; damage: number; icon: string }[]>([]);
     const [round, setRound] = useState(1);
     const [skillsExpanded, setSkillsExpanded] = useState(false);
@@ -215,7 +215,7 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({
                 const db = skillDef.debuff;
                 const turns = Math.floor(db.baseDuration + (playerSkill.level - 1) * db.durationGrowth);
                 const regenAmt = Math.floor(db.baseDamage + (playerSkill.level - 1) * db.damageGrowth);
-                setActiveBuffs(prev => [...prev.filter(b => b.type !== 'regen'), { id: skillDef.id, name: skillDef.name, turns, type: 'regen', power: regenAmt }]);
+                setActiveBuffs(prev => [...prev.filter(b => b.type !== 'regen'), { id: skillDef.id, name: skillDef.name, turns, type: 'regen', power: regenAmt, icon: skillDef.icon }]);
                 log(`💚 獲得【持續恢復】狀態，每回合恢復 ${regenAmt} HP，持續 ${turns} 回合！`);
             }
         } else if (skillDef.type === 'buff') {
@@ -223,10 +223,10 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({
                 const db = skillDef.debuff;
                 const turns = Math.floor(db.baseDuration + (playerSkill.level - 1) * db.durationGrowth);
                 const percent = Math.floor(db.baseDamage + (playerSkill.level - 1) * db.damageGrowth);
-                setActiveBuffs(prev => [...prev.filter(b => b.type !== 'reflect'), { id: skillDef.id, name: skillDef.name, turns, type: 'reflect', power: percent }]);
+                setActiveBuffs(prev => [...prev.filter(b => b.type !== 'reflect'), { id: skillDef.id, name: skillDef.name, turns, type: 'reflect', power: percent, icon: skillDef.icon }]);
                 log(`${skillDef.icon} 使用了 ${skillDef.name}！獲得【反射傷害】狀態 (${percent}%)，持續 ${turns} 回合`);
             } else {
-                setActiveBuffs(prev => [...prev.filter(b => b.type !== 'atk'), { id: skillDef.id, name: skillDef.name, turns: skillDef.durationTurns || 3, type: 'atk', power: power }]);
+                setActiveBuffs(prev => [...prev.filter(b => b.type !== 'atk'), { id: skillDef.id, name: skillDef.name, turns: skillDef.durationTurns || 3, type: 'atk', power: power, icon: skillDef.icon }]);
                 log(`${skillDef.icon} 使用了 ${skillDef.name}！攻擊力提升了 ${power}，持續 ${skillDef.durationTurns} 回合`);
             }
         }
@@ -528,8 +528,17 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({
                             {/* Player */}
                             <div className={`glass-panel rounded-2xl p-3 md:p-4 flex flex-col items-center relative overflow-hidden ${pShake ? 'anim-shake' : ''}`}>
                                 <div className="absolute -right-6 -top-6 w-24 h-24 bg-game-accent/8 rounded-full blur-2xl" />
-                                <div className="w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-gradient-to-br from-slate-700 to-slate-900 border-2 border-game-accent/60 flex items-center justify-center text-3xl md:text-4xl mb-2 anim-pulse-glow">
+                                <div className="w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-gradient-to-br from-slate-700 to-slate-900 border-2 border-game-accent/60 flex items-center justify-center text-3xl md:text-4xl mb-2 anim-pulse-glow relative">
                                     🧙‍♂️
+                                    {activeBuffs.length > 0 && (
+                                        <div className="absolute -bottom-2 flex gap-0.5 justify-center w-full">
+                                            {activeBuffs.map((b, i) => (
+                                                <div key={i} className="text-[10px] bg-black/80 border border-white/20 rounded px-1 flex items-center gap-0.5" title={`${b.name} (${b.turns}回合)`}>
+                                                    {b.icon}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                                 <div className="font-bold text-xs md:text-sm">{combatStats.nickname} <span className="text-gray-500 text-xs">Lv.{combatStats.level}</span></div>
                                 {/* HP */}
