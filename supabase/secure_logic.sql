@@ -165,7 +165,7 @@ CREATE OR REPLACE FUNCTION public.secure_resolve_combat(
     p_monster_name text, p_is_elite boolean, p_is_boss boolean,
     p_lv_at_combat int, p_player_hp int, p_player_mp float8,
     p_base_exp int DEFAULT 20, p_base_gold int DEFAULT 10,
-    p_skill_reward_id text DEFAULT null, p_lat float8 DEFAULT null,
+    p_skill_reward_id text DEFAULT null, p_skill_reward_name text DEFAULT null, p_lat float8 DEFAULT null,
     p_lng float8 DEFAULT null, p_is_weather_special boolean DEFAULT false
 ) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER AS $$
 DECLARE
@@ -173,6 +173,9 @@ DECLARE
     v_g int; v_e int; v_lv int; v_ex int; v_mx int; v_hp int; v_mhp int; v_mp float8; v_mmp int; 
     v_up bool := false; v_t date := current_date; v_ws date := date_trunc('week', current_date)::date;
     v_loots jsonb := '[]'::jsonb; v_sid text; v_sn text; v_sic text; v_sd text;
+    v_incense_gain int := 0; v_reg text := 'unknown';
+    v_skill_drop bool := false; v_has_skill bool := false; v_skill_idx int;
+    v_p_exp int := 0;
 BEGIN
     SELECT * INTO v_p FROM public.profiles WHERE id = v_u;
     IF NOT FOUND THEN RAISE EXCEPTION 'No profile'; END IF;
@@ -259,30 +262,126 @@ BEGIN
             -- 一般、掩人耳目: 10% 機率 (1~3個); 菁英、首領: 20% 機率 (2~5個)
             IF (p_is_elite OR p_is_boss) THEN
                 IF random() < 0.20 THEN
+                    v_incense_gain := floor(random() * 4 + 2)::int;
                     v_loots := v_loots || jsonb_build_array(jsonb_build_object(
-                        'id', 'item_incense', 'name', '香火', 'icon', '🕯️', 'type', 'material', 
-                        'description', '台灣地區特有物品，打敗魔物後有機率獲得。', 'quantity', floor(random() * 4 + 2)::int
+                        'id', 'currency_incense', 'name', '香火', 'icon', '🔥', 'type', 'material', 
+                        'description', '來自全台各地廟宇的信仰力量，可用於祭祀。', 'quantity', v_incense_gain
                     ));
                 END IF;
             ELSE
                 IF random() < 0.10 THEN
+                    v_incense_gain := floor(random() * 3 + 1)::int;
                     v_loots := v_loots || jsonb_build_array(jsonb_build_object(
-                        'id', 'item_incense', 'name', '香火', 'icon', '🕯️', 'type', 'material', 
-                        'description', '台灣地區特有物品，打敗魔物後有機率獲得。', 'quantity', floor(random() * 3 + 1)::int
+                        'id', 'currency_incense', 'name', '香火', 'icon', '🔥', 'type', 'material', 
+                        'description', '來自全台各地廟宇的信仰力量，可用於祭祀。', 'quantity', v_incense_gain
                     ));
                 END IF;
             END IF;
         END IF;
+        END IF;
+
+        -- 5.6 技能與碎片掉落邏輯
+        -- 機率：一般怪 5%, 菁英怪 15%, 首領怪 30%
+        IF p_skill_reward_id IS NOT NULL THEN
+            DECLARE
+                v_drop_roll float := random();
+                v_drop_chance float := 0.05;
+            BEGIN
+                IF p_is_boss THEN v_drop_chance := 0.30;
+                ELSIF p_is_elite OR p_is_weather_special THEN v_drop_chance := 0.15;
+                END IF;
+
+                IF v_drop_roll < v_drop_chance THEN
+                    v_skill_drop := true;
+                    -- 檢查是否已持有該技能
+                    SELECT (idx - 1) INTO v_skill_idx
+                    FROM jsonb_array_elements(v_p.skills) WITH ORDINALITY AS t(elem, idx)
+                    WHERE elem->>'id' = p_skill_reward_id;
+
+                    IF v_skill_idx IS NOT NULL THEN
+                        v_has_skill := true;
+                        -- 已持有：增加碎片
+                        v_p.skills := jsonb_set(
+                            v_p.skills,
+                            ARRAY[v_skill_idx::text, 'fragments'],
+                            ((COALESCE(v_p.skills->v_skill_idx->>'fragments', '0')::int) + 1)::text::jsonb
+                        );
+                        v_loots := v_loots || jsonb_build_array(jsonb_build_object(
+                            'id', 'frag_' || p_skill_reward_id, 'name', p_skill_reward_name || '碎片', 
+                            'icon', '💎', 'type', 'material', 'description', '用於強化技能的碎片。', 'quantity', 1
+                        ));
+                    ELSE
+                        -- 未持有：習得技能
+                        v_p.skills := v_p.skills || jsonb_build_array(jsonb_build_object(
+                            'id', p_skill_reward_id, 'level', 1, 'fragments', 0
+                        ));
+                        v_loots := v_loots || jsonb_build_array(jsonb_build_object(
+                            'id', 'skill_' || p_skill_reward_id, 'name', '技能：' || p_skill_reward_name, 
+                            'icon', '✨', 'type', 'material', 'description', '全新的技能！', 'quantity', 1
+                        ));
+                    END IF;
+                END IF;
+            END;
+        END IF;
     END;
+
+    -- 5.7 夥伴經驗值邏輯 (戰鬥經驗的 20%)
+    v_p_exp := floor(v_e * 0.2);
+    IF v_p_exp > 0 AND v_p.partners IS NOT NULL THEN
+        v_p.partners := (
+            SELECT jsonb_agg(
+                CASE 
+                    WHEN (elem->>'isDeployed')::boolean = true THEN
+                        (
+                            -- 內部迴圈處理連續升級
+                            WITH RECURSIVE leveling(p_id, p_lv, p_ex, p_mx, p_pow, p_rarity) AS (
+                                SELECT 
+                                    elem->>'id',
+                                    (elem->>'level')::int,
+                                    (elem->>'exp')::int + v_p_exp,
+                                    (elem->>'maxExp')::int,
+                                    (elem->>'power')::int,
+                                    (elem->>'rarity')::int
+                                UNION ALL
+                                SELECT 
+                                    p_id,
+                                    p_lv + 1,
+                                    p_ex - p_mx,
+                                    floor(p_mx * 1.5)::int,
+                                    p_pow + (CASE WHEN p_rarity = 5 THEN 5 WHEN p_rarity = 4 THEN 3 ELSE 2 END),
+                                    p_rarity
+                                FROM leveling
+                                WHERE p_ex >= p_mx
+                            )
+                            SELECT jsonb_build_object(
+                                'id', p_id, 'name', elem->>'name', 'avatar', elem->>'avatar',
+                                'role', elem->>'role', 'rarity', p_rarity, 'power', p_pow,
+                                'level', p_lv, 'exp', p_ex, 'maxExp', p_mx, 'isDeployed', true
+                            )
+                            FROM leveling
+                            WHERE p_ex < p_mx
+                            LIMIT 1
+                        )
+                    ELSE elem
+                END
+            )
+            FROM jsonb_array_elements(v_p.partners) AS elem
+        );
+    END IF;
 
     -- 6. 更新玩家資料
     UPDATE public.profiles SET 
-        level=v_lv, exp=v_ex, max_exp=v_mx, hp=v_hp, max_hp=v_mhp, mp=v_mp, max_mp=v_mmp, gold=gold+v_g, updated_at=now(),
+        level=v_lv, exp=v_ex, max_exp=v_mx, hp=v_hp, max_hp=v_mhp, mp=v_mp, max_mp=v_mmp, 
+        gold=gold+v_g, incense = incense + v_incense_gain, 
+        skills = v_p.skills,
+        partners = v_p.partners, -- 更新夥伴狀態
+        updated_at=now(),
         items = (
             SELECT jsonb_agg(row_to_json(m)) FROM (
                 SELECT id, name, icon, type, description, SUM(quantity)::int as quantity FROM (
                     SELECT (elem->>'id') as id, (elem->>'name') as name, (elem->>'icon') as icon, (elem->>'type') as type, (elem->>'description') as description, (elem->>'quantity')::int as quantity
                     FROM jsonb_array_elements(COALESCE(v_p.items, '[]'::jsonb) || v_loots) AS elem
+                    WHERE (elem->>'id') != 'currency_incense' -- Don't add fake currency item to real inventory
                 ) t GROUP BY id, name, icon, type, description
             ) m
         )

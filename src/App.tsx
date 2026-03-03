@@ -116,6 +116,16 @@ const TARGET_ICON_SIMPLE = L.divIcon({
   iconAnchor: [15, 30]
 });
 
+interface SessionStats {
+  exp: number;
+  gold: number;
+  kills: number;
+  eliteKills: number;
+  partnerExp: number;
+  incense: number;
+  items: Record<string, { id: string; name: string; icon: string; quantity: number }>;
+}
+
 function MapUpdater({ center, isTraveling, weather }: { center: [number, number], isTraveling: boolean, weather: WeatherType }) {
   const map = useMap();
   const lastCenterRef = React.useRef<[number, number] | null>(null);
@@ -321,6 +331,21 @@ const App: React.FC = () => {
   const [isEditingNickname, setIsEditingNickname] = useState(false);
   const [tempNickname, setTempNickname] = useState('');
   const [showTreasury, setShowTreasury] = useState(false);
+
+  // --- Session Stats Logic ---
+  const [isStatsView, setIsStatsView] = useState(false);
+  const [sessionStartTime, setSessionStartTime] = useState<number | null>(null);
+  const [sessionDuration, setSessionDuration] = useState(0);
+  const [sessionStats, setSessionStats] = useState<SessionStats>({
+    exp: 0, gold: 0, kills: 0, eliteKills: 0, partnerExp: 0, incense: 0, items: {}
+  });
+
+  const formatDuration = (seconds: number) => {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
 
   // Check for onboarding
   useEffect(() => {
@@ -1007,6 +1032,15 @@ const App: React.FC = () => {
   const [currentEnemy, setCurrentEnemy] = useState<Enemy | null>(null);
   const [autoExplore, setAutoExplore] = useState(false);
 
+  // --- Session Stats Logic (Tracking Duration) ---
+  useEffect(() => {
+    if (!autoExplore || !sessionStartTime) return;
+    const interval = setInterval(() => {
+      setSessionDuration(Math.floor((Date.now() - sessionStartTime) / 1000));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [autoExplore, sessionStartTime]);
+
   // Auto-minimize combat when switching tabs
   useEffect(() => {
     if (isCombatAction && activeTab !== 'explore') {
@@ -1235,10 +1269,25 @@ const App: React.FC = () => {
 
     console.log('Starting hunt...', { level: p.level, isElite, isWeatherSpecial });
     const lv = p.level;
-    const pool = MONSTER_DATABASE.filter(m => lv >= m.minLv && lv <= m.maxLv + 5);
-    const template = pool.length > 0
-      ? pool[Math.floor(Math.random() * pool.length)]
-      : [...MONSTER_DATABASE].sort((a, b) => Math.abs(a.maxLv - lv) - Math.abs(b.maxLv - lv))[0];
+
+    // Helper: get prefix based on monster level (not player level)
+    const getMonsterPrefix = (monsterLv: number): string => {
+      if (monsterLv <= 10) return '呆滯的';
+      if (monsterLv <= 20) return '溫馴的';
+      if (monsterLv <= 30) return '膽小的';
+      if (monsterLv <= 40) return '頑皮的';
+      if (monsterLv <= 50) return '躁動的';
+      if (monsterLv <= 60) return '憤怒的';
+      if (monsterLv <= 70) return '殘酷的';
+      if (monsterLv <= 80) return '嗜血的';
+      if (monsterLv <= 90) return '狂暴的';
+      if (monsterLv <= 100) return '災厄級的';
+      const tier = Math.floor((monsterLv - 101) / 10) + 1;
+      return `災厄${tier}階`;
+    };
+
+    // All monster types are available regardless of player level
+    const template = MONSTER_DATABASE[Math.floor(Math.random() * MONSTER_DATABASE.length)];
 
     const isBoss = isElite && template.name.includes('黑龍');
     // Weather Special enemies are roughly 2x stronger than normal
@@ -1267,12 +1316,20 @@ const App: React.FC = () => {
       eDef = Math.floor((template.baseDef + Math.floor(lv * 0.8)) * statMultiplier);
     }
 
+    // Calculate the actual monster level for prefix naming
+    const monsterLv = lv + Math.floor(Math.random() * 3) - 1 + (isBoss ? 5 : isElite ? 2 : isWeatherSpecial ? 3 : 0);
+    const prefix = getMonsterPrefix(monsterLv);
+    const specialTag = isBoss ? '【首領】' : isElite ? '【菁英】' : isWeatherSpecial ? '【掩人耳目】' : '';
+
     const enemy = {
       id: Math.random().toString(),
-      name: (isBoss ? '【首領】' : isElite ? '【菁英】' : isWeatherSpecial ? '【掩人耳目】' : '') + template.name,
+      // Display name includes prefix (e.g. "【菁英】狂暴的 史萊姆")
+      name: `${specialTag}${prefix} ${template.name}`,
+      // baseName is the original name for quest matching (e.g. "史萊姆")
+      baseName: template.name,
       avatar: template.avatar,
       element: template.element,
-      level: lv + Math.floor(Math.random() * 3) - 1 + (isBoss ? 5 : isElite ? 2 : isWeatherSpecial ? 3 : 0),
+      level: monsterLv,
       hp, maxHp: hp,
       attack: eAtk,
       defense: eDef,
@@ -1316,6 +1373,8 @@ const App: React.FC = () => {
     // Call Backend to resolve rewards securely
     const lvRewards = getRewardsByLevel((currentEnemy as any).baseLv || player.level);
 
+    const randomSkill = SKILL_DATABASE[Math.floor(Math.random() * SKILL_DATABASE.length)];
+
     isRpcPendingRef.current = true;
     const { data: result, error } = await supabase.rpc('secure_resolve_combat', {
       p_monster_name: currentEnemy.name,
@@ -1327,7 +1386,8 @@ const App: React.FC = () => {
       p_base_gold: lvRewards.gold,
       p_player_hp: finalHp ?? player.hp,
       p_player_mp: finalMp ?? player.mp,
-      p_skill_reward_id: SKILL_DATABASE[Math.floor(Math.random() * SKILL_DATABASE.length)].id,
+      p_skill_reward_id: randomSkill.id,
+      p_skill_reward_name: randomSkill.name,
       p_lat: positionRef.current[0],
       p_lng: positionRef.current[1]
     });
@@ -1380,6 +1440,47 @@ const App: React.FC = () => {
     // AUTHORITATIVE LOGGING
     const finalExp = result?.exp ?? _expReward;
     const finalGold = result?.gold ?? _goldReward;
+
+    // --- Update Session Stats ---
+    setSessionStats(prev => {
+      const newItems = { ...prev.items };
+      let incenseGained = 0;
+      let partnerExpGained = 0;
+      const isEliteOrBoss = currentEnemy.name.includes('菁英') || currentEnemy.name.includes('首領');
+
+      sLoots.forEach((loot: any) => {
+        if (loot.id === 'currency_incense') {
+          incenseGained += (loot.quantity || 1);
+        } else if (loot.id === 'partner_exp' || loot.id === 'p_exp') {
+          partnerExpGained += (loot.quantity || 1);
+        } else {
+          const qty = loot.quantity || 1;
+          const key = loot.name;
+          if (!newItems[key]) {
+            newItems[key] = { id: loot.id, name: loot.name, icon: loot.icon || '📦', quantity: 0 };
+          }
+          newItems[key].quantity += qty;
+        }
+      });
+
+      if (sEquip) {
+        const key = sEquip.name;
+        if (!newItems[key]) {
+          newItems[key] = { id: `eq_${key}`, name: sEquip.name, icon: sEquip.icon || '🛡️', quantity: 0 };
+        }
+        newItems[key].quantity += 1;
+      }
+
+      return {
+        exp: prev.exp + finalExp,
+        gold: prev.gold + finalGold,
+        kills: prev.kills + 1,
+        eliteKills: prev.eliteKills + (isEliteOrBoss ? 1 : 0),
+        partnerExp: prev.partnerExp + partnerExpGained,
+        incense: prev.incense + incenseGained,
+        items: newItems
+      };
+    });
 
     const newLog: CombatLog = {
       id: `battle_${Date.now()}`,
@@ -2465,40 +2566,117 @@ const App: React.FC = () => {
               )}
             </div>
 
-            {/* Bottom Right Area - Combat Logs */}
-            {combatLogs.length > 0 && logOpacity > 0 && (
-              <div className="absolute bottom-8 right-6 z-[1000] flex flex-col-reverse gap-1.5 transition-opacity duration-300 pointer-events-none max-w-[calc(100vw-3rem)] md:max-w-[400px] items-end" style={{ opacity: logOpacity }}>
-                {combatLogs.map(log => (
-                  <div key={log.id} className="text-[11px] md:text-[12px] font-bold px-3 py-2 bg-black/60 backdrop-blur-md rounded-xl border border-white/10 text-white shadow-sm flex flex-wrap items-center gap-x-2 gap-y-1 anim-fade-in-up pointer-events-auto w-fit max-w-full">
-                    {log.type === 'win' ? (
-                      <>
-                        <span className="whitespace-nowrap">⚔️ 擊敗 {log.enemyName}</span>
-                        <span className="text-gray-400">|</span>
-                        <span className="text-sky-300 whitespace-nowrap">+{log.exp} EXP</span>
-                        <span className="text-gray-400">|</span>
-                        <span className="text-game-gold whitespace-nowrap">+{log.gold} 金幣</span>
-                        {log.items && log.items.length > 0 && (
+            {/* Bottom Right Area - Combat Logs / Stats */}
+            {logOpacity > 0 && (
+              <div className="absolute bottom-8 right-6 z-[1000] flex flex-col gap-2 transition-opacity duration-300 pointer-events-none max-w-[calc(100vw-3rem)] w-[280px] sm:w-[320px] md:w-[380px] items-end" style={{ opacity: logOpacity }}>
+
+                {/* Toggle Button */}
+                {(combatLogs.length > 0 || sessionStats.kills > 0 || autoExplore) && (
+                  <div className="flex justify-end pointer-events-auto w-full mb-0.5">
+                    <div className="bg-black/60 backdrop-blur-md rounded-full border border-white/20 p-1 flex shadow-lg">
+                      <button onClick={() => setIsStatsView(false)} className={`px-4 py-1.5 rounded-full text-[11px] font-bold transition-all ${!isStatsView ? 'bg-game-gold text-black shadow-md' : 'text-gray-400 hover:text-white'}`}>📝 戰鬥日誌</button>
+                      <button onClick={() => setIsStatsView(true)} className={`px-4 py-1.5 rounded-full text-[11px] font-bold transition-all flex items-center gap-1 ${isStatsView ? 'bg-game-gold text-black shadow-md' : 'text-gray-400 hover:text-white'}`}><TrendingUp size={12} /> 統計數據</button>
+                    </div>
+                  </div>
+                )}
+
+                {isStatsView ? (
+                  <div className="bg-black/80 backdrop-blur-[10px] rounded-2xl border border-white/20 p-4 pointer-events-auto shadow-[0_10px_30px_rgba(0,0,0,0.8)] flex flex-col gap-3 anim-fade-in-up w-full">
+                    <div className="text-center pb-2 border-b border-white/10">
+                      <div className="flex items-center justify-center gap-1.5 text-[10px] text-gray-400 tracking-wider mb-0.5">
+                        <span className={`w-1.5 h-1.5 rounded-full ${autoExplore ? 'bg-green-500 animate-[pulse_1.5s_ease-in-out_infinite]' : 'bg-gray-500'}`}></span>
+                        <span>本次掛機時長</span>
+                      </div>
+                      <div className="text-xl font-black text-white tracking-widest drop-shadow-[0_0_8px_rgba(255,255,255,0.3)] tabular-nums">{formatDuration(sessionDuration)}</div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div className="bg-white/5 rounded-xl p-2.5 border border-white/5 flex flex-col gap-1 relative overflow-hidden group">
+                        <div className="absolute top-0 right-0 w-12 h-12 bg-sky-500/10 rounded-full blur-xl group-hover:bg-sky-500/20 transition-all duration-500"></div>
+                        <span className="text-[10px] text-gray-400 z-10 font-medium tracking-wide">🚀 累計經驗值</span>
+                        <div className="font-bold text-sky-400 flex items-baseline gap-1 z-10">
+                          <span className="text-lg tabular-nums">{sessionStats.exp.toLocaleString()}</span>
+                          <span className="text-[9px] font-normal text-sky-400/60 drop-shadow-none tabular-nums">({(sessionStats.exp / Math.max(1, sessionDuration / 60)).toFixed(0)}/min)</span>
+                        </div>
+                      </div>
+                      <div className="bg-white/5 rounded-xl p-2.5 border border-white/5 flex flex-col gap-1 relative overflow-hidden group">
+                        <div className="absolute top-0 right-0 w-12 h-12 bg-amber-500/10 rounded-full blur-xl group-hover:bg-amber-500/20 transition-all duration-500"></div>
+                        <span className="text-[10px] text-gray-400 z-10 font-medium tracking-wide">💰 累計金幣</span>
+                        <div className="font-bold text-game-gold flex items-baseline gap-1 z-10">
+                          <span className="text-lg tabular-nums">{sessionStats.gold.toLocaleString()}</span>
+                          <span className="text-[9px] font-normal text-amber-400/60 drop-shadow-none tabular-nums">({(sessionStats.gold / Math.max(1, sessionDuration / 60)).toFixed(0)}/min)</span>
+                        </div>
+                      </div>
+                      <div className="bg-white/5 rounded-xl p-2 border border-white/5 flex justify-between items-center col-span-2">
+                        <span className="text-[10px] text-gray-400 pl-1 font-medium tracking-wide">👾 總擊殺數</span>
+                        <span className="font-bold text-white text-base pr-1 tabular-nums">
+                          {sessionStats.kills.toLocaleString()} <span className="text-[10px] font-normal text-rose-400 ml-1">(菁英: {sessionStats.eliteKills})</span>
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2 text-xs">
+                      <div className="flex-1 bg-white/5 rounded-lg px-2.5 py-2 border border-white/5 flex justify-between items-center">
+                        <span className="text-[10px] text-gray-400 font-medium">⭐ 夥伴總經驗</span>
+                        <span className="font-bold text-amber-200 tabular-nums">{sessionStats.partnerExp.toLocaleString()}</span>
+                      </div>
+                      <div className="flex-1 bg-white/5 rounded-lg px-2.5 py-2 border border-white/5 flex justify-between items-center">
+                        <span className="text-[10px] text-gray-400 font-medium">🏮 獲得香火</span>
+                        <span className="font-bold text-orange-400 tabular-nums">{sessionStats.incense.toLocaleString()}</span>
+                      </div>
+                    </div>
+
+                    <div className="pt-2.5 border-t border-white/10 mt-1">
+                      <div className="text-[10px] text-gray-400 mb-2 font-bold flex items-center gap-1.5 pl-1"><Package size={12} className="opacity-70" /> 戰利品清單 <span className="text-[9px] font-normal opacity-50 ml-1">(自動堆疊)</span></div>
+                      {Object.keys(sessionStats.items).length > 0 ? (
+                        <div className="flex flex-wrap gap-1.5 max-h-[140px] overflow-y-auto custom-scrollbar pr-1 pb-1">
+                          {Object.values(sessionStats.items).map(item => (
+                            <div key={item.name} className="flex items-center gap-1.5 bg-black/40 px-2 py-1.5 rounded-lg border border-white/10 hover:border-white/30 transition-colors" title={item.name}>
+                              <span className="text-sm drop-shadow-sm">{item.icon}</span>
+                              <span className="text-[10px] text-white whitespace-nowrap tracking-wide">{item.name} <span className="font-black text-game-gold ml-0.5">x{item.quantity}</span></span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-center py-4 text-[10px] text-gray-500 italic bg-black/20 rounded-lg border border-white/5 w-full">尚未獲得戰利品...</div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col-reverse gap-1.5 w-full items-end max-h-[300px] overflow-y-auto custom-scrollbar pointer-events-auto pr-1">
+                    {combatLogs.length > 0 ? combatLogs.map(log => (
+                      <div key={log.id} className="text-[11px] md:text-[12px] font-bold px-3 py-2 bg-black/60 backdrop-blur-md rounded-xl border border-white/10 text-white shadow-sm flex flex-wrap items-center gap-x-2 gap-y-1 anim-fade-in-up w-fit max-w-full">
+                        {log.type === 'win' ? (
                           <>
+                            <span className="whitespace-nowrap">⚔️ 擊敗 {log.enemyName}</span>
                             <span className="text-gray-400">|</span>
-                            <span className="text-emerald-300">
-                              {log.items.map(i => `${i.icon}${i.name}x${i.quantity}`).join(', ')}
-                            </span>
+                            <span className="text-sky-300 whitespace-nowrap">+{log.exp} EXP</span>
+                            <span className="text-gray-400">|</span>
+                            <span className="text-game-gold whitespace-nowrap">+{log.gold} 金幣</span>
+                            {log.items && log.items.length > 0 && (
+                              <>
+                                <span className="text-gray-400">|</span>
+                                <span className="text-emerald-300">
+                                  {log.items.map(i => `${i.icon}${i.name}x${i.quantity}`).join(', ')}
+                                </span>
+                              </>
+                            )}
+                          </>
+                        ) : log.type === 'lose' ? (
+                          <>
+                            <span className="whitespace-nowrap">💀 挑戰 {log.enemyName} 失敗</span>
+                            <span className="text-gray-400">|</span>
+                            <span className="text-red-400">{log.message}</span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="whitespace-nowrap">{log.message}</span>
                           </>
                         )}
-                      </>
-                    ) : log.type === 'lose' ? (
-                      <>
-                        <span className="whitespace-nowrap">💀 挑戰 {log.enemyName} 失敗</span>
-                        <span className="text-gray-400">|</span>
-                        <span className="text-red-400">{log.message}</span>
-                      </>
-                    ) : (
-                      <>
-                        <span className="whitespace-nowrap">{log.message}</span>
-                      </>
-                    )}
+                      </div>
+                    )) : null}
                   </div>
-                ))}
+                )}
               </div>
             )}
 
@@ -2538,7 +2716,16 @@ const App: React.FC = () => {
                       </button>
                     )}
                     <button
-                      onClick={() => { if (!isTraveling) setAutoExplore(!autoExplore); }}
+                      onClick={() => {
+                        if (!isTraveling) {
+                          if (!autoExplore) {
+                            setSessionStartTime(Date.now());
+                            setSessionDuration(0);
+                            setSessionStats({ exp: 0, gold: 0, kills: 0, eliteKills: 0, partnerExp: 0, incense: 0, items: {} });
+                          }
+                          setAutoExplore(!autoExplore);
+                        }
+                      }}
                       disabled={isTraveling}
                       className={`h-10 w-10 flex-shrink-0 rounded-xl flex items-center justify-center transition-all ${isTraveling ? 'bg-white/5 opacity-30 cursor-not-allowed' : autoExplore ? 'bg-green-500/20 text-green-400 border border-green-500/50 shadow-lg shadow-green-500/20' : 'bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10'}`}
                     >

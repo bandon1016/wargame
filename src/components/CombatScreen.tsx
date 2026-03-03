@@ -619,7 +619,7 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({
                     </div>
 
                     {/* ===== RIGHT COLUMN: Skills + Potions (Desktop Only) ===== */}
-                    {!auto && !ended && !awaitingRevive && isPlayerTurn && combatStats.skills.length > 0 && (
+                    {!auto && !ended && !awaitingRevive && combatStats.skills.length > 0 && (
                         <div className="hidden md:flex md:flex-col md:w-72 gap-3 min-h-0 overflow-y-auto">
                             <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider flex items-center gap-1.5">
                                 <Zap size={12} className="text-game-accent" /> 技能
@@ -638,8 +638,8 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({
                                         <button
                                             key={ps.id}
                                             onClick={() => handleUseSkill(ps.id)}
-                                            disabled={pMp < cost}
-                                            className={`glass-panel border p-2.5 rounded-xl flex items-center gap-3 transition-all active:scale-95 disabled:opacity-30 ${isWeatherBuffed
+                                            disabled={pMp < cost || !isPlayerTurn}
+                                            className={`glass-panel border p-2.5 rounded-xl flex items-center gap-3 transition-all active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed ${isWeatherBuffed
                                                 ? 'border-amber-400/60 bg-amber-400/5 shadow-[0_0_15px_rgba(251,191,36,0.2)] text-amber-200'
                                                 : 'border-white/10 hover:border-white/30 text-blue-200'
                                                 }`}
@@ -685,7 +685,8 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({
                                         <button
                                             key={pot.id}
                                             onClick={() => handleUsePotion(pot)}
-                                            className="flex-shrink-0 glass-panel border border-white/10 p-2 rounded-xl flex items-center gap-2 hover:bg-white/5 active:scale-95 transition-all"
+                                            disabled={!isPlayerTurn}
+                                            className="flex-shrink-0 glass-panel border border-white/10 p-2 rounded-xl flex items-center gap-2 hover:bg-white/5 active:scale-95 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
                                         >
                                             <span className="text-lg">{pot.icon}</span>
                                             <div className="text-left">
@@ -743,7 +744,7 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({
                 {!auto && !ended && !awaitingRevive && (
                     <div className="md:hidden mt-3">
                         {/* Toggle Skills */}
-                        {isPlayerTurn && combatStats.skills.length > 0 && (
+                        {combatStats.skills.length > 0 && (
                             <div>
                                 <button
                                     onClick={() => setSkillsExpanded(!skillsExpanded)}
@@ -767,8 +768,8 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({
                                                 <button
                                                     key={ps.id}
                                                     onClick={() => handleUseSkill(ps.id)}
-                                                    disabled={pMp < cost}
-                                                    className={`glass-panel border p-2 rounded-xl flex items-center gap-2 transition-all active:scale-95 disabled:opacity-30 ${isWeatherBuffed
+                                                    disabled={pMp < cost || !isPlayerTurn}
+                                                    className={`glass-panel border p-2 rounded-xl flex items-center gap-2 transition-all active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed ${isWeatherBuffed
                                                         ? 'border-amber-400/60 bg-amber-400/5 text-amber-200'
                                                         : 'border-white/10 hover:border-white/30 text-blue-200'
                                                         }`}
@@ -811,7 +812,8 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({
                                     <button
                                         key={pot.id}
                                         onClick={() => handleUsePotion(pot)}
-                                        className="flex-shrink-0 glass-panel border border-white/10 p-2 rounded-xl flex items-center gap-2 hover:bg-white/5 active:scale-95 transition-all"
+                                        disabled={!isPlayerTurn}
+                                        className="flex-shrink-0 glass-panel border border-white/10 p-2 rounded-xl flex items-center gap-2 hover:bg-white/5 active:scale-95 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
                                     >
                                         <span className="text-xl">{pot.icon}</span>
                                         <div className="text-left">

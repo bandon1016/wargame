@@ -552,7 +552,6 @@ export const ITEM_DATABASE: Omit<GameItem, 'quantity'>[] = [
     { id: 'mat_basalt', name: '玄武岩礦石', type: 'material', icon: '🌑', description: '台東特產：花東縱谷出產的堅硬黑色岩石。' },
     { id: 'mat_ancient_wood', name: '太古神木', type: 'material', icon: '🌲', description: '台中稀有：更高品質的千年神木原木，蒸餾著古老欲力。' },
     { id: 'mat_lava_sand', name: '熔岩紅砂', type: 'material', icon: '🌋', description: '台南稀有：比炎漠紅砂更濃縮的極品火屬性砂礫。' },
-    { id: 'item_incense', name: '香火', type: 'material', icon: '🕯️', description: '台灣地區特有物品，打敗魔物後有機率獲得。' },
 ];
 
 // Crafting Recipes
