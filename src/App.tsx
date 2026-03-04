@@ -1,7 +1,7 @@
 ﻿import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap, Circle, Polyline, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Compass, Sword, Home, Users, Package, Settings as SettingsIcon, Book, Heart, Shield, Zap, ChevronRight, ChevronLeft, MapPin, Loader2, X, PlusCircle, ShieldAlert, TrainFront, Coins, Sparkles, Cpu, Waves, Diamond, Trophy, Copy, Check, ScrollText, TrendingUp, Square, Crown } from 'lucide-react';
+import { Compass, Sword, Home, Users, Package, Settings as SettingsIcon, Book, Heart, Shield, Zap, ChevronRight, ChevronLeft, MapPin, Loader2, X, PlusCircle, ShieldAlert, TrainFront, Coins, Sparkles, Cpu, Waves, Diamond, Trophy, Copy, Check, ScrollText, TrendingUp, Square, Crown, Rocket } from 'lucide-react';
 import type { CharacterStats, Equipment, GameItem, Skill, MapPOI, Town, WeatherType, Enemy, AlchemyRecipe, BlacksmithRecipe, ElementType } from './types/game';
 import { MONSTER_DATABASE, SKILL_DATABASE, ITEM_DATABASE, EQUIPMENT_DATABASE, RARITY_COLORS, WEATHER_TYPES, TOWN_DATABASE, getPartnerAvatar, getRailwayPath, POI_NAMES, ELEMENT_META, getRegionByCoordinates, getRegionByCityName, getRegionalMaterials } from './types/game';
 import { UPDATE_NOTES } from './data/updates';
@@ -1218,9 +1218,10 @@ const App: React.FC = () => {
 
   // Memoize Icons to prevent shaking (re-creation of DIV icons kills performance)
   const playerIcon = useMemo(() => {
-    const avatar = isTraveling ? '🚂' : isWalking ? '🏃‍♂️' : '🧙‍♂️';
+    const hasHsrPass = player?.activeBuffs?.hsrPassExpiry && Date.now() < player.activeBuffs.hsrPassExpiry;
+    const avatar = isTraveling ? (hasHsrPass ? '🚄' : '🚂') : isWalking ? '🏃‍♂️' : '🧙‍♂️';
     return createPlayerIcon(avatar, activeGod?.avatar);
-  }, [isTraveling, isWalking, activeGod?.avatar]);
+  }, [isTraveling, isWalking, activeGod?.avatar, player?.activeBuffs?.hsrPassExpiry]);
 
   const hasWeatherResistance = useCallback((type: WeatherType) => {
     if (!activeGod) return false;
@@ -2402,7 +2403,7 @@ const App: React.FC = () => {
         >
           <div className="relative flex-shrink-0">
             <div className={`w-12 h-12 rounded-full border-2 bg-gradient-to-br from-game-medium to-game-dark flex items-center justify-center text-2xl ${activeGod ? 'border-amber-400 anim-god-glow' : 'border-game-gold anim-pulse-glow'}`}>
-              {isTraveling ? '🚂' : isWalking ? '🏃‍♂️' : '🧙‍♂️'}
+              {isTraveling ? (player?.activeBuffs?.hsrPassExpiry && Date.now() < player.activeBuffs.hsrPassExpiry ? '🚄' : '🚂') : isWalking ? '🏃‍♂️' : '🧙‍♂️'}
             </div>
             {activeGod && (
               <div className="absolute -top-1 -right-1 w-6 h-6 bg-amber-400 rounded-full flex items-center justify-center border-2 border-[#0a0e1a] shadow-lg anim-god-glow z-10">
@@ -2903,25 +2904,32 @@ const App: React.FC = () => {
             </div>
 
             {/* Travel Overlay (during train ride) */}
-            {isTraveling && (
-              <div className="absolute top-[35%] left-1/2 -translate-x-1/2 -translate-y-1/2 z-[1200] w-[90%] max-w-xs pointer-events-none anim-scale-in">
-                <div className="bg-black/80 backdrop-blur-2xl p-6 rounded-3xl border border-white/20 flex flex-col items-center gap-4 shadow-[0_0_50px_rgba(0,0,0,0.5)]">
-                  <div className="text-3xl animate-bounce flex items-center justify-center text-game-gold shrink-0">
-                    <TrainFront size={32} strokeWidth={2.5} />
-                  </div>
-                  <div className="w-full text-center">
-                    <div className="text-xs font-black text-game-gold uppercase tracking-[0.2em] mb-1">Traveling...</div>
-                    <div className="text-lg font-bold text-white mb-3">火車行駛中</div>
-                    <div className="w-full h-2.5 bg-white/10 rounded-full overflow-hidden border border-white/5 relative">
-                      <div
-                        className="absolute inset-y-0 left-0 bg-gradient-to-r from-game-gold to-orange-400 shadow-[0_0_15px_#fbbf24] transition-all duration-100 ease-linear rounded-full"
-                        style={{ width: `${travelProgress * 100}%` }}
-                      />
+            {isTraveling && (() => {
+              const hasHsrPass = player?.activeBuffs?.hsrPassExpiry && Date.now() < player.activeBuffs.hsrPassExpiry;
+              return (
+                <div className="absolute top-[35%] left-1/2 -translate-x-1/2 -translate-y-1/2 z-[1200] w-[90%] max-w-xs pointer-events-none anim-scale-in">
+                  <div className={`bg-black/80 backdrop-blur-2xl p-6 rounded-3xl border flex flex-col items-center gap-4 shadow-[0_0_50px_rgba(0,0,0,0.5)] ${hasHsrPass ? 'border-cyan-500/30' : 'border-white/20'}`}>
+                    <div className={`text-3xl animate-bounce flex items-center justify-center shrink-0 ${hasHsrPass ? 'text-cyan-400 drop-shadow-[0_0_15px_rgba(6,182,212,0.5)]' : 'text-game-gold'}`}>
+                      {hasHsrPass ? <Rocket size={40} strokeWidth={2} /> : <TrainFront size={32} strokeWidth={2.5} />}
+                    </div>
+                    <div className="w-full text-center">
+                      <div className={`text-xs font-black uppercase tracking-[0.2em] mb-1 ${hasHsrPass ? 'text-cyan-400 drop-shadow-[0_0_8px_rgba(6,182,212,0.8)]' : 'text-game-gold'}`}>
+                        {hasHsrPass ? 'HSR SPEEDUP...' : 'Traveling...'}
+                      </div>
+                      <div className={`text-lg font-bold mb-3 ${hasHsrPass ? 'text-cyan-300' : 'text-white'}`}>
+                        {hasHsrPass ? '🚄 高鐵飆速中' : '火車行駛中'}
+                      </div>
+                      <div className="w-full h-2.5 bg-white/10 rounded-full overflow-hidden border border-white/5 relative">
+                        <div
+                          className={`absolute inset-y-0 left-0 transition-all duration-100 ease-linear rounded-full ${hasHsrPass ? 'bg-gradient-to-r from-cyan-400 to-blue-500 shadow-[0_0_15px_#22d3ee]' : 'bg-gradient-to-r from-game-gold to-orange-400 shadow-[0_0_15px_#fbbf24]'}`}
+                          style={{ width: `${travelProgress * 100}%` }}
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
 
             {/* ─── Weather Visual Overlays ─── */}

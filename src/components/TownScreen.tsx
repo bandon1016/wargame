@@ -424,14 +424,18 @@ export const TownScreen: React.FC<TownScreenProps> = ({ town, player, userId, on
 
                                             const path = getRailwayPath(town.id, dest.id);
                                             const pathLength = Math.max(0, path.length - 1);
-                                            let speedBonus = 1;
-                                            if (player.activeBuffs?.hsrPassExpiry && Date.now() < player.activeBuffs.hsrPassExpiry) {
-                                                speedBonus = 2;
-                                            }
+                                            const hasHsrPass = player.activeBuffs?.hsrPassExpiry && Date.now() < player.activeBuffs.hsrPassExpiry;
+                                            const speedBonus = hasHsrPass ? 2 : 1;
+
                                             const estimatedSeconds = Math.ceil(pathLength / (0.0016 * speedBonus * 60));
                                             const timeDisplay = estimatedSeconds > 60
                                                 ? `${Math.floor(estimatedSeconds / 60)}m ${estimatedSeconds % 60}s`
                                                 : `${estimatedSeconds}s`;
+
+                                            const baseEstimatedSeconds = Math.ceil(pathLength / (0.0016 * 60));
+                                            const baseTimeDisplay = baseEstimatedSeconds > 60
+                                                ? `${Math.floor(baseEstimatedSeconds / 60)}m ${baseEstimatedSeconds % 60}s`
+                                                : `${baseEstimatedSeconds}s`;
 
                                             return (
                                                 <div key={dest.id} className="p-5 rounded-2xl bg-white/5 border border-white/10 flex items-center gap-4 hover:bg-white/10 transition-all group">
@@ -439,8 +443,16 @@ export const TownScreen: React.FC<TownScreenProps> = ({ town, player, userId, on
                                                         🏰
                                                     </div>
                                                     <div className="flex-1">
-                                                        <div className="font-bold text-lg text-white group-hover:text-game-accent transition-colors">
-                                                            {dest.name} <span className="text-xs text-gray-400 font-normal ml-1">({timeDisplay})</span>
+                                                        <div className="font-bold text-lg text-white group-hover:text-game-accent transition-colors flex items-center flex-wrap">
+                                                            {dest.name}
+                                                            {hasHsrPass ? (
+                                                                <span className="ml-2 inline-flex items-center gap-1.5">
+                                                                    <span className="text-[11px] text-gray-500 line-through">({baseTimeDisplay})</span>
+                                                                    <span className="text-[11px] text-cyan-400 font-bold bg-cyan-400/10 px-1.5 py-0.5 rounded border border-cyan-400/30 tracking-wider shadow-[0_0_8px_rgba(6,182,212,0.3)]">🚄 {timeDisplay}</span>
+                                                                </span>
+                                                            ) : (
+                                                                <span className="text-xs text-gray-400 font-normal ml-1">({timeDisplay})</span>
+                                                            )}
                                                         </div>
                                                         <div className="text-xs text-gray-500 flex items-center gap-3 mt-1">
                                                             <span className="flex items-center gap-1"><MapIcon size={12} /> {Math.round(dist / 1000)} km</span>
