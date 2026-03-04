@@ -2559,7 +2559,8 @@ const App: React.FC = () => {
                   {[
                     { id: '自動變化', desc: '隨天氣聰明切換' },
                     { id: '荒野地形', desc: '等高線求生風' },
-                    { id: '極簡白板', desc: '突顯圖標位置' },
+                    { id: '極簡白板', desc: '明亮淺色底圖' },
+                    { id: '極簡黑板', desc: '突顯圖標位置' },
                     { id: '現代航圖', desc: '戶外導航介面' },
                     { id: '街道路網', desc: '細緻街道配色' }
                   ].map(style => (
@@ -2607,7 +2608,7 @@ const App: React.FC = () => {
                 if (targetStyle === '自動變化') {
                   if (weather === 'sunny') targetStyle = '現代航圖';
                   else if (weather === 'rainy') targetStyle = '街道路網';
-                  else targetStyle = '荒野地形'; // foggy, stormy
+                  else targetStyle = '極簡黑板'; // foggy, stormy
                 }
 
                 let url = '';
@@ -2616,6 +2617,10 @@ const App: React.FC = () => {
                 switch (targetStyle) {
                   case '極簡白板':
                     url = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+                    attribution = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
+                    break;
+                  case '極簡黑板':
+                    url = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
                     attribution = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
                     break;
                   case '現代航圖':
