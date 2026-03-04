@@ -920,7 +920,7 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
                                             </div>
                                             <div className="w-[1px] h-8 bg-white/5" />
                                             <div className="flex flex-col items-center">
-                                                <span className="text-gray-400 font-black text-base">98.0%</span>
+                                                <span className="text-gray-400 font-black text-base">90.0%</span>
                                                 <span className="text-[9px] text-gray-500 font-bold">緣分未到</span>
                                             </div>
                                         </div>
