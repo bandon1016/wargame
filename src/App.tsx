@@ -336,6 +336,16 @@ const App: React.FC = () => {
   const isRpcPendingRef = React.useRef(false); // New flag to block auto-save during RPCs
   useEffect(() => { isDoubleTabbedRef.current = isDoubleTabbed; }, [isDoubleTabbed]);
   const [showGuide, setShowGuide] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+
+  // --- Map Style Switcher State ---
+  const [mapStyle, setMapStyle] = useState(() => {
+    return localStorage.getItem('war_game_map_style') || '荒野地形';
+  });
+  useEffect(() => {
+    localStorage.setItem('war_game_map_style', mapStyle);
+  }, [mapStyle]);
+
   const [mySessionId] = useState(() => crypto.randomUUID());
   const activePoiRef = React.useRef<string | null>(null);
   const activeMerchantPoiRef = React.useRef<string | null>(null);
@@ -2377,8 +2387,18 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        {/* Right: Guide + Profile Menu */}
+        {/* Right: Guide + Profile + Settings */}
         <div className="flex items-center gap-2 relative">
+          {/* Settings Button */}
+          <button
+            onClick={() => setShowSettings(true)}
+            className="flex items-center gap-1.5 bg-gray-600/20 hover:bg-gray-500/40 text-gray-300 px-3 py-1.5 rounded-full border border-gray-500/30 transition shadow-[0_0_10px_rgba(156,163,175,0.2)]"
+            title="遊戲設定"
+          >
+            <span className="text-sm">⚙️</span>
+            <span className="text-xs font-bold hidden sm:inline">設定</span>
+          </button>
+
           <button
             onClick={() => setShowGuide(true)}
             className="flex items-center gap-1.5 bg-game-accent/20 hover:bg-game-accent/40 text-game-accent px-3 py-1.5 rounded-full border border-game-accent/30 transition shadow-[0_0_10px_rgba(99,102,241,0.2)]"
@@ -2507,6 +2527,74 @@ const App: React.FC = () => {
 
       {showGuide && <GuideModal onClose={() => setShowGuide(false)} />}
 
+      {/* ─── SETTINGS MODAL ─── */}
+      {showSettings && (
+        <div className="fixed inset-0 z-[3000] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm anim-fade-in-up">
+          <div className="glass-panel w-full max-w-md rounded-3xl p-6 border border-gray-500/30 shadow-2xl flex flex-col relative overflow-hidden">
+            <button
+              onClick={() => setShowSettings(false)}
+              className="absolute top-4 right-4 w-10 h-10 rounded-full glass-panel flex items-center justify-center text-gray-400 hover:text-white transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+
+            <div className="flex items-center gap-3 mb-8">
+              <span className="text-3xl">⚙️</span>
+              <div>
+                <h3 className="text-xl font-black text-white">遊戲設定</h3>
+                <p className="text-xs text-gray-400">自訂您的冒險體驗</p>
+              </div>
+            </div>
+
+            <div className="space-y-6 flex-1 overflow-y-auto pr-2 custom-scrollbar">
+
+              {/* Map Style Section */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-amber-400 font-bold">
+                  <span>🗺️</span>
+                  <h4>地圖風格切換</h4>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { id: '自動變化', desc: '隨天氣聰明切換' },
+                    { id: '荒野地形', desc: '等高線求生風' },
+                    { id: '極簡白板', desc: '突顯圖標位置' },
+                    { id: '現代航圖', desc: '戶外導航介面' },
+                    { id: '街道路網', desc: '細緻街道配色' }
+                  ].map(style => (
+                    <button
+                      key={style.id}
+                      onClick={() => setMapStyle(style.id)}
+                      className={`relative flex flex-col items-start p-3 rounded-xl border transition-all text-left overflow-hidden group ${mapStyle === style.id
+                        ? 'border-amber-500 bg-amber-500/10'
+                        : 'border-white/10 hover:border-white/30 hover:bg-white/5'
+                        }`}
+                    >
+                      {mapStyle === style.id && (
+                        <div className="absolute top-0 right-0 p-1">
+                          <div className="w-2 h-2 rounded-full bg-amber-400 shadow-[0_0_8px_#fbbf24]"></div>
+                        </div>
+                      )}
+                      <span className={`font-bold text-sm mb-1 ${mapStyle === style.id ? 'text-amber-400' : 'text-gray-200'}`}>
+                        {style.id}
+                      </span>
+                      <span className="text-[10px] text-gray-400 leading-tight">
+                        {style.desc}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[10px] text-gray-500 italic mt-2">
+                  * 「自動變化」會依據遊戲內的天氣切換最適合的底圖（晴天：航圖 / 雨天：路網 / 霧天：地形）。
+                </p>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ═══════════ MAIN CONTENT ═══════════ */}
       <div className="flex-1 relative overflow-hidden">
 
@@ -2514,10 +2602,39 @@ const App: React.FC = () => {
         {activeTab === 'explore' && (
           <div className="w-full h-full relative">
             <MapContainer center={position} zoom={15} zoomControl={false} className="w-full h-full">
-              <TileLayer
-                url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-              />
+              {(() => {
+                let targetStyle = mapStyle;
+                if (targetStyle === '自動變化') {
+                  if (weather === 'sunny') targetStyle = '現代航圖';
+                  else if (weather === 'rainy') targetStyle = '街道路網';
+                  else targetStyle = '荒野地形'; // foggy, stormy
+                }
+
+                let url = '';
+                let attribution = '';
+
+                switch (targetStyle) {
+                  case '極簡白板':
+                    url = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+                    attribution = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
+                    break;
+                  case '現代航圖':
+                    url = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+                    attribution = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
+                    break;
+                  case '街道路網':
+                    url = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}';
+                    attribution = 'Tiles &copy; Esri &mdash; Source: Esri, DeLorme, NAVTEQ, USGS, Intermap, iPC, NRCAN, Esri Japan, METI, etc.';
+                    break;
+                  case '荒野地形':
+                  default:
+                    url = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Terrain_Base/MapServer/tile/{z}/{y}/{x}';
+                    attribution = 'Tiles &copy; Esri &mdash; Source: USGS, Esri, TANA, DeLorme, and NPS';
+                    break;
+                }
+
+                return <TileLayer url={url} attribution={attribution} />;
+              })()}
               {townLayers}
               {poiLayers}
               {facilityLayers}
