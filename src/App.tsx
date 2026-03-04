@@ -340,7 +340,7 @@ const App: React.FC = () => {
 
   // --- Map Style Switcher State ---
   const [mapStyle, setMapStyle] = useState(() => {
-    return localStorage.getItem('war_game_map_style') || '荒野地形';
+    return localStorage.getItem('war_game_map_style') || '自動變化';
   });
   useEffect(() => {
     localStorage.setItem('war_game_map_style', mapStyle);
@@ -2387,18 +2387,8 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        {/* Right: Guide + Profile + Settings */}
+        {/* Right: Guide + Profile Menu */}
         <div className="flex items-center gap-2 relative">
-          {/* Settings Button */}
-          <button
-            onClick={() => setShowSettings(true)}
-            className="flex items-center gap-1.5 bg-gray-600/20 hover:bg-gray-500/40 text-gray-300 px-3 py-1.5 rounded-full border border-gray-500/30 transition shadow-[0_0_10px_rgba(156,163,175,0.2)]"
-            title="遊戲設定"
-          >
-            <span className="text-sm">⚙️</span>
-            <span className="text-xs font-bold hidden sm:inline">設定</span>
-          </button>
-
           <button
             onClick={() => setShowGuide(true)}
             className="flex items-center gap-1.5 bg-game-accent/20 hover:bg-game-accent/40 text-game-accent px-3 py-1.5 rounded-full border border-game-accent/30 transition shadow-[0_0_10px_rgba(99,102,241,0.2)]"
@@ -2452,6 +2442,12 @@ const App: React.FC = () => {
                     <Coins size={14} /> 財庫
                   </button>
                   <div className="border-t border-white/10 mt-1 pt-1">
+                    <button
+                      onClick={() => { setShowSettings(true); setIsProfileMenuOpen(false); }}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm text-gray-300 hover:bg-white/8 hover:text-white transition-colors"
+                    >
+                      <MapPin size={14} /> 地圖樣式
+                    </button>
                     <button
                       onClick={() => supabase.auth.signOut()}
                       className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm text-red-400 hover:bg-red-500/10 transition-colors"
@@ -2539,10 +2535,10 @@ const App: React.FC = () => {
             </button>
 
             <div className="flex items-center gap-3 mb-8">
-              <span className="text-3xl">⚙️</span>
+              <span className="text-3xl">🗺️</span>
               <div>
-                <h3 className="text-xl font-black text-white">遊戲設定</h3>
-                <p className="text-xs text-gray-400">自訂您的冒險體驗</p>
+                <h3 className="text-xl font-black text-white">地圖樣式</h3>
+                <p className="text-xs text-gray-400">自訂您的視覺探索體驗</p>
               </div>
             </div>
 
@@ -2550,17 +2546,11 @@ const App: React.FC = () => {
 
               {/* Map Style Section */}
               <div className="space-y-3">
-                <div className="flex items-center gap-2 text-amber-400 font-bold">
-                  <span>🗺️</span>
-                  <h4>地圖風格切換</h4>
-                </div>
-
                 <div className="grid grid-cols-2 gap-3">
                   {[
                     { id: '自動變化', desc: '隨天氣聰明切換' },
-                    { id: '荒野地形', desc: '等高線求生風' },
                     { id: '極簡白板', desc: '明亮淺色底圖' },
-                    { id: '極簡黑板', desc: '突顯圖標位置' },
+                    { id: '極簡黑板', desc: '純淨黑底畫面' },
                     { id: '現代航圖', desc: '戶外導航介面' },
                     { id: '街道路網', desc: '細緻街道配色' }
                   ].map(style => (
@@ -2587,7 +2577,7 @@ const App: React.FC = () => {
                   ))}
                 </div>
                 <p className="text-[10px] text-gray-500 italic mt-2">
-                  * 「自動變化」會依據遊戲內的天氣切換最適合的底圖（晴天：航圖 / 雨天：路網 / 霧天：地形）。
+                  * 「自動變化」會依據遊戲內的天氣切換最適合的底圖（晴天：航圖 / 雨天：路網 / 霧天：黑板）。
                 </p>
               </div>
 
@@ -2631,10 +2621,9 @@ const App: React.FC = () => {
                     url = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}';
                     attribution = 'Tiles &copy; Esri &mdash; Source: Esri, DeLorme, NAVTEQ, USGS, Intermap, iPC, NRCAN, Esri Japan, METI, etc.';
                     break;
-                  case '荒野地形':
                   default:
-                    url = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Terrain_Base/MapServer/tile/{z}/{y}/{x}';
-                    attribution = 'Tiles &copy; Esri &mdash; Source: USGS, Esri, TANA, DeLorme, and NPS';
+                    url = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+                    attribution = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
                     break;
                 }
 
