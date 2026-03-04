@@ -3,7 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup, useMap, Circle, Polyline, useMa
 import 'leaflet/dist/leaflet.css';
 import { Compass, Sword, Home, Users, Package, Settings as SettingsIcon, Book, Heart, Shield, Zap, ChevronRight, ChevronLeft, MapPin, Loader2, X, PlusCircle, ShieldAlert, TrainFront, Coins, Sparkles, Cpu, Waves, Diamond, Trophy, Copy, Check, ScrollText, TrendingUp, Square, Crown, Rocket } from 'lucide-react';
 import type { CharacterStats, Equipment, GameItem, Skill, MapPOI, Town, WeatherType, Enemy, AlchemyRecipe, BlacksmithRecipe, ElementType } from './types/game';
-import { MONSTER_DATABASE, SKILL_DATABASE, ITEM_DATABASE, EQUIPMENT_DATABASE, RARITY_COLORS, WEATHER_TYPES, TOWN_DATABASE, getPartnerAvatar, getRailwayPath, POI_NAMES, ELEMENT_META, getRegionByCoordinates, getRegionByCityName, getRegionalMaterials } from './types/game';
+import { MONSTER_DATABASE, SKILL_DATABASE, ITEM_DATABASE, EQUIPMENT_DATABASE, RARITY_COLORS, WEATHER_TYPES, TOWN_DATABASE, getPartnerAvatar, getRailwayPath, POI_NAMES, ELEMENT_META, getRegionByCoordinates, getRegionByCityName, getRegionalMaterials, getDistance, getPathDistance, getInterpolatedPositionByDistance } from './types/game';
 import { UPDATE_NOTES } from './data/updates';
 import { CombatScreen } from './components/CombatScreen';
 import { PartnersTab } from './components/PartnersTab';
@@ -177,16 +177,7 @@ function MapUpdater({ center, isTraveling, weather }: { center: [number, number]
 }
 
 /* ─── Helpers ─── */
-const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-  const R = 6371e3; // metres
-  const r1 = lat1 * Math.PI / 180;
-  const r2 = lat2 * Math.PI / 180;
-  const dr = (lat2 - lat1) * Math.PI / 180;
-  const dl = (lon2 - lon1) * Math.PI / 180;
-  const a = Math.sin(dr / 2) * Math.sin(dr / 2) + Math.cos(r1) * Math.cos(r2) * Math.sin(dl / 2) * Math.sin(dl / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-};
+// getDistance is now imported from game.ts
 
 // ─── Fixed Rewards by Level (Authoritative Helper) ───
 const getRewardsByLevel = (lv: number) => ({
@@ -471,17 +462,11 @@ const App: React.FC = () => {
         return;
       }
 
-      // Interpolate position along path
-      const totalSegments = path.length - 1;
-      const rawIndex = progress * totalSegments;
-      const segmentIndex = Math.floor(rawIndex);
-      const segmentProgress = rawIndex - segmentIndex;
-      const p1 = path[Math.min(segmentIndex, path.length - 2)];
-      const p2 = path[Math.min(segmentIndex + 1, path.length - 1)];
-
-      const lat = p1[0] + (p2[0] - p1[0]) * segmentProgress;
-      const lng = p1[1] + (p2[1] - p1[1]) * segmentProgress;
-      setPosition([lat, lng]);
+      // Interpolate position along path by total distance
+      const totalDist = getPathDistance(path);
+      const currentDist = progress * totalDist;
+      const newPos = getInterpolatedPositionByDistance(path, currentDist);
+      setPosition(newPos);
 
       frameId = requestAnimationFrame(animate);
     };
@@ -1221,7 +1206,7 @@ const App: React.FC = () => {
     const hasHsrPass = player?.activeBuffs?.hsrPassExpiry && Date.now() < player.activeBuffs.hsrPassExpiry;
     const avatar = isTraveling ? (hasHsrPass ? '🚄' : '🚂') : isWalking ? '🏃‍♂️' : '🧙‍♂️';
     return createPlayerIcon(avatar, activeGod?.avatar);
-  }, [isTraveling, isWalking, activeGod?.avatar, player?.activeBuffs?.hsrPassExpiry]);
+  }, [isTraveling, isWalking, activeGod?.avatar, player?.activeBuffs?.hsrPassExpiry, player]);
 
   const hasWeatherResistance = useCallback((type: WeatherType) => {
     if (!activeGod) return false;
@@ -2015,8 +2000,9 @@ const App: React.FC = () => {
       speedBonus = 2; // 高鐵通行票: 速度提升2倍
     }
 
-    const TRAVEL_SPEED_FACTOR = 0.0016 * speedBonus;
-    const totalDurationSec = (path.length - 1) / TRAVEL_SPEED_FACTOR / 60;
+    const TRAVEL_SPEED_MPS = 0.0016 * 60 * 10000; // 基礎移動速度 (公尺/秒)，這裡對應原邏輯約每幀移動 0.0016 單位
+    const totalPathMeters = getPathDistance(path);
+    const totalDurationSec = totalPathMeters / (TRAVEL_SPEED_MPS * speedBonus);
     const departedAt = new Date();
 
     const nextState = { ...player, gold: player.gold - cost };
@@ -2921,7 +2907,7 @@ const App: React.FC = () => {
                       </div>
                       <div className="w-full h-2.5 bg-white/10 rounded-full overflow-hidden border border-white/5 relative">
                         <div
-                          className={`absolute inset-y-0 left-0 transition-all duration-100 ease-linear rounded-full ${hasHsrPass ? 'bg-gradient-to-r from-cyan-400 to-blue-500 shadow-[0_0_15px_#22d3ee]' : 'bg-gradient-to-r from-game-gold to-orange-400 shadow-[0_0_15px_#fbbf24]'}`}
+                          className={`absolute inset-y-0 left-0 rounded-full ${hasHsrPass ? 'bg-gradient-to-r from-cyan-400 to-blue-500 shadow-[0_0_15px_#22d3ee]' : 'bg-gradient-to-r from-game-gold to-orange-400 shadow-[0_0_15px_#fbbf24]'}`}
                           style={{ width: `${travelProgress * 100}%` }}
                         />
                       </div>

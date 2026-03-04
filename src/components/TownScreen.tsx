@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Map as MapIcon, ChevronRight, TrainFront, ClipboardList, Anchor, Ship, Coins, ShoppingBag, Trash2, Loader2, PlusCircle, CheckCircle, RefreshCw } from 'lucide-react';
 import type { Town, CharacterStats, AlchemyRecipe, BlacksmithRecipe, Equipment } from '../types/game';
-import { ALCHEMY_RECIPES, BLACKSMITH_RECIPES, ITEM_DATABASE, EQUIPMENT_DATABASE, RARITY_COLORS, TOWN_DATABASE, CITY_QUEST_POOL, getRailwayPath } from '../types/game';
+import { ALCHEMY_RECIPES, BLACKSMITH_RECIPES, ITEM_DATABASE, EQUIPMENT_DATABASE, RARITY_COLORS, TOWN_DATABASE, CITY_QUEST_POOL, getRailwayPath, getDistance, getPathDistance } from '../types/game';
 import { supabase } from '../lib/supabase';
 
 const CURRENCY_ICONS: Record<string, string> = {
@@ -409,30 +409,23 @@ export const TownScreen: React.FC<TownScreenProps> = ({ town, player, userId, on
                                     </h3>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 overflow-y-auto max-h-[60vh] pr-2 custom-scrollbar">
                                         {TOWN_DATABASE.filter(t => t.id !== town.id).map(dest => {
-                                            const getDistanceLocal = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-                                                const R = 6371e3;
-                                                const d1 = lat1 * Math.PI / 180;
-                                                const d2 = lat2 * Math.PI / 180;
-                                                const dr = (lat2 - lat1) * Math.PI / 180;
-                                                const dl = (lon2 - lon1) * Math.PI / 180;
-                                                const a = Math.sin(dr / 2) * Math.sin(dr / 2) + Math.cos(d1) * Math.cos(d2) * Math.sin(dl / 2) * Math.sin(dl / 2);
-                                                return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-                                            };
-                                            const dist = getDistanceLocal(town.lat, town.lng, dest.lat, dest.lng);
+                                            const dist = getDistance(town.lat, town.lng, dest.lat, dest.lng);
                                             const cost = Math.max(50, Math.floor(dist / 100));
                                             const canAfford = player.gold >= cost;
 
                                             const path = getRailwayPath(town.id, dest.id);
-                                            const pathLength = Math.max(0, path.length - 1);
+                                            const totalPathMeters = getPathDistance(path);
+                                            const TRAVEL_SPEED_MPS = 0.0016 * 60 * 10000;
+
                                             const hasHsrPass = player.activeBuffs?.hsrPassExpiry && Date.now() < player.activeBuffs.hsrPassExpiry;
                                             const speedBonus = hasHsrPass ? 2 : 1;
 
-                                            const estimatedSeconds = Math.ceil(pathLength / (0.0016 * speedBonus * 60));
+                                            const estimatedSeconds = Math.ceil(totalPathMeters / (TRAVEL_SPEED_MPS * speedBonus));
                                             const timeDisplay = estimatedSeconds > 60
                                                 ? `${Math.floor(estimatedSeconds / 60)}m ${estimatedSeconds % 60}s`
                                                 : `${estimatedSeconds}s`;
 
-                                            const baseEstimatedSeconds = Math.ceil(pathLength / (0.0016 * 60));
+                                            const baseEstimatedSeconds = Math.ceil(totalPathMeters / TRAVEL_SPEED_MPS);
                                             const baseTimeDisplay = baseEstimatedSeconds > 60
                                                 ? `${Math.floor(baseEstimatedSeconds / 60)}m ${baseEstimatedSeconds % 60}s`
                                                 : `${baseEstimatedSeconds}s`;

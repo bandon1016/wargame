@@ -881,6 +881,51 @@ export const RAILWAY_NETWORK: Record<string, [number, number][]> = {
     'town_hun-town_tpe': [[23.9936, 121.5972], [24.15, 121.65], [24.4025, 121.7825], [24.55, 121.80], [24.7561, 121.7513], [24.95, 121.90], [25.05, 121.70], [25.0330, 121.5654]]
 };
 
+// Helper: Get distance in meters between two coordinates (Haversine formula)
+export const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const R = 6371e3; // Radius of the earth in meters
+    const d1 = lat1 * Math.PI / 180;
+    const d2 = lat2 * Math.PI / 180;
+    const dr = (lat2 - lat1) * Math.PI / 180;
+    const dl = (lon2 - lon1) * Math.PI / 180;
+
+    const a = Math.sin(dr / 2) * Math.sin(dr / 2) +
+        Math.cos(d1) * Math.cos(d2) *
+        Math.sin(dl / 2) * Math.sin(dl / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    return R * c;
+};
+
+// Helper: Get total physical distance of a path in meters
+export const getPathDistance = (path: [number, number][]) => {
+    let total = 0;
+    for (let i = 0; i < path.length - 1; i++) {
+        total += getDistance(path[i][0], path[i][1], path[i + 1][0], path[i + 1][1]);
+    }
+    return total;
+};
+
+// Helper: Interpolate position along a path by physical distance (meters)
+export const getInterpolatedPositionByDistance = (path: [number, number][], distance: number): [number, number] => {
+    if (path.length === 0) return [0, 0];
+    if (path.length === 1 || distance <= 0) return path[0];
+
+    let accumulated = 0;
+    for (let i = 0; i < path.length - 1; i++) {
+        const segDist = getDistance(path[i][0], path[i][1], path[i + 1][0], path[i + 1][1]);
+        if (accumulated + segDist >= distance) {
+            const segmentProgress = (distance - accumulated) / segDist;
+            return [
+                path[i][0] + (path[i + 1][0] - path[i][0]) * segmentProgress,
+                path[i][1] + (path[i + 1][1] - path[i][1]) * segmentProgress
+            ];
+        }
+        accumulated += segDist;
+    }
+    return path[path.length - 1];
+};
+
 // Helper: Get full path between cities (Shortest path in circular sequence)
 export const getRailwayPath = (startId: string, endId: string): [number, number][] => {
     const sequence = ['town_tpe', 'town_ntpc', 'town_tyn', 'town_txg', 'town_tnn', 'town_khh', 'town_pif', 'town_ttu', 'town_hun'];
