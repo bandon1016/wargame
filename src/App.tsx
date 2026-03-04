@@ -3508,10 +3508,10 @@ const App: React.FC = () => {
               <div className="glass-panel rounded-2xl p-5">
                 <h3 className="text-base font-bold mb-4 flex items-center gap-2">🎒 背包裝備</h3>
                 <div className="flex flex-wrap gap-3">
-                  {player.equipment.map(eq => {
+                  {player.equipment.map((eq, index) => {
                     const r = RARITY_COLORS[eq.rarity];
                     return (
-                      <div key={eq.id} className="tooltip-wrap" onClick={() => equipItem(eq)}>
+                      <div key={`${eq.id}-${index}`} className="tooltip-wrap" onClick={() => equipItem(eq)}>
                         <div className={`inv-slot border-2 ${r.border} ${r.bg} ${r.glow} cursor-pointer hover:scale-105 transition-transform`}>
                           <span className="text-3xl">{EQUIPMENT_DATABASE.find(e => e.id === eq.id)?.icon ?? eq.icon}</span>
                         </div>
