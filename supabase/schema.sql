@@ -252,20 +252,24 @@ begin
   
   -- 允許 5050ms 的緩衝空間以應對前端 5s 自動存檔延遲 + 網路延遲
   if p_last_updated_at is not null and v_db_updated_at_ms > (p_last_updated_at + 5050) then
-    -- 版本衝突：只更新位置、HP/MP 與步行路徑，保護夥伴、建築與金幣不被舊版本覆寫
+    -- 版本衝突：只更新位置、HP/MP、火車與步行路徑，保護夥伴、建築與金幣不被舊版本覆寫
     update public.profiles
     set 
         current_location_lat = p_lat,
         current_location_lng = p_lng,
         hp = p_hp,
         mp = p_mp,
+        -- 同步火車資料，避免回溯
+        travel_path = CASE WHEN p_travel_data ? 'path' THEN p_travel_data->'path' ELSE travel_path END,
+        travel_started_at = CASE WHEN p_travel_data ? 'started_at' THEN (p_travel_data->>'started_at')::timestamp with time zone ELSE travel_started_at END,
+        travel_duration_seconds = CASE WHEN p_travel_data ? 'duration' THEN (p_travel_data->>'duration')::double precision ELSE travel_duration_seconds END,
         -- 同步步行路徑，避免玩家抵達目的地後位置被回滾
-        walk_target_lat = COALESCE((p_walk_data->>'target_lat')::double precision, walk_target_lat),
-        walk_target_lng = COALESCE((p_walk_data->>'target_lng')::double precision, walk_target_lng),
-        walk_start_lat = COALESCE((p_walk_data->>'start_lat')::double precision, walk_start_lat),
-        walk_start_lng = COALESCE((p_walk_data->>'start_lng')::double precision, walk_start_lng),
-        walk_started_at = COALESCE((p_walk_data->>'started_at')::timestamp with time zone, walk_started_at),
-        walk_duration_seconds = COALESCE((p_walk_data->>'duration')::double precision, walk_duration_seconds),
+        walk_target_lat = CASE WHEN p_walk_data ? 'target_lat' THEN (p_walk_data->>'target_lat')::double precision ELSE walk_target_lat END,
+        walk_target_lng = CASE WHEN p_walk_data ? 'target_lng' THEN (p_walk_data->>'target_lng')::double precision ELSE walk_target_lng END,
+        walk_start_lat = CASE WHEN p_walk_data ? 'start_lat' THEN (p_walk_data->>'start_lat')::double precision ELSE walk_start_lat END,
+        walk_start_lng = CASE WHEN p_walk_data ? 'start_lng' THEN (p_walk_data->>'start_lng')::double precision ELSE walk_start_lng END,
+        walk_started_at = CASE WHEN p_walk_data ? 'started_at' THEN (p_walk_data->>'started_at')::timestamp with time zone ELSE walk_started_at END,
+        walk_duration_seconds = CASE WHEN p_walk_data ? 'duration' THEN (p_walk_data->>'duration')::double precision ELSE walk_duration_seconds END,
         updated_at = now()
     where id = auth.uid()
     returning * into v_profile;
@@ -280,15 +284,15 @@ begin
     current_location_lng = p_lng,
     hp = p_hp,
     mp = p_mp,
-    travel_path = COALESCE(p_travel_data->'path', travel_path),
-    travel_started_at = COALESCE((p_travel_data->>'started_at')::timestamp with time zone, travel_started_at),
-    travel_duration_seconds = COALESCE((p_travel_data->>'duration')::double precision, travel_duration_seconds),
-    walk_target_lat = COALESCE((p_walk_data->>'target_lat')::double precision, walk_target_lat),
-    walk_target_lng = COALESCE((p_walk_data->>'target_lng')::double precision, walk_target_lng),
-    walk_start_lat = COALESCE((p_walk_data->>'start_lat')::double precision, walk_start_lat),
-    walk_start_lng = COALESCE((p_walk_data->>'start_lng')::double precision, walk_start_lng),
-    walk_started_at = COALESCE((p_walk_data->>'started_at')::timestamp with time zone, walk_started_at),
-    walk_duration_seconds = COALESCE((p_walk_data->>'duration')::double precision, walk_duration_seconds),
+    travel_path = CASE WHEN p_travel_data ? 'path' THEN p_travel_data->'path' ELSE travel_path END,
+    travel_started_at = CASE WHEN p_travel_data ? 'started_at' THEN (p_travel_data->>'started_at')::timestamp with time zone ELSE travel_started_at END,
+    travel_duration_seconds = CASE WHEN p_travel_data ? 'duration' THEN (p_travel_data->>'duration')::double precision ELSE travel_duration_seconds END,
+    walk_target_lat = CASE WHEN p_walk_data ? 'target_lat' THEN (p_walk_data->>'target_lat')::double precision ELSE walk_target_lat END,
+    walk_target_lng = CASE WHEN p_walk_data ? 'target_lng' THEN (p_walk_data->>'target_lng')::double precision ELSE walk_target_lng END,
+    walk_start_lat = CASE WHEN p_walk_data ? 'start_lat' THEN (p_walk_data->>'start_lat')::double precision ELSE walk_start_lat END,
+    walk_start_lng = CASE WHEN p_walk_data ? 'start_lng' THEN (p_walk_data->>'start_lng')::double precision ELSE walk_start_lng END,
+    walk_started_at = CASE WHEN p_walk_data ? 'started_at' THEN (p_walk_data->>'started_at')::timestamp with time zone ELSE walk_started_at END,
+    walk_duration_seconds = CASE WHEN p_walk_data ? 'duration' THEN (p_travel_data->>'duration')::double precision ELSE walk_duration_seconds END,
     active_god_id = p_active_god_id,
     partners = COALESCE(p_partners, partners),
     buildings = COALESCE(p_buildings, buildings),
