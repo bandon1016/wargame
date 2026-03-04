@@ -2558,16 +2558,12 @@ const App: React.FC = () => {
                 return (
                   <div
                     key={p.id}
-                    onClick={() => togglePartnerDeployment(p.id)}
-                    className={`relative w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center text-xl sm:text-2xl border-2 pointer-events-auto bg-black/60 backdrop-blur-md shadow-lg cursor-pointer hover:scale-110 active:scale-95 transition-all group ${colors ? colors.border + ' ' + colors.glow : 'border-gray-500'} ${isTraveling ? 'opacity-50 grayscale' : ''}`}
-                    title={`${p.name} (點擊卸下)`}
+                    className={`relative w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center text-xl sm:text-2xl border-2 bg-black/60 backdrop-blur-md shadow-lg transition-all ${colors ? colors.border + ' ' + colors.glow : 'border-gray-500'} ${isTraveling ? 'opacity-50 grayscale' : ''}`}
+                    title={p.name}
                   >
                     {getPartnerAvatar(p.name, p.avatar)}
                     <div className="absolute -bottom-2 px-1.5 py-0.5 rounded-full text-[9px] font-black bg-black border border-white/20 text-white shadow-sm whitespace-nowrap">
                       Lv.{p.level}
-                    </div>
-                    <div className="absolute inset-0 bg-red-500/40 opacity-0 group-hover:opacity-100 flex items-center justify-center rounded-lg transition-opacity">
-                      <X className="text-white" size={16} />
                     </div>
                   </div>
                 );

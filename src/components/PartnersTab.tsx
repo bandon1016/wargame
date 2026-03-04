@@ -370,16 +370,18 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
                         {[0, 1, 2, 3, 4].map(idx => {
                             const p = currentDeployed[idx];
                             return (
-                                <div key={idx} className={`rounded-xl lg:rounded-[20px] border-2 flex flex-col lg:flex-row items-center justify-center lg:justify-start p-2 lg:p-3 transition-all relative group ${p ? `${RARITY_COLORS[p.rarity].border} ${RARITY_COLORS[p.rarity].bg} ${RARITY_COLORS[p.rarity].glow}` : 'border-dashed border-white/10 bg-black/20 text-gray-700'}`}>
+                                <div
+                                    key={idx}
+                                    onClick={() => p && toggleDeploy(p.id)}
+                                    className={`rounded-xl lg:rounded-[20px] border-2 flex flex-col lg:flex-row items-center justify-center lg:justify-start p-2 lg:p-3 transition-all relative group cursor-pointer active:scale-95 ${p ? `${RARITY_COLORS[p.rarity].border} ${RARITY_COLORS[p.rarity].bg} ${RARITY_COLORS[p.rarity].glow}` : 'border-dashed border-white/10 bg-black/20 text-gray-700 pointer-events-none'}`}
+                                >
                                     {p ? (
                                         <>
-                                            <button
-                                                disabled={isCombatAction}
-                                                onClick={() => toggleDeploy(p.id)}
-                                                className="absolute -top-1.5 -right-1.5 lg:-top-2 lg:-right-2 w-5 h-5 lg:w-7 lg:h-7 rounded-full bg-red-500 text-white flex items-center justify-center shadow-lg transform scale-0 group-hover:scale-100 transition-transform hover:bg-red-400 disabled:hidden z-10"
+                                            <div
+                                                className="absolute -top-1.5 -right-1.5 lg:-top-2 lg:-right-2 w-5 h-5 lg:w-7 lg:h-7 rounded-full bg-red-500 text-white flex items-center justify-center shadow-lg transform lg:scale-0 lg:group-hover:scale-100 transition-transform z-10"
                                             >
                                                 <MinusCircle size={14} className="lg:w-[18px] lg:h-[18px]" />
-                                            </button>
+                                            </div>
 
                                             <div className="text-2xl lg:text-4xl lg:mr-3.5 shrink-0 flex items-center justify-center w-8 h-8 lg:w-[50px] lg:h-[50px] bg-black/30 rounded-lg lg:rounded-xl shadow-inner border border-white/5">{getLatestAvatar(p.name, p.avatar)}</div>
 
