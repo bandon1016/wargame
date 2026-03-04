@@ -357,7 +357,7 @@ export interface CharacterStats {
     // 新增多元幣值 (符合台灣故事背景)
     lingQi: number;         // 🌿 靈氣 (山林)
     techFragments: number;  // ⚙️ 科技碎片 (科技城)
-    incense: number;        // 🏮 香火 (廟宇)
+    incense: number;        // 🕯️ 香火 (廟宇)
     saltCrystals: number;   // 🌊 鹽晶 (沿海)
     premiumGems: number;    // 💎 靈石 (花蓮玉/付費)
     mp: number;

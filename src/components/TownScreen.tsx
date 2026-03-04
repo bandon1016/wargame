@@ -7,7 +7,7 @@ import { supabase } from '../lib/supabase';
 const CURRENCY_ICONS: Record<string, string> = {
     lingQi: '🌿',
     techFragments: '⚙️',
-    incense: '🏮',
+    incense: '🕯️',
     saltCrystals: '🌊',
     premiumGems: '💎',
 };

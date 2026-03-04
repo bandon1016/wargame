@@ -289,7 +289,7 @@ begin
     walk_start_lng = COALESCE((p_walk_data->>'start_lng')::double precision, walk_start_lng),
     walk_started_at = COALESCE((p_walk_data->>'started_at')::timestamp with time zone, walk_started_at),
     walk_duration_seconds = COALESCE((p_walk_data->>'duration')::double precision, walk_duration_seconds),
-    active_god_id = COALESCE(p_active_god_id, active_god_id),
+    active_god_id = p_active_god_id,
     partners = COALESCE(p_partners, partners),
     buildings = COALESCE(p_buildings, buildings),
     gold = COALESCE(p_gold, gold),
