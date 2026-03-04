@@ -1187,8 +1187,8 @@ const App: React.FC = () => {
     // 3. Update local state
     if (target) {
       const isDifferent = !interactingLocation ||
-         (target.type === 'poi' && (interactingLocation.type !== 'poi' || interactingLocation.poi.id !== target.poi.id)) ||
-         (target.type === 'town' && (interactingLocation.type !== 'town' || interactingLocation.town.id !== target.town.id));
+        (target.type === 'poi' && (interactingLocation.type !== 'poi' || interactingLocation.poi.id !== target.poi.id)) ||
+        (target.type === 'town' && (interactingLocation.type !== 'town' || interactingLocation.town.id !== target.town.id));
       if (isDifferent) setInteractingLocation(target);
     } else {
       if (interactingLocation) {
@@ -2827,13 +2827,13 @@ const App: React.FC = () => {
 
                 {/* Contextual Interaction Card (Shown when clicking a POI or Town nearby) */}
                 {interactingLocation && (
-                  <div className="w-full sm:w-72 glass-panel p-5 rounded-2xl anim-fade-in-up pointer-events-auto border-t-2 border-t-game-accent/50 shadow-2xl relative overflow-hidden">
+                  <div className="w-full sm:w-64 glass-panel p-4 rounded-2xl anim-fade-in-up pointer-events-auto border-t-2 border-t-game-accent/50 shadow-2xl relative overflow-hidden">
                     <div className="absolute inset-0 bg-gradient-to-br from-game-accent/10 to-transparent pointer-events-none"></div>
                     <div className="flex flex-col gap-3 relative z-10">
                       <div className="flex justify-between items-center bg-black/40 p-2 rounded-xl border border-white/5">
                         <div className="flex items-center gap-2">
-                          <MapPin size={18} className="text-game-accent animate-pulse" />
-                          <span className="font-bold text-base text-white">
+                          <MapPin size={16} className="text-game-accent animate-pulse" />
+                          <span className="font-bold text-sm text-white">
                             {interactingLocation.type === 'town' ? interactingLocation.town.name : POI_NAMES[interactingLocation.poi.type] || '未知點'}
                           </span>
                         </div>
@@ -2857,12 +2857,12 @@ const App: React.FC = () => {
 
                       <div className="flex gap-2 w-full mt-1">
                         {interactingLocation.type === 'town' ? (
-                          <button onClick={() => { setInTown(interactingLocation.town); setInteractingLocation(null); }} className="flex-1 h-11 bg-gradient-to-tr from-indigo-600 to-violet-500 hover:from-indigo-500 hover:to-violet-400 text-white font-bold rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/25 border border-indigo-400/30 px-3 text-sm">
-                            <Home size={18} /> 進入城鎮
+                          <button onClick={() => { setInTown(interactingLocation.town); setInteractingLocation(null); }} className="flex-1 h-9 bg-gradient-to-tr from-indigo-600 to-violet-500 hover:from-indigo-500 hover:to-violet-400 text-white font-bold rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/25 border border-indigo-400/30 px-3 text-[13px]">
+                            <Home size={16} /> 進入城鎮
                           </button>
                         ) : (
-                          <button onClick={() => executePoiInteraction(interactingLocation.poi)} className="flex-1 h-11 bg-gradient-to-tr from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-bold rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/25 border border-emerald-400/30 px-3 text-sm">
-                            <Compass size={18} /> 開始互動
+                          <button onClick={() => executePoiInteraction(interactingLocation.poi)} className="flex-1 h-9 bg-gradient-to-tr from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-bold rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/25 border border-emerald-400/30 px-3 text-[13px]">
+                            <Compass size={16} /> 開始互動
                           </button>
                         )}
                       </div>
@@ -2882,14 +2882,14 @@ const App: React.FC = () => {
                     }
                   }}
                   disabled={isTraveling}
-                  className={`pointer-events-auto flex items-center justify-center sm:justify-start gap-3 w-full sm:w-auto px-7 py-4 rounded-3xl shadow-2xl transition-all border font-black tracking-widest text-[16px] backdrop-blur-xl ${isTraveling ? 'bg-black/50 border-white/10 text-gray-500 cursor-not-allowed' :
+                  className={`pointer-events-auto flex items-center justify-center sm:justify-start gap-2.5 w-full sm:w-fit px-5 py-3 rounded-2xl shadow-2xl transition-all border font-black tracking-widest text-[13px] backdrop-blur-xl ${isTraveling ? 'bg-black/50 border-white/10 text-gray-500 cursor-not-allowed' :
                     autoExplore
                       ? 'bg-game-accent text-white border-game-accent shadow-[0_0_20px_rgba(var(--game-accent-rgb),0.4)]'
                       : 'bg-black/60 border-white/20 text-gray-300 hover:text-white hover:bg-black/80 hover:border-white/40'
                     }`}
                 >
-                  <Zap size={20} fill={autoExplore && !isTraveling ? "currentColor" : "none"} className={autoExplore && !isTraveling ? 'animate-pulse' : ''} />
-                  <span>{autoExplore ? '自動探索正在進行' : '啟動自動探索模式'}</span>
+                  <Zap size={18} fill={autoExplore && !isTraveling ? "currentColor" : "none"} className={autoExplore && !isTraveling ? 'animate-pulse' : ''} />
+                  <span>{autoExplore ? '自動探索進行中' : '啟動自動探索模式'}</span>
                 </button>
               </div>
             )}
