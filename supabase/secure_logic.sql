@@ -467,16 +467,128 @@ BEGIN
         )
     WHERE id = v_u;
 
+
     -- 7. 同步任務進度
+    -- 7a. 精英 / 首領 / 天氣特殊怪 → 週任務 (已有)
     IF (v_is_elite OR v_is_weather_special OR v_is_boss) THEN
-        UPDATE public.player_quests SET progress = LEAST(progress + 1, required) WHERE user_id = v_u AND quest_id = 'wq_kill_boss' AND assigned_date = v_ws AND claimed = false;
+        UPDATE public.player_quests SET progress = LEAST(progress + 1, required)
+        WHERE user_id = v_u
+          AND quest_id IN ('wq_kill_boss', 'cq_khh_weekly', 'cq_hun_weekly')
+          AND (assigned_date = v_ws OR assigned_date = v_t)
+          AND claimed = false;
     END IF;
+
+    -- 7b. 史萊姆 (已有，擴充至所有史萊姆任務)
     IF p_monster_name LIKE '%史萊姆%' THEN
-        UPDATE public.player_quests SET progress = LEAST(progress + 1, required) WHERE user_id = v_u AND (quest_id = 'dq_kill_slime' OR quest_id = 'cq_tyn_slime') AND assigned_date = v_t AND claimed = false;
+        UPDATE public.player_quests SET progress = LEAST(progress + 1, required)
+        WHERE user_id = v_u
+          AND quest_id IN ('dq_kill_slime', 'cq_tyn_slime', 'cq_pif_slime')
+          AND (assigned_date = v_t OR assigned_date = v_ws)
+          AND claimed = false;
     END IF;
+
+    -- 7c. 哥布林 (擴充至台北城市任務)
     IF p_monster_name LIKE '%哥布林%' THEN
-        UPDATE public.player_quests SET progress = LEAST(progress + 1, required) WHERE user_id = v_u AND quest_id = 'dq_kill_goblin' AND assigned_date = v_t AND claimed = false;
+        UPDATE public.player_quests SET progress = LEAST(progress + 1, required)
+        WHERE user_id = v_u
+          AND quest_id IN ('dq_kill_goblin', 'cq_tpe_101')
+          AND (assigned_date = v_t OR assigned_date = v_ws)
+          AND claimed = false;
     END IF;
+
+    -- 7d. 骷髏兵 → 台南古城牆清掃
+    IF p_monster_name LIKE '%骷髏兵%' THEN
+        UPDATE public.player_quests SET progress = LEAST(progress + 1, required)
+        WHERE user_id = v_u
+          AND quest_id = 'cq_tnn_ghost'
+          AND (assigned_date = v_t OR assigned_date = v_ws)
+          AND claimed = false;
+    END IF;
+
+    -- 7e. 野豬 → 新北山海防線守護
+    IF p_monster_name LIKE '%野豬%' THEN
+        UPDATE public.player_quests SET progress = LEAST(progress + 1, required)
+        WHERE user_id = v_u
+          AND quest_id = 'cq_ntpc_kill'
+          AND (assigned_date = v_t OR assigned_date = v_ws)
+          AND claimed = false;
+    END IF;
+
+    -- 7f. 高雄區域任意怪物 (south region，不含 cq_pif)
+    --     需要座標，且屬於 south 非 east。高雄座標約 lat 22.6-22.8, lng 120.2-120.4
+    IF p_lat IS NOT NULL AND p_lng IS NOT NULL AND v_reg = 'south'
+       AND p_lat BETWEEN 22.5 AND 23.0 AND p_lng BETWEEN 120.1 AND 120.6 THEN
+        UPDATE public.player_quests SET progress = LEAST(progress + 1, required)
+        WHERE user_id = v_u
+          AND quest_id = 'cq_khh_kill'
+          AND (assigned_date = v_t OR assigned_date = v_ws)
+          AND claimed = false;
+    END IF;
+
+    -- 7g. 採集任務自動計數：根據 v_loots 中的掉落物名稱自動匹配
+    --     注意：只計算 type='material' 的道具，不計算 currency_incense / p_exp 等特殊道具
+    DECLARE
+        v_loot_item jsonb;
+        v_loot_name text;
+    BEGIN
+        FOR v_loot_item IN SELECT * FROM jsonb_array_elements(v_loots)
+        LOOP
+            -- 跳過非一般材料類型
+            CONTINUE WHEN (v_loot_item->>'type') IS DISTINCT FROM 'material';
+            CONTINUE WHEN (v_loot_item->>'id') IN ('currency_incense', 'p_exp');
+            CONTINUE WHEN (v_loot_item->>'id') LIKE 'frag_%';
+
+            v_loot_name := v_loot_item->>'name';
+            v_loot_name := COALESCE(v_loot_name, '');
+
+            -- 每日通用採集任務：任何材料 +1
+            UPDATE public.player_quests SET progress = LEAST(progress + 1, required)
+            WHERE user_id = v_u
+              AND quest_id = 'dq_collect_mat'
+              AND assigned_date = v_t
+              AND claimed = false;
+
+            -- 週任務：稀有材料 (使用 wq_collect_rare)
+            -- 只有菁英/首領才確定掉落，視為稀有
+            IF v_is_elite OR v_is_boss THEN
+                UPDATE public.player_quests SET progress = LEAST(progress + 1, required)
+                WHERE user_id = v_u
+                  AND quest_id = 'wq_collect_rare'
+                  AND assigned_date = v_ws
+                  AND claimed = false;
+            END IF;
+
+            -- 目標採集任務自動匹配 (依名稱對應)
+            CASE v_loot_name
+                WHEN '花東水晶' THEN
+                    UPDATE public.player_quests SET progress = LEAST(progress + 1, required)
+                    WHERE user_id = v_u
+                      AND quest_id IN ('cq_hun_crystal', 'cq_ttu_crystal')
+                      AND (assigned_date = v_t OR assigned_date = v_ws)
+                      AND claimed = false;
+                WHEN '科技廢料' THEN
+                    UPDATE public.player_quests SET progress = LEAST(progress + 1, required)
+                    WHERE user_id = v_u
+                      AND quest_id = 'cq_tpe_weekly'
+                      AND (assigned_date = v_t OR assigned_date = v_ws)
+                      AND claimed = false;
+                WHEN '高山鐵礦' THEN
+                    UPDATE public.player_quests SET progress = LEAST(progress + 1, required)
+                    WHERE user_id = v_u
+                      AND quest_id = 'cq_txg_iron'
+                      AND (assigned_date = v_t OR assigned_date = v_ws)
+                      AND claimed = false;
+                WHEN '海淵珍珠' THEN
+                    UPDATE public.player_quests SET progress = LEAST(progress + 1, required)
+                    WHERE user_id = v_u
+                      AND quest_id = 'cq_khh_collect'
+                      AND (assigned_date = v_t OR assigned_date = v_ws)
+                      AND claimed = false;
+                ELSE NULL; -- 其他材料不做特定任務
+            END CASE;
+        END LOOP;
+    END;
+
 
     SELECT * INTO v_p FROM public.profiles WHERE id = v_u;
 RETURN jsonb_build_object('gold',v_g,'exp',v_e,'leveled_up',v_up,'new_level',v_lv,'loots',v_loots,'updated_profile',row_to_json(v_p));
@@ -1293,3 +1405,106 @@ BEGIN
     );
 END;
 $$;
+
+-- ==========================================
+-- 11. 走路任務進度更新 (Walk Quest Progress)
+-- 擴充支援城市任務 (cq_..._walk)
+-- ==========================================
+CREATE OR REPLACE FUNCTION public.increment_walk_quests(
+  p_user_id uuid,
+  p_increment_meters int
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_today      date := current_date;
+  v_week_start date := date_trunc('week', current_date)::date;
+BEGIN
+  IF auth.uid() != p_user_id THEN
+    RAISE EXCEPTION 'Unauthorized';
+  END IF;
+
+  -- 更新所有走路類型任務（包含每日 dq_、每週 wq_、城市 cq_ 任務）
+  UPDATE public.player_quests
+  SET progress = LEAST(progress + p_increment_meters, required)
+  WHERE user_id = p_user_id
+    AND (assigned_date = v_today OR assigned_date = v_week_start)
+    AND claimed = false
+    AND (
+      quest_id LIKE 'dq_walk_%'
+      OR quest_id LIKE 'wq_walk_%'
+      OR quest_id LIKE 'cq_%_walk'  -- 城市走路任務 (如 cq_tpe_walk, cq_ntpc_weekly 等走路型)
+    );
+END;
+$$;
+
+-- ==========================================
+-- 12. 探索任務進度更新 (Explore Quest Progress)
+-- 擴充支援城市祭壇/探索任務 (cq_..._altar)
+-- ==========================================
+CREATE OR REPLACE FUNCTION public.increment_explore_quests(
+  p_user_id uuid,
+  p_increment int DEFAULT 1
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_today      date := current_date;
+  v_week_start date := date_trunc('week', current_date)::date;
+BEGIN
+  IF auth.uid() != p_user_id THEN
+    RAISE EXCEPTION 'Unauthorized';
+  END IF;
+
+  -- 更新所有探索類型任務（包含每日/週常/城市祭壇任務）
+  UPDATE public.player_quests
+  SET progress = LEAST(progress + p_increment, required)
+  WHERE user_id = p_user_id
+    AND (assigned_date = v_today OR assigned_date = v_week_start)
+    AND claimed = false
+    AND (
+      quest_id LIKE 'dq_explore_%'
+      OR quest_id LIKE 'wq_explore_%'
+      OR quest_id LIKE 'cq_%_altar'  -- 城市祭壇任務 (如 cq_txg_altar, cq_tnn_altar)
+      OR quest_id = 'dq_explore_poi' -- 每日探索聖地任務
+    );
+END;
+$$;
+
+-- ==========================================
+-- 13. 採集任務進度更新 (Collect Quest Progress)
+-- 擴充支援城市採集任務 (cq_..._collect) 
+-- ==========================================
+CREATE OR REPLACE FUNCTION public.increment_collect_quests(
+  p_user_id uuid,
+  p_increment int DEFAULT 1
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_today      date := current_date;
+  v_week_start date := date_trunc('week', current_date)::date;
+BEGIN
+  IF auth.uid() != p_user_id THEN
+    RAISE EXCEPTION 'Unauthorized';
+  END IF;
+
+  -- 更新所有通用採集任務（不含特定目標的城市採集，那部分由 secure_resolve_combat 處理）
+  UPDATE public.player_quests
+  SET progress = LEAST(progress + p_increment, required)
+  WHERE user_id = p_user_id
+    AND (assigned_date = v_today OR assigned_date = v_week_start)
+    AND claimed = false
+    AND (
+      quest_id LIKE 'dq_collect_%'
+      OR quest_id LIKE 'wq_collect_%'
+    );
+END;
+$$;
+
