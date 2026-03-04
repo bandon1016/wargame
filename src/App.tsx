@@ -984,8 +984,8 @@ const App: React.FC = () => {
       p_base_materials: p.baseMaterials,
       p_equipment: p.equipment,
       p_items: p.items,
-      p_skills: p.skills,
-      p_gods: p.gods,
+      p_skills: null, // Fully managed by server RPCs (secure_upgrade_skill, secure_resolve_combat) to prevent overwrite race conditions
+      p_gods: null, // Fully managed by server RPCs
       p_equipped_weapon: p.equippedWeapon,
       p_equipped_armor: p.equippedArmor,
       p_equipped_helmet: p.equippedHelmet,
@@ -1509,7 +1509,9 @@ const App: React.FC = () => {
 
     if (result.updated_profile) {
       // 🚀 AUTHORITATIVE STATE SYNC
-      setPlayer(mapServerProfile(result.updated_profile));
+      const newP = mapServerProfile(result.updated_profile);
+      playerRef.current = newP; // 即時同步引用，防止下一微秒的自動存檔抓取到舊狀態
+      setPlayer(newP);
     }
 
     if (result.leveled_up) {
@@ -1711,7 +1713,9 @@ const App: React.FC = () => {
 
     if (result && result.success && result.updated_profile) {
       // Authoritative Local Sync
-      setPlayer(mapServerProfile(result.updated_profile));
+      const newP = mapServerProfile(result.updated_profile);
+      playerRef.current = newP;
+      setPlayer(newP);
 
       if (!silent) {
         const recoverItems = [];
@@ -1747,7 +1751,9 @@ const App: React.FC = () => {
 
     if (result && result.success && result.updated_profile) {
       // Authoritative State Sync
-      setPlayer(mapServerProfile(result.updated_profile));
+      const newP = mapServerProfile(result.updated_profile);
+      playerRef.current = newP;
+      setPlayer(newP);
 
       setLootMessage({
         title: '✨ 批量使用成功！',
@@ -1779,7 +1785,9 @@ const App: React.FC = () => {
     }
 
     if (result && result.updated_profile) {
-      setPlayer(mapServerProfile(result.updated_profile));
+      const newP = mapServerProfile(result.updated_profile);
+      playerRef.current = newP;
+      setPlayer(newP);
     }
 
     // Quest: craft progress tracking
@@ -1808,7 +1816,9 @@ const App: React.FC = () => {
     }
 
     if (data && data.updated_profile) {
-      setPlayer(mapServerProfile(data.updated_profile));
+      const newP = mapServerProfile(data.updated_profile);
+      playerRef.current = newP;
+      setPlayer(newP);
     }
 
     setForgingRecipeId(null);
@@ -1846,7 +1856,9 @@ const App: React.FC = () => {
     if (error) {
       alert(`交易失敗: ${error.message}`);
     } else if (result?.updated_profile) {
-      setPlayer(mapServerProfile(result.updated_profile));
+      const newP = mapServerProfile(result.updated_profile);
+      playerRef.current = newP;
+      setPlayer(newP);
     }
     isRpcPendingRef.current = false;
   }, [player, mapServerProfile]);
@@ -1866,7 +1878,9 @@ const App: React.FC = () => {
     }
 
     if (result && result.success && result.updated_profile) {
-      setPlayer(mapServerProfile(result.updated_profile));
+      const newP = mapServerProfile(result.updated_profile);
+      playerRef.current = newP;
+      setPlayer(newP);
       console.log(`Successfully sold ${equipment.name} for ${result.gold_gained} gold`);
     }
     isRpcPendingRef.current = false;
@@ -1890,7 +1904,9 @@ const App: React.FC = () => {
     }
 
     if (result && result.updated_profile) {
-      setPlayer(mapServerProfile(result.updated_profile));
+      const newP = mapServerProfile(result.updated_profile);
+      playerRef.current = newP;
+      setPlayer(newP);
       if (result.success) {
         setLootMessage({
           title: '✨ 技能升級成功！',
