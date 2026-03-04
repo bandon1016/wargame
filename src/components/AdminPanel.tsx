@@ -17,19 +17,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
     const [loadingAction, setLoadingAction] = useState<'gems' | 'buff' | 'lookup' | null>(null);
     const [message, setMessage] = useState<{ text: string, type: 'error' | 'success' } | null>(null);
 
-    const resolveUidToUuid = async (uid: string): Promise<string | null> => {
+    const resolveUidToUuid = async (uid: string): Promise<{ uuid: string | null, error?: string }> => {
         const cleanUid = uid.trim().toUpperCase();
-        if (!cleanUid) return null;
+        if (!cleanUid) return { uuid: null };
 
         const { data, error } = await supabase.rpc('secure_admin_resolve_uid', {
             p_uid: cleanUid
         });
 
-        if (error || !data) {
+        if (error) {
             console.error('UID Resolve RPC Error:', error);
-            return null;
+            return { uuid: null, error: error.message };
         }
-        return data as string;
+        return { uuid: data as string };
     };
 
     if (!isOpen) return null;
@@ -44,9 +44,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
         setMessage(null);
 
         try {
-            const uuid = await resolveUidToUuid(targetUid);
+            const { uuid, error: lookupError } = await resolveUidToUuid(targetUid);
             if (!uuid) {
-                setMessage({ text: `找不到玩家 UID: ${targetUid}`, type: 'error' });
+                setMessage({ text: lookupError || `找不到玩家 UID: ${targetUid}`, type: 'error' });
                 setLoadingAction(null);
                 return;
             }
@@ -83,9 +83,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
         setMessage(null);
 
         try {
-            const uuid = await resolveUidToUuid(targetUid);
+            const { uuid, error: lookupError } = await resolveUidToUuid(targetUid);
             if (!uuid) {
-                setMessage({ text: `找不到玩家 UID: ${targetUid}`, type: 'error' });
+                setMessage({ text: lookupError || `找不到玩家 UID: ${targetUid}`, type: 'error' });
                 setLoadingAction(null);
                 return;
             }
