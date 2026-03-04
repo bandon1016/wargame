@@ -342,6 +342,59 @@ export const CITY_QUEST_POOL: DailyQuest[] = [
 ];
 
 
+// ── 加值商城系統 ──────────────────────────────────────────────────
+export interface ActiveBuffs {
+    eliteEncounterExpiry?: number;  // 冥幽七里香：自動探索 5% 菁英怪
+    hsrPassExpiry?: number;         // 高鐵通行票：火車速度 ×2
+    luckyCloverExpiry?: number;     // 幸運四葉草：素材掉落率 +20%
+    goddessBlessingExpiry?: number; // 女神的恩典：夥伴 EXP +50%
+    hornOfPlentyExpiry?: number;    // 豐饒角：自動探索金幣/資源 ×1~1.5
+}
+
+export interface PremiumShopItem {
+    id: string;
+    name: string;
+    icon: string;
+    description: string;
+    price: number;       // 台灣藍寶靈石的價格
+    buffKey: keyof ActiveBuffs;
+    durationMs: number;  // buff 持續時間 (毫秒)
+    category: 'combat' | 'travel' | 'resource';
+}
+
+export const PREMIUM_SHOP_ITEMS: PremiumShopItem[] = [
+    {
+        id: 'ps_elite_lure', name: '冥幽七里香', icon: '🌸',
+        description: '使用後 24 小時內，自動探索時有 5% 機率遇到菁英怪。',
+        price: 50, buffKey: 'eliteEncounterExpiry', durationMs: 24 * 60 * 60 * 1000,
+        category: 'combat',
+    },
+    {
+        id: 'ps_hsr_pass', name: '高鐵通行票', icon: '🚄',
+        description: '使用後 24 小時內，搭乘火車的移動速度提高 2 倍。',
+        price: 30, buffKey: 'hsrPassExpiry', durationMs: 24 * 60 * 60 * 1000,
+        category: 'travel',
+    },
+    {
+        id: 'ps_lucky_clover', name: '幸運四葉草', icon: '🍀',
+        description: '使用後 24 小時內，戰鬥後素材掉落率增加 20%。',
+        price: 40, buffKey: 'luckyCloverExpiry', durationMs: 24 * 60 * 60 * 1000,
+        category: 'combat',
+    },
+    {
+        id: 'ps_goddess_blessing', name: '女神的恩典', icon: '👼',
+        description: '使用後 24 小時內，夥伴獲得的經驗值 (EXP) 增加 50%。',
+        price: 60, buffKey: 'goddessBlessingExpiry', durationMs: 24 * 60 * 60 * 1000,
+        category: 'resource',
+    },
+    {
+        id: 'ps_horn_of_plenty', name: '豐饒角', icon: '🎺',
+        description: '使用後 24 小時內，自動探索取得的資源與金幣產量隨機增加 1~1.5 倍。',
+        price: 45, buffKey: 'hornOfPlentyExpiry', durationMs: 24 * 60 * 60 * 1000,
+        category: 'resource',
+    },
+];
+
 export interface CharacterStats {
     nickname?: string;
     level: number;
@@ -381,6 +434,7 @@ export interface CharacterStats {
     activeGodId: string | null;
     quests: DailyQuest[];
     updatedAt?: number; // Unix timestamp (ms) for state versioning
+    activeBuffs?: ActiveBuffs; // 加值商城 24 小時增益效果
 }
 
 export interface God {

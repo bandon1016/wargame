@@ -1,7 +1,7 @@
 ﻿import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap, Circle, Polyline, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Compass, Sword, Home, Users, Package, Settings as SettingsIcon, Book, Heart, Shield, Zap, ChevronRight, ChevronLeft, MapPin, Loader2, X, PlusCircle, ShieldAlert, TrainFront, Coins, Sparkles, Cpu, Waves, Diamond, Trophy, Copy, Check, ScrollText, TrendingUp, Square } from 'lucide-react';
+import { Compass, Sword, Home, Users, Package, Settings as SettingsIcon, Book, Heart, Shield, Zap, ChevronRight, ChevronLeft, MapPin, Loader2, X, PlusCircle, ShieldAlert, TrainFront, Coins, Sparkles, Cpu, Waves, Diamond, Trophy, Copy, Check, ScrollText, TrendingUp, Square, Crown } from 'lucide-react';
 import type { CharacterStats, Equipment, GameItem, Skill, MapPOI, Town, WeatherType, Enemy, AlchemyRecipe, BlacksmithRecipe, ElementType } from './types/game';
 import { MONSTER_DATABASE, SKILL_DATABASE, ITEM_DATABASE, EQUIPMENT_DATABASE, RARITY_COLORS, WEATHER_TYPES, TOWN_DATABASE, getPartnerAvatar, getRailwayPath, POI_NAMES, ELEMENT_META, getRegionByCoordinates, getRegionByCityName, getRegionalMaterials } from './types/game';
 import { UPDATE_NOTES } from './data/updates';
@@ -14,6 +14,8 @@ import { GuideModal } from './components/GuideModal';
 import RankingTab from './components/RankingTab';
 import { WeatherRain } from './components/WeatherRain';
 import { DailyQuestPanel } from './components/DailyQuestPanel';
+import { PremiumShopModal } from './components/PremiumShopModal';
+import { AdminPanel } from './components/AdminPanel';
 import { supabase } from './lib/supabase';
 
 // Fix leaflet default icon paths in React
@@ -370,6 +372,8 @@ const App: React.FC = () => {
   const [isEditingNickname, setIsEditingNickname] = useState(false);
   const [tempNickname, setTempNickname] = useState('');
   const [showTreasury, setShowTreasury] = useState(false);
+  const [showPremiumShop, setShowPremiumShop] = useState(false);
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
 
   // --- Session Stats Logic ---
   const [isStatsView, setIsStatsView] = useState(false);
@@ -751,7 +755,8 @@ const App: React.FC = () => {
       activeGodId: data.active_god_id,
       quests: Array.isArray(data.quests) ? data.quests : [],
       uid: data.uid || data.uid_12_code || 'G-0000',
-      updatedAt: data.updated_at ? Math.floor(new Date(data.updated_at).getTime()) : Math.floor(Date.now())
+      updatedAt: data.updated_at ? Math.floor(new Date(data.updated_at).getTime()) : Math.floor(Date.now()),
+      activeBuffs: data.active_buffs || {},
     };
   }, []);
 
@@ -1400,7 +1405,18 @@ const App: React.FC = () => {
       console.error('Encounter check error:', encError);
     }
 
-    if (!isElite && (!enc || enc.result === 'none')) {
+    let currentIsElite = isElite;
+
+    // 冥幽七里香 (Elite Lure): 5% chance to encounter elite during auto explore
+    if (autoExplore && playerRef.current?.activeBuffs?.eliteEncounterExpiry) {
+      if (Date.now() < playerRef.current.activeBuffs.eliteEncounterExpiry) {
+        if (Math.random() < 0.05) {
+          currentIsElite = true;
+        }
+      }
+    }
+
+    if (!currentIsElite && (!enc || enc.result === 'none')) {
       if (!autoExplore) {
         console.warn('Manual Hunt failed to force encounter - check server RPC');
       }
@@ -1443,13 +1459,13 @@ const App: React.FC = () => {
 
     const template = availableMonsters[Math.floor(Math.random() * availableMonsters.length)];
 
-    const isBoss = isElite && template.name.includes('黑龍');
+    const isBoss = currentIsElite && template.name.includes('黑龍');
     // Weather Special enemies are roughly 2x stronger than normal
-    const statMultiplier = (isElite ? 2.5 : 1) * (isWeatherSpecial ? 2.0 : 1.0);
+    const statMultiplier = (currentIsElite ? 2.5 : 1) * (isWeatherSpecial ? 2.0 : 1.0);
 
     let hp, eAtk, eDef;
 
-    if (isElite || isBoss || isWeatherSpecial) {
+    if (currentIsElite || isBoss || isWeatherSpecial) {
       const pHP = getEffectiveMaxHp(p);
       const pATK = getEffectiveAtk(p);
       const pDEF = getEffectiveDef(p);
@@ -1471,9 +1487,9 @@ const App: React.FC = () => {
     }
 
     // Calculate the actual monster level for prefix naming
-    const monsterLv = lv + Math.floor(Math.random() * 3) - 1 + (isBoss ? 5 : isElite ? 2 : isWeatherSpecial ? 3 : 0);
+    const monsterLv = lv + Math.floor(Math.random() * 3) - 1 + (isBoss ? 5 : currentIsElite ? 2 : isWeatherSpecial ? 3 : 0);
     const prefix = getMonsterPrefix(monsterLv);
-    const specialTag = isBoss ? '【首領】' : isElite ? '【菁英】' : isWeatherSpecial ? '【掩人耳目】' : '';
+    const specialTag = isBoss ? '【首領】' : currentIsElite ? '【菁英】' : isWeatherSpecial ? '【掩人耳目】' : '';
 
     const enemy = {
       id: Math.random().toString(),
@@ -1487,11 +1503,11 @@ const App: React.FC = () => {
       hp, maxHp: hp,
       attack: eAtk,
       defense: eDef,
-      expReward: Math.floor(getRewardsByLevel(monsterLv).exp * (isElite ? 2.5 : 1) * (isWeatherSpecial ? 3 : 1)),
-      goldReward: Math.floor(getRewardsByLevel(monsterLv).gold * (isElite ? 2.5 : 1) * (isWeatherSpecial ? 3 : 1)),
+      expReward: Math.floor(getRewardsByLevel(monsterLv).exp * (currentIsElite ? 2.5 : 1) * (isWeatherSpecial ? 3 : 1)),
+      goldReward: Math.floor(getRewardsByLevel(monsterLv).gold * (currentIsElite ? 2.5 : 1) * (isWeatherSpecial ? 3 : 1)),
       lootTable: [],
       // Metadata for backend resolution
-      isElite,
+      isElite: currentIsElite,
       isBoss,
       isWeatherSpecial,
       baseLv: lv
@@ -1535,7 +1551,8 @@ const App: React.FC = () => {
       p_skill_reward_name: randomSkill.name,
       p_lat: positionRef.current[0],
       p_lng: positionRef.current[1],
-      p_monster_level: currentEnemy.level
+      p_monster_level: currentEnemy.level,
+      p_is_auto_explore: autoExplore
     });
 
     if (error) {
@@ -1589,7 +1606,7 @@ const App: React.FC = () => {
 
     // AUTHORITATIVE LOGGING
     const finalExp = result?.exp ?? _expReward;
-    const finalGold = result?.gold ?? _goldReward;
+    let finalGold = result?.gold ?? _goldReward;
 
     // Explicitly grab partner exp from loots for logging & stats
     const pExpLoot = sLoots.find((l: any) => l.id === 'p_exp' || l.id === 'partner_exp' || l.name?.includes('夥伴經驗'));
@@ -1603,12 +1620,13 @@ const App: React.FC = () => {
       const isEliteOrBoss = currentEnemy.name.includes('菁英') || currentEnemy.name.includes('首領');
 
       sLoots.forEach((loot: any) => {
+        let qty = loot.quantity || 1;
+
         if (loot.id === 'currency_incense') {
-          incenseGained += (loot.quantity || 1);
+          incenseGained += qty;
         } else if (loot.id === 'partner_exp' || loot.id === 'p_exp') {
-          partnerExpGained += (loot.quantity || 1);
+          partnerExpGained += qty;
         } else {
-          const qty = loot.quantity || 1;
           const key = loot.name;
           if (!newItems[key]) {
             newItems[key] = { id: loot.id, name: loot.name, icon: loot.icon || '📦', quantity: 0 };
@@ -1674,7 +1692,7 @@ const App: React.FC = () => {
     }
 
     isRpcPendingRef.current = false;
-  }, [player, currentEnemy, fetchPois, session, saveProfile, mapServerProfile]);
+  }, [player, currentEnemy, fetchPois, session, saveProfile, mapServerProfile, autoExplore]);
 
 
   // ─── Weather Effects & Encounter Rate Logic ───
@@ -1991,7 +2009,12 @@ const App: React.FC = () => {
     // Time-based travel: compute total seconds based on path length
     // TRAVEL_SPEED_FACTOR = 0.0008 units/frame at 60fps
     // progress goes from 0 to (path.length-1), so total frames = (path.length-1)/0.0008
-    const TRAVEL_SPEED_FACTOR = 0.0016; // 2x faster (original 0.0008)
+    let speedBonus = 1;
+    if (player?.activeBuffs?.hsrPassExpiry && Date.now() < player.activeBuffs.hsrPassExpiry) {
+      speedBonus = 2; // 高鐵通行票: 速度提升2倍
+    }
+
+    const TRAVEL_SPEED_FACTOR = 0.0016 * speedBonus;
     const totalDurationSec = (path.length - 1) / TRAVEL_SPEED_FACTOR / 60;
     const departedAt = new Date();
 
@@ -2473,6 +2496,12 @@ const App: React.FC = () => {
                     <Trophy size={14} /> 排行榜
                   </button>
                   <button
+                    onClick={() => { setShowPremiumShop(true); setIsProfileMenuOpen(false); }}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm font-bold text-indigo-300 hover:bg-indigo-900/40 hover:text-indigo-200 transition-colors"
+                  >
+                    <Crown size={14} className="text-indigo-400" /> 星空商城
+                  </button>
+                  <button
                     onClick={() => { setShowTreasury(true); setIsProfileMenuOpen(false); }}
                     className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm text-gray-300 hover:bg-white/8 hover:text-white transition-colors"
                   >
@@ -2491,6 +2520,14 @@ const App: React.FC = () => {
                     >
                       <MapPin size={14} /> 地圖樣式
                     </button>
+                    {session?.user?.email === 'werboy@gmail.com' && (
+                      <button
+                        onClick={() => { setShowAdminPanel(true); setIsProfileMenuOpen(false); }}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm font-bold text-red-400 hover:bg-red-900/30 hover:text-red-300 transition-colors mt-1 border-t border-red-950"
+                      >
+                        <ShieldAlert size={14} /> 開發者後台
+                      </button>
+                    )}
                     <button
                       onClick={() => supabase.auth.signOut()}
                       className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm text-red-400 hover:bg-red-500/10 transition-colors"
@@ -2634,6 +2671,22 @@ const App: React.FC = () => {
       )}
 
       {showGuide && <GuideModal onClose={() => setShowGuide(false)} />}
+
+      {showPremiumShop && player && (
+        <PremiumShopModal
+          isOpen={showPremiumShop}
+          onClose={() => setShowPremiumShop(false)}
+          player={player}
+          refreshProfile={() => fetchProfile(session!.user.id, true)}
+        />
+      )}
+
+      {showAdminPanel && (
+        <AdminPanel
+          isOpen={showAdminPanel}
+          onClose={() => setShowAdminPanel(false)}
+        />
+      )}
 
       {/* ─── SETTINGS MODAL ─── */}
       {showSettings && (

@@ -422,10 +422,13 @@ export const TownScreen: React.FC<TownScreenProps> = ({ town, player, userId, on
                                             const cost = Math.max(50, Math.floor(dist / 100));
                                             const canAfford = player.gold >= cost;
 
-                                            // Calculate estimated time based on 0.0008 units per frame at ~60fps
                                             const path = getRailwayPath(town.id, dest.id);
                                             const pathLength = Math.max(0, path.length - 1);
-                                            const estimatedSeconds = Math.ceil(pathLength / (0.0016 * 60));
+                                            let speedBonus = 1;
+                                            if (player.activeBuffs?.hsrPassExpiry && Date.now() < player.activeBuffs.hsrPassExpiry) {
+                                                speedBonus = 2;
+                                            }
+                                            const estimatedSeconds = Math.ceil(pathLength / (0.0016 * speedBonus * 60));
                                             const timeDisplay = estimatedSeconds > 60
                                                 ? `${Math.floor(estimatedSeconds / 60)}m ${estimatedSeconds % 60}s`
                                                 : `${estimatedSeconds}s`;

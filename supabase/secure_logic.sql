@@ -208,7 +208,8 @@ CREATE OR REPLACE FUNCTION public.secure_resolve_combat(
     p_player_hp integer, p_player_mp float8,
     p_skill_reward_id text DEFAULT null, p_skill_reward_name text DEFAULT null,
     p_lat float8 DEFAULT null, p_lng float8 DEFAULT null,
-    p_monster_level integer DEFAULT null
+    p_monster_level integer DEFAULT null,
+    p_is_auto_explore boolean DEFAULT false
 ) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER AS $$
 DECLARE
     v_u uuid := auth.uid(); v_p public.profiles;
@@ -227,6 +228,15 @@ BEGIN
     SELECT * INTO v_p FROM public.profiles WHERE id = v_u;
     IF NOT FOUND THEN RAISE EXCEPTION 'No profile'; END IF;
 
+    DECLARE
+        v_now_ms bigint := EXTRACT(EPOCH FROM NOW())::bigint * 1000;
+        v_buffs jsonb := COALESCE(v_p.active_buffs, '{}'::jsonb);
+        v_lucky_active boolean := COALESCE((v_buffs->>'luckyCloverExpiry')::bigint, 0) > v_now_ms;
+        v_goddess_active boolean := COALESCE((v_buffs->>'goddessBlessingExpiry')::bigint, 0) > v_now_ms;
+        v_horn_active boolean := p_is_auto_explore AND COALESCE((v_buffs->>'hornOfPlentyExpiry')::bigint, 0) > v_now_ms;
+        v_horn_multiplier float := CASE WHEN v_horn_active THEN 1.0 + random() * 0.5 ELSE 1.0 END;
+    BEGIN
+
     -- 安全驗證：p_monster_level 必須在玩家等級 +/- 20 範圍內，否則回退到玩家等級
     IF p_monster_level IS NOT NULL AND ABS(p_monster_level - v_p.level) <= 20 THEN
         v_calc_lv := p_monster_level;
@@ -242,6 +252,9 @@ BEGIN
         v_e := floor(v_base_exp * (CASE WHEN v_is_elite OR v_is_boss THEN 2.5 ELSE 1 END));
         v_g := floor(v_base_gold * (CASE WHEN v_is_elite OR v_is_boss THEN 2.5 ELSE 1 END));
         IF v_is_weather_special THEN v_e := v_e * 3; v_g := v_g * 3; END IF;
+        
+        -- 豐饒角 (Horn of Plenty) 金幣增幅
+        v_g := floor(v_g * v_horn_multiplier);
     END;
 
     -- 2. 成長與升級 (平滑曲線)
@@ -293,11 +306,13 @@ BEGIN
         ELSE v_reg := 'unknown';
         END IF;
 
-        IF v_reg != 'unknown' AND (random() < 0.2 OR v_is_elite OR v_is_boss) THEN
+        IF v_reg != 'unknown' AND ((random() < (CASE WHEN v_lucky_active THEN 0.24 ELSE 0.2 END)) OR v_is_elite OR v_is_boss) THEN
             DECLARE
                 v_reg_sid text; v_reg_sn text; v_reg_sic text; v_reg_sd text; v_reg_q int := 1;
             BEGIN
                 IF (v_is_elite OR v_is_boss) THEN v_reg_q := floor(random() * 2 + 1); END IF;
+                -- Apply Horn of Plenty to regional material
+                v_reg_q := GREATEST(1, floor(v_reg_q * v_horn_multiplier))::int;
                 
                 CASE v_reg
                     WHEN 'north' THEN
@@ -332,16 +347,16 @@ BEGIN
         IF v_reg != 'unknown' THEN
             -- 一般、掩人耳目: 10% 機率 (1~3個); 菁英、首領: 20% 機率 (2~5個)
             IF (v_is_elite OR v_is_boss) THEN
-                IF random() < 0.20 THEN
-                    v_incense_gain := floor(random() * 4 + 2)::int;
+                IF random() < (CASE WHEN v_lucky_active THEN 0.24 ELSE 0.20 END) THEN
+                    v_incense_gain := GREATEST(1, floor(floor(random() * 4 + 2) * v_horn_multiplier))::int;
                     v_loots := v_loots || jsonb_build_array(jsonb_build_object(
                         'id', 'currency_incense', 'name', '香火', 'icon', '🔥', 'type', 'material', 
                         'description', '來自全台各地廟宇的信仰力量，可用於祭祀。', 'quantity', v_incense_gain
                     ));
                 END IF;
             ELSE
-                IF random() < 0.10 THEN
-                    v_incense_gain := floor(random() * 3 + 1)::int;
+                IF random() < (CASE WHEN v_lucky_active THEN 0.12 ELSE 0.10 END) THEN
+                    v_incense_gain := GREATEST(1, floor(floor(random() * 3 + 1) * v_horn_multiplier))::int;
                     v_loots := v_loots || jsonb_build_array(jsonb_build_object(
                         'id', 'currency_incense', 'name', '香火', 'icon', '🔥', 'type', 'material', 
                         'description', '來自全台各地廟宇的信仰力量，可用於祭祀。', 'quantity', v_incense_gain
@@ -361,6 +376,8 @@ BEGIN
             IF v_is_boss THEN v_drop_chance := 0.30;
             ELSIF v_is_elite OR v_is_weather_special THEN v_drop_chance := 0.15;
             END IF;
+
+            v_drop_chance := v_drop_chance * (CASE WHEN v_lucky_active THEN 1.2 ELSE 1.0 END);
 
             IF v_drop_roll < v_drop_chance THEN
                 v_skill_drop := true;
@@ -396,7 +413,7 @@ BEGIN
     END IF;
 
     -- 5.7 夥伴經驗值邏輯 (必定回傳供前端顯示)
-    v_p_exp := GREATEST(1, floor(v_e * 0.2));
+    v_p_exp := GREATEST(1, floor(v_e * 0.2 * (CASE WHEN v_goddess_active THEN 1.5 ELSE 1.0 END)));
     IF v_e > 0 THEN
         v_loots := v_loots || jsonb_build_array(jsonb_build_object(
             'id', 'p_exp', 'name', '夥伴經驗', 'icon', '⭐', 'type', 'material', 
@@ -592,6 +609,7 @@ BEGIN
 
     SELECT * INTO v_p FROM public.profiles WHERE id = v_u;
 RETURN jsonb_build_object('gold',v_g,'exp',v_e,'leveled_up',v_up,'new_level',v_lv,'loots',v_loots,'updated_profile',row_to_json(v_p));
+    END; -- CLOSE THE added BEGIN block for variable declarations
 END; $$;
 
 
