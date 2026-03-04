@@ -184,3 +184,47 @@ BEGIN
     );
 END;
 $$;
+
+-- ============================================================
+-- 5. RPC: secure_admin_resolve_uid
+--    管理員透過玩家 UID (G-xxxx) 查詢真實 UUID
+--    使用 SECURITY DEFINER 繞過 RLS
+-- ============================================================
+CREATE OR REPLACE FUNCTION secure_admin_resolve_uid(
+    p_uid TEXT
+)
+RETURNS UUID
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_admin_id UUID := auth.uid();
+    v_admin_email TEXT;
+    v_target_id UUID;
+    v_clean_uid TEXT := UPPER(TRIM(p_uid));
+BEGIN
+    -- Check admin identity
+    SELECT email INTO v_admin_email
+    FROM auth.users
+    WHERE id = v_admin_id;
+
+    IF v_admin_email IS NULL OR v_admin_email != 'werboy@gmail.com' THEN
+        RAISE EXCEPTION '權限不足：僅限管理員使用';
+    END IF;
+
+    -- Search in profiles. Since SECURITY DEFINER is used, this bypasses RLS.
+    -- We assume 'uid' or 'uid_12_code' exists in profiles.
+    SELECT id INTO v_target_id
+    FROM profiles
+    WHERE 
+        (UPPER(uid) = v_clean_uid) OR 
+        (UPPER(uid_12_code) = v_clean_uid)
+    LIMIT 1;
+
+    IF v_target_id IS NULL THEN
+        RAISE EXCEPTION '找不到目標玩家 UID: %', p_uid;
+    END IF;
+
+    RETURN v_target_id;
+END;
+$$;

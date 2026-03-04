@@ -21,17 +21,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
         const cleanUid = uid.trim().toUpperCase();
         if (!cleanUid) return null;
 
-        const { data, error } = await supabase
-            .from('profiles')
-            .select('id')
-            .or(`uid.eq.${cleanUid},uid_12_code.eq.${cleanUid}`)
-            .single();
+        const { data, error } = await supabase.rpc('secure_admin_resolve_uid', {
+            p_uid: cleanUid
+        });
 
         if (error || !data) {
-            console.error('UID Lookup Error:', error);
+            console.error('UID Resolve RPC Error:', error);
             return null;
         }
-        return data.id;
+        return data as string;
     };
 
     if (!isOpen) return null;
