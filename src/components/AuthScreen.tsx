@@ -22,7 +22,7 @@ export const AuthScreen: React.FC<{ onSignIn: () => void }> = ({ onSignIn }) => 
                 onSignIn();
             } else {
                 if (!nickname.trim()) throw new Error('請輸入角色名稱');
-                const { error } = await supabase.auth.signUp({
+                const { data, error } = await supabase.auth.signUp({
                     email,
                     password,
                     options: {
@@ -32,8 +32,14 @@ export const AuthScreen: React.FC<{ onSignIn: () => void }> = ({ onSignIn }) => 
                     }
                 });
                 if (error) throw error;
-                setMessage('註冊成功！系統已為您建立冒險者檔案。按登入進入遊戲。');
-                setIsLogin(true);
+
+                // If Supabase Email Confirmation is OFF, data.session will exist immediately
+                if (data.session) {
+                    onSignIn();
+                } else {
+                    setMessage('註冊成功！麻煩請至信箱收取驗證信，或直接嘗試登入。');
+                    setIsLogin(true);
+                }
             }
         } catch (error: any) {
             let errorMsg = error.message;
