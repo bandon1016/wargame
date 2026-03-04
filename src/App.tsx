@@ -754,7 +754,7 @@ const App: React.FC = () => {
       gods: data.gods || [],
       activeGodId: data.active_god_id,
       quests: Array.isArray(data.quests) ? data.quests : [],
-      uid: data.uid || data.uid_12_code || 'G-0000',
+      uid: data.uid || data.uid_12_code || (data.id ? data.id.substring(0, 8).toUpperCase() : 'G-0000'),
       updatedAt: data.updated_at ? Math.floor(new Date(data.updated_at).getTime()) : Math.floor(Date.now()),
       activeBuffs: data.active_buffs || {},
     };

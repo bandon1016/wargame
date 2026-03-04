@@ -214,11 +214,14 @@ BEGIN
 
     -- Search in profiles. Since SECURITY DEFINER is used, this bypasses RLS.
     -- We assume 'uid' or 'uid_12_code' exists in profiles.
+    -- We also support full UUID or the 8-character short UUID prefix.
     SELECT id INTO v_target_id
     FROM profiles
     WHERE 
         (UPPER(uid) = v_clean_uid) OR 
-        (UPPER(uid_12_code) = v_clean_uid)
+        (UPPER(uid_12_code) = v_clean_uid) OR
+        (UPPER(id::TEXT) = v_clean_uid) OR
+        (UPPER(LEFT(id::TEXT, 8)) = v_clean_uid)
     LIMIT 1;
 
     IF v_target_id IS NULL THEN
