@@ -2703,16 +2703,18 @@ const App: React.FC = () => {
             {/* Bottom Right Area - Combat Logs / Stats */}
             {logOpacity > 0 && (
               <div
-                className={`absolute bottom-8 z-[1000] flex flex-col gap-2 transition-all duration-500 ease-in-out pointer-events-none max-w-[calc(100vw-3rem)] w-[280px] sm:w-[320px] md:w-[380px] items-end ${isLogsExpanded ? 'right-6' : '-right-[260px] sm:-right-[300px] md:-right-[360px]'}`}
+                className={`fixed bottom-20 sm:bottom-8 z-[1000] flex flex-col gap-2 transition-all duration-500 ease-in-out pointer-events-none max-w-[calc(100vw-3rem)] w-[280px] sm:w-[320px] md:w-[380px] items-end ${isLogsExpanded ? 'right-4 sm:right-6' : '-right-[240px] sm:-right-[280px] md:-right-[340px]'}`}
                 style={{ opacity: logOpacity }}
               >
                 {/* Collapse/Expand Pull Tab */}
                 <button
                   onClick={() => setIsLogsExpanded(!isLogsExpanded)}
-                  className="absolute left-[-32px] top-1/2 -translate-y-1/2 w-8 h-16 bg-black/60 backdrop-blur-md rounded-l-xl border-l border-y border-white/20 pointer-events-auto flex items-center justify-center text-gray-400 hover:text-white transition-colors shadow-lg"
+                  className="absolute left-[-28px] top-1/2 -translate-y-1/2 w-7 h-16 bg-black/60 backdrop-blur-md rounded-l-xl border-l border-y border-white/20 pointer-events-auto flex items-center justify-center text-gray-400 hover:text-white transition-colors shadow-lg group"
                   title={isLogsExpanded ? "隱藏面板" : "展開面板"}
                 >
-                  {isLogsExpanded ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
+                  <div className="flex flex-col items-center gap-1 opacity-60 group-hover:opacity-100">
+                    {isLogsExpanded ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+                  </div>
                 </button>
 
                 {/* Toggle Button */}
@@ -2827,7 +2829,11 @@ const App: React.FC = () => {
                           </>
                         )}
                       </div>
-                    )) : null}
+                    )) : (
+                      <div className="text-[11px] font-bold px-4 py-3 bg-black/40 backdrop-blur-md rounded-xl border border-white/5 text-gray-500 italic shadow-sm w-fit anim-fade-in transition-opacity" style={{ opacity: isLogsExpanded ? 1 : 0 }}>
+                        等待數據中...
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
