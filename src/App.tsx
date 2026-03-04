@@ -2823,11 +2823,11 @@ const App: React.FC = () => {
 
             {/* Bottom Left Area - Auto Explore & Interactions */}
             {activeTab === 'explore' && !isCombatAction && !inTown && (
-              <div className="absolute bottom-28 sm:bottom-8 sm:left-6 left-1/2 -translate-x-1/2 sm:translate-x-0 z-[1000] flex flex-col gap-3 pointer-events-none items-center sm:items-start w-full sm:w-auto px-4 sm:px-0">
+              <div className="absolute bottom-28 sm:bottom-8 sm:left-6 left-1/2 -translate-x-1/2 sm:translate-x-0 z-[1000] flex flex-col gap-3 pointer-events-none items-center sm:items-start w-fit sm:w-auto px-4 sm:px-0">
 
                 {/* Contextual Interaction Card (Shown when clicking a POI or Town nearby) */}
                 {interactingLocation && (
-                  <div className="w-full sm:w-64 glass-panel p-4 rounded-2xl anim-fade-in-up pointer-events-auto border-t-2 border-t-game-accent/50 shadow-2xl relative overflow-hidden">
+                  <div className="w-fit sm:w-64 glass-panel p-3.5 rounded-2xl anim-fade-in-up pointer-events-auto border-t-2 border-t-game-accent/50 shadow-2xl relative overflow-hidden">
                     <div className="absolute inset-0 bg-gradient-to-br from-game-accent/10 to-transparent pointer-events-none"></div>
                     <div className="flex flex-col gap-3 relative z-10">
                       <div className="flex justify-between items-center bg-black/40 p-2 rounded-xl border border-white/5">
@@ -2849,11 +2849,6 @@ const App: React.FC = () => {
                         </button>
                       </div>
 
-                      <div className="text-sm text-gray-300 px-1 py-1 leading-relaxed text-left">
-                        {interactingLocation.type === 'town'
-                          ? `這是一座繁華的城鎮，是否進入進行補給或接取任務？`
-                          : `發現了【${POI_NAMES[interactingLocation.poi.type] || '地點'}】，要嘗試進行互動嗎？`}
-                      </div>
 
                       <div className="flex gap-2 w-full mt-1">
                         {interactingLocation.type === 'town' ? (
@@ -2882,7 +2877,7 @@ const App: React.FC = () => {
                     }
                   }}
                   disabled={isTraveling}
-                  className={`pointer-events-auto flex items-center justify-center sm:justify-start gap-2.5 w-full sm:w-fit px-5 py-3 rounded-2xl shadow-2xl transition-all border font-black tracking-widest text-[13px] backdrop-blur-xl ${isTraveling ? 'bg-black/50 border-white/10 text-gray-500 cursor-not-allowed' :
+                  className={`pointer-events-auto flex items-center justify-center sm:justify-start gap-2.5 w-fit px-5 py-3 rounded-2xl shadow-2xl transition-all border font-black tracking-widest text-[13px] backdrop-blur-xl ${isTraveling ? 'bg-black/50 border-white/10 text-gray-500 cursor-not-allowed' :
                     autoExplore
                       ? 'bg-game-accent text-white border-game-accent shadow-[0_0_20px_rgba(var(--game-accent-rgb),0.4)]'
                       : 'bg-black/60 border-white/20 text-gray-300 hover:text-white hover:bg-black/80 hover:border-white/40'
