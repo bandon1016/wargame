@@ -1991,7 +1991,7 @@ const App: React.FC = () => {
     // Time-based travel: compute total seconds based on path length
     // TRAVEL_SPEED_FACTOR = 0.0008 units/frame at 60fps
     // progress goes from 0 to (path.length-1), so total frames = (path.length-1)/0.0008
-    const TRAVEL_SPEED_FACTOR = 0.0008;
+    const TRAVEL_SPEED_FACTOR = 0.0016; // 2x faster (original 0.0008)
     const totalDurationSec = (path.length - 1) / TRAVEL_SPEED_FACTOR / 60;
     const departedAt = new Date();
 
