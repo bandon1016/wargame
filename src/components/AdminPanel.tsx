@@ -9,67 +9,108 @@ interface AdminPanelProps {
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
-    const [targetId, setTargetId] = useState('');
+    const [targetUid, setTargetUid] = useState('');
     const [gemAmount, setGemAmount] = useState(100);
     const [selectedBuffKey, setSelectedBuffKey] = useState(PREMIUM_SHOP_ITEMS[0].buffKey);
     const [buffDurationDays, setBuffDurationDays] = useState(1);
 
-    const [loadingAction, setLoadingAction] = useState<'gems' | 'buff' | null>(null);
+    const [loadingAction, setLoadingAction] = useState<'gems' | 'buff' | 'lookup' | null>(null);
     const [message, setMessage] = useState<{ text: string, type: 'error' | 'success' } | null>(null);
+
+    const resolveUidToUuid = async (uid: string): Promise<string | null> => {
+        const cleanUid = uid.trim().toUpperCase();
+        if (!cleanUid) return null;
+
+        const { data, error } = await supabase
+            .from('profiles')
+            .select('id')
+            .or(`uid.eq.${cleanUid},uid_12_code.eq.${cleanUid}`)
+            .single();
+
+        if (error || !data) {
+            console.error('UID Lookup Error:', error);
+            return null;
+        }
+        return data.id;
+    };
 
     if (!isOpen) return null;
 
     const handleGrantGems = async () => {
-        if (!targetId || gemAmount <= 0) {
-            setMessage({ text: '請輸入目標 ID 與大於 0 的靈石數量', type: 'error' });
+        if (!targetUid || gemAmount <= 0) {
+            setMessage({ text: '請輸入目標 UID 與大於 0 的靈石數量', type: 'error' });
             return;
         }
 
-        const confirmText = `[管理員操作]\n確定要發送 ${gemAmount} 顆 台灣藍寶靈石 給 ${targetId} 嗎？`;
-        if (!window.confirm(confirmText)) return;
-
         setLoadingAction('gems');
         setMessage(null);
+
         try {
+            const uuid = await resolveUidToUuid(targetUid);
+            if (!uuid) {
+                setMessage({ text: `找不到玩家 UID: ${targetUid}`, type: 'error' });
+                setLoadingAction(null);
+                return;
+            }
+
+            const confirmText = `[管理員操作]\n確定要發送 ${gemAmount} 顆 台灣藍寶靈石 給 ${targetUid} (${uuid}) 嗎？`;
+            if (!window.confirm(confirmText)) {
+                setLoadingAction(null);
+                return;
+            }
+
             const { data, error } = await supabase.rpc('secure_admin_grant_gems', {
-                p_target_id: targetId,
+                p_target_id: uuid,
                 p_amount: gemAmount
             });
 
             if (error) throw error;
-            setMessage({ text: `成功發送 ${gemAmount} 顆靈石！目標新餘額: ${data.new_balance}`, type: 'success' });
-        } catch (err: any) {
-            console.error('Admin Grant Error:', err);
-            setMessage({ text: err.message || '發送失敗，請確認是否具備管理員權限', type: 'error' });
+            setMessage({ text: `成功發送 ${gemAmount} 顆靈石！玩家: ${targetUid} 新餘額: ${data.new_balance}`, type: 'success' });
+        } catch (err: unknown) {
+            const error = err as Error;
+            console.error('Admin Grant Error:', error);
+            setMessage({ text: error.message || '發送失敗，請確認是否具備管理員權限', type: 'error' });
         } finally {
             setLoadingAction(null);
         }
     };
 
     const handleGrantBuff = async () => {
-        if (!targetId || buffDurationDays <= 0) {
-            setMessage({ text: '請輸入目標 ID 與大於 0 的天數', type: 'error' });
+        if (!targetUid || buffDurationDays <= 0) {
+            setMessage({ text: '請輸入目標 UID 與大於 0 的天數', type: 'error' });
             return;
         }
 
-        const buffName = PREMIUM_SHOP_ITEMS.find(i => i.buffKey === selectedBuffKey)?.name || selectedBuffKey;
-        const confirmText = `[管理員操作]\n確定要發送【${buffName}】(${buffDurationDays}天) 給 ${targetId} 嗎？`;
-        if (!window.confirm(confirmText)) return;
-
         setLoadingAction('buff');
         setMessage(null);
+
         try {
+            const uuid = await resolveUidToUuid(targetUid);
+            if (!uuid) {
+                setMessage({ text: `找不到玩家 UID: ${targetUid}`, type: 'error' });
+                setLoadingAction(null);
+                return;
+            }
+
+            const buffName = PREMIUM_SHOP_ITEMS.find(i => i.buffKey === selectedBuffKey)?.name || selectedBuffKey;
+            const confirmText = `[管理員操作]\n確定要發送【${buffName}】(${buffDurationDays}天) 給 ${targetUid} (${uuid}) 嗎？`;
+            if (!window.confirm(confirmText)) {
+                setLoadingAction(null);
+                return;
+            }
+
             const { error } = await supabase.rpc('secure_admin_grant_buff', {
-                p_target_id: targetId,
+                p_target_id: uuid,
                 p_buff_key: String(selectedBuffKey),
                 p_duration_ms: buffDurationDays * 24 * 60 * 60 * 1000
             });
 
             if (error) throw error;
-            setMessage({ text: `成功發送 ${buffName}！`, type: 'success' });
-        } catch (err: any) {
-            console.error('Admin Grant Error:', err);
-            setMessage({ text: err.message || '發送失敗，請確認是否具備管理員權限', type: 'error' });
+            setMessage({ text: `成功發送 ${buffName} 給玩家: ${targetUid}！`, type: 'success' });
+        } catch (err: unknown) {
+            const error = err as Error;
+            console.error('Admin Grant Error:', error);
+            setMessage({ text: error.message || '發送失敗，請確認是否具備管理員權限', type: 'error' });
         } finally {
             setLoadingAction(null);
         }
@@ -104,13 +145,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
 
                     <div className="space-y-4 bg-slate-800/50 p-4 rounded-xl border border-slate-700">
                         <div>
-                            <label className="block text-sm text-slate-400 mb-1">目標玩家 ID (UUID)</label>
+                            <label className="block text-sm text-slate-400 mb-1">目標玩家 UID (例如: G-0000)</label>
                             <input
                                 type="text"
-                                value={targetId}
-                                onChange={e => setTargetId(e.target.value)}
-                                placeholder="e.g. 123e4567-e89b-12d3..."
-                                className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 focus:outline-none focus:border-red-500 transition-colors font-mono text-sm"
+                                value={targetUid}
+                                onChange={e => setTargetUid(e.target.value)}
+                                placeholder="輸入玩家 UID..."
+                                className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 focus:outline-none focus:border-red-500 transition-colors font-mono text-sm uppercase"
                             />
                         </div>
 
@@ -151,7 +192,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                             <div className="grid grid-cols-2 gap-4">
                                 <select
                                     value={String(selectedBuffKey)}
-                                    onChange={e => setSelectedBuffKey(e.target.value as any)}
+                                    onChange={e => setSelectedBuffKey(e.target.value as "eliteEncounterExpiry" | "hsrPassExpiry" | "luckyCloverExpiry" | "goddessBlessingExpiry" | "hornOfPlentyExpiry")}
                                     className="w-full bg-slate-900 border border-emerald-900/50 rounded-lg p-3 text-emerald-200 focus:outline-none focus:border-emerald-500"
                                 >
                                     {PREMIUM_SHOP_ITEMS.map(item => (
