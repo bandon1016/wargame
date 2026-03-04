@@ -1243,9 +1243,9 @@ DECLARE
     v_threshold float; 
     v_res text := 'none';
 BEGIN
-    -- 晴天 5%, 雨天 10%, 雷暴/濃霧 15%
+    -- 晴天 8%, 雨天 10%, 雷暴/濃霧 15%
     v_threshold := CASE 
-        WHEN p_weather IN ('sunny', 'clear') THEN 0.05 
+        WHEN p_weather IN ('sunny', 'clear') THEN 0.08 
         WHEN p_weather = 'rainy' THEN 0.10 
         WHEN p_weather IN ('stormy', 'foggy') THEN 0.15 
         ELSE 0.10 
