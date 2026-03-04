@@ -292,7 +292,7 @@ begin
     walk_start_lat = CASE WHEN p_walk_data ? 'start_lat' THEN (p_walk_data->>'start_lat')::double precision ELSE walk_start_lat END,
     walk_start_lng = CASE WHEN p_walk_data ? 'start_lng' THEN (p_walk_data->>'start_lng')::double precision ELSE walk_start_lng END,
     walk_started_at = CASE WHEN p_walk_data ? 'started_at' THEN (p_walk_data->>'started_at')::timestamp with time zone ELSE walk_started_at END,
-    walk_duration_seconds = CASE WHEN p_walk_data ? 'duration' THEN (p_travel_data->>'duration')::double precision ELSE walk_duration_seconds END,
+    walk_duration_seconds = CASE WHEN p_walk_data ? 'duration' THEN (p_walk_data->>'duration')::double precision ELSE walk_duration_seconds END,
     active_god_id = p_active_god_id,
     partners = COALESCE(p_partners, partners),
     buildings = COALESCE(p_buildings, buildings),

@@ -1115,6 +1115,12 @@ const App: React.FC = () => {
 
   const move = useCallback((d: 'n' | 's' | 'e' | 'w') => {
     const s = 0.00025;
+    // Clear walking persistence when manual control takes over
+    walkTargetRef.current = null;
+    walkStartRef.current = null;
+    walkStartedAtRef.current = null;
+    walkDurationSecRef.current = 0;
+
     setPosition(p => {
       const next: [number, number] = d === 'n' ? [p[0] + s, p[1]] : d === 's' ? [p[0] - s, p[1]] : d === 'e' ? [p[0], p[1] + s] : [p[0], p[1] - s];
       // Immediate save when manually moving to clear any active targetPosition in DB
@@ -1186,6 +1192,11 @@ const App: React.FC = () => {
   const startMove = (d: 'n' | 's' | 'e' | 'w') => {
     moveDirRef.current = d;
     setTargetPosition(null);
+    // Clear walking persistence when manual control takes over
+    walkTargetRef.current = null;
+    walkStartRef.current = null;
+    walkStartedAtRef.current = null;
+    walkDurationSecRef.current = 0;
     // Immediate save to clear walking/targeting persistence when manual control takes over
     saveProfileRef.current?.();
     if ('vibrate' in navigator) navigator.vibrate(10); // Subtle haptic feedback
@@ -1272,7 +1283,15 @@ const App: React.FC = () => {
   // Click-to-Move Walking Animation (Time-based for persistence)
   useEffect(() => {
     if (!targetPosition || isTraveling) {
-      setIsWalking(false);
+      if (!isTraveling) {
+        setIsWalking(false);
+        walkTargetRef.current = null;
+        walkStartRef.current = null;
+        walkStartedAtRef.current = null;
+        walkDurationSecRef.current = 0;
+      } else {
+        setIsWalking(false);
+      }
       return;
     }
 
