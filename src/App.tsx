@@ -1,7 +1,7 @@
 ﻿import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap, Circle, Polyline, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Compass, Sword, Home, Users, Package, Settings as SettingsIcon, Book, Heart, Shield, Zap, ChevronRight, MapPin, Loader2, X, PlusCircle, ShieldAlert, TrainFront, Coins, Sparkles, Cpu, Flame, Waves, Diamond, Trophy, Copy, Check, ScrollText, TrendingUp } from 'lucide-react';
+import { Compass, Sword, Home, Users, Package, Settings as SettingsIcon, Book, Heart, Shield, Zap, ChevronRight, ChevronLeft, MapPin, Loader2, X, PlusCircle, ShieldAlert, TrainFront, Coins, Sparkles, Cpu, Flame, Waves, Diamond, Trophy, Copy, Check, ScrollText, TrendingUp } from 'lucide-react';
 import type { CharacterStats, Equipment, GameItem, Skill, MapPOI, Town, WeatherType, Enemy, AlchemyRecipe, BlacksmithRecipe, ElementType } from './types/game';
 import { MONSTER_DATABASE, SKILL_DATABASE, ITEM_DATABASE, EQUIPMENT_DATABASE, RARITY_COLORS, WEATHER_TYPES, TOWN_DATABASE, getPartnerAvatar, getRailwayPath, POI_NAMES, ELEMENT_META, getRegionByCoordinates, getRegionByCityName, getRegionalMaterials } from './types/game';
 import { CombatScreen } from './components/CombatScreen';
@@ -332,6 +332,7 @@ const App: React.FC = () => {
   const [combatLogs, setCombatLogs] = useState<CombatLog[]>([]);
   const [forgingRecipeId, setForgingRecipeId] = useState<string | null>(null);
   const [logOpacity, setLogOpacity] = useState(1);
+  const [isLogsExpanded, setIsLogsExpanded] = useState(true);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [isEditingNickname, setIsEditingNickname] = useState(false);
   const [tempNickname, setTempNickname] = useState('');
@@ -2701,11 +2702,22 @@ const App: React.FC = () => {
 
             {/* Bottom Right Area - Combat Logs / Stats */}
             {logOpacity > 0 && (
-              <div className="absolute bottom-8 right-6 z-[1000] flex flex-col gap-2 transition-opacity duration-300 pointer-events-none max-w-[calc(100vw-3rem)] w-[280px] sm:w-[320px] md:w-[380px] items-end" style={{ opacity: logOpacity }}>
+              <div
+                className={`absolute bottom-8 z-[1000] flex flex-col gap-2 transition-all duration-500 ease-in-out pointer-events-none max-w-[calc(100vw-3rem)] w-[280px] sm:w-[320px] md:w-[380px] items-end ${isLogsExpanded ? 'right-6' : '-right-[260px] sm:-right-[300px] md:-right-[360px]'}`}
+                style={{ opacity: logOpacity }}
+              >
+                {/* Collapse/Expand Pull Tab */}
+                <button
+                  onClick={() => setIsLogsExpanded(!isLogsExpanded)}
+                  className="absolute left-[-32px] top-1/2 -translate-y-1/2 w-8 h-16 bg-black/60 backdrop-blur-md rounded-l-xl border-l border-y border-white/20 pointer-events-auto flex items-center justify-center text-gray-400 hover:text-white transition-colors shadow-lg"
+                  title={isLogsExpanded ? "隱藏面板" : "展開面板"}
+                >
+                  {isLogsExpanded ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
+                </button>
 
                 {/* Toggle Button */}
                 {(combatLogs.length > 0 || sessionStats.kills > 0 || autoExplore) && (
-                  <div className="flex justify-end pointer-events-auto w-full mb-0.5">
+                  <div className={`flex justify-end pointer-events-auto w-full mb-0.5 transition-opacity duration-300 ${isLogsExpanded ? 'opacity-100' : 'opacity-0'}`}>
                     <div className="bg-black/60 backdrop-blur-md rounded-full border border-white/20 p-1 flex shadow-lg">
                       <button onClick={() => setIsStatsView(false)} className={`px-4 py-1.5 rounded-full text-[11px] font-bold transition-all ${!isStatsView ? 'bg-game-gold text-black shadow-md' : 'text-gray-400 hover:text-white'}`}>📝 戰鬥日誌</button>
                       <button onClick={() => setIsStatsView(true)} className={`px-4 py-1.5 rounded-full text-[11px] font-bold transition-all flex items-center gap-1 ${isStatsView ? 'bg-game-gold text-black shadow-md' : 'text-gray-400 hover:text-white'}`}><TrendingUp size={12} /> 統計數據</button>
@@ -2823,7 +2835,7 @@ const App: React.FC = () => {
 
             {/* Bottom Left Area - Auto Explore & Interactions */}
             {activeTab === 'explore' && !isCombatAction && !inTown && (
-              <div className="absolute bottom-28 sm:bottom-8 left-4 sm:left-6 z-[1000] flex flex-col gap-3 pointer-events-none items-start w-fit px-0">
+              <div className="absolute bottom-20 sm:bottom-8 left-4 sm:left-6 z-[1000] flex flex-col gap-3 pointer-events-none items-start w-fit px-0">
 
                 {/* Contextual Interaction Card (Shown when clicking a POI or Town nearby) */}
                 {interactingLocation && (
