@@ -1669,45 +1669,41 @@ const App: React.FC = () => {
     }
   }, [player, saveProfile, fetchPois, currentEnemy]);
 
-  const equipItem = useCallback((eq: Equipment) => {
-    if (!player) return;
-    const slotKey = `equipped${eq.slot.charAt(0).toUpperCase() + eq.slot.slice(1)}` as keyof CharacterStats;
-    const currentEquipped = player[slotKey] as Equipment | undefined;
+  const equipItem = useCallback(async (eq: Equipment) => {
+    if (!player || !session?.user?.id) return;
+    const { data: result, error } = await supabase.rpc('secure_equip_item', {
+      p_equip_id: eq.id,
+      p_slot: eq.slot,
+      p_equipment_inventory: player.equipment
+    });
 
-    // Remove the new equipment from inventory
-    let newInventory = player.equipment.filter(e => e.id !== eq.id);
-
-    // If there was an old equipment, add it back to inventory
-    if (currentEquipped) {
-      newInventory.push(currentEquipped);
+    if (error || !result?.success) {
+      console.error('[equipItem] RPC failed:', error?.message || result?.message);
+      return;
     }
 
-    const nextState = {
-      ...player,
-      [slotKey]: eq,
-      equipment: newInventory
-    } as CharacterStats;
+    const newP = mapServerProfile(result.updated_profile);
+    playerRef.current = newP;
+    setPlayer(newP);
+  }, [player, session, mapServerProfile]);
 
-    setPlayer(nextState);
-    saveProfile(nextState);
-  }, [player, saveProfile]);
+  const unequipItem = useCallback(async (slot: string) => {
+    if (!player || !session?.user?.id) return;
+    const { data: result, error } = await supabase.rpc('secure_equip_item', {
+      p_equip_id: null,
+      p_slot: slot,
+      p_equipment_inventory: player.equipment
+    });
 
-  const unequipItem = useCallback((slot: string) => {
-    if (!player) return;
-    const slotKey = `equipped${slot.charAt(0).toUpperCase() + slot.slice(1)}` as keyof CharacterStats;
-    const currentEquipped = player[slotKey] as Equipment | undefined;
+    if (error || !result?.success) {
+      console.error('[unequipItem] RPC failed:', error?.message || result?.message);
+      return;
+    }
 
-    if (!currentEquipped) return;
-
-    const nextState = {
-      ...player,
-      [slotKey]: null,
-      equipment: [...player.equipment, currentEquipped]
-    } as CharacterStats;
-
-    setPlayer(nextState);
-    saveProfile(nextState);
-  }, [player, saveProfile]);
+    const newP = mapServerProfile(result.updated_profile);
+    playerRef.current = newP;
+    setPlayer(newP);
+  }, [player, session, mapServerProfile]);
 
   const useItem = useCallback(async (item: GameItem, silent = false) => {
     if (!player || !session?.user?.id || (item.type !== 'potion' && item.type !== 'consumable')) return;
