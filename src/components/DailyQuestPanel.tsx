@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { CheckCircle, Loader2, RefreshCw, Gift, Trophy, Target } from 'lucide-react';
+import { CheckCircle, Loader2, RefreshCw, Gift, Trophy, Target, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { DAILY_QUEST_POOL, WEEKLY_QUEST_POOL, CITY_QUEST_POOL } from '../types/game';
 import type { DailyQuest } from '../types/game';
@@ -30,7 +30,7 @@ const CURRENCY_ICONS: Record<string, string> = {
     premiumGems: '💎',
 };
 
-export const DailyQuestPanel: React.FC<DailyQuestPanelProps> = ({ userId, onReward, cityId, onQuestsStatusUpdate }) => {
+export const DailyQuestPanel: React.FC<DailyQuestPanelProps> = ({ userId, onReward, cityId, onQuestsStatusUpdate, onClose }) => {
     const [quests, setQuests] = useState<QuestRow[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -139,6 +139,13 @@ export const DailyQuestPanel: React.FC<DailyQuestPanelProps> = ({ userId, onRewa
                         title="重整任務清單"
                     >
                         <RefreshCw size={18} className={refreshing ? 'animate-spin' : ''} />
+                    </button>
+                    <button
+                        onClick={onClose}
+                        className="p-2.5 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 text-gray-400 hover:text-white transition-all"
+                        title="關閉"
+                    >
+                        <X size={18} />
                     </button>
                 </div>
             </div>
