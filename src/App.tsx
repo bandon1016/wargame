@@ -1401,8 +1401,19 @@ const App: React.FC = () => {
       return `災厄${tier}階`;
     };
 
-    // All monster types are available regardless of player level
-    const template = MONSTER_DATABASE[Math.floor(Math.random() * MONSTER_DATABASE.length)];
+    // 1. Filter monsters based on player level (Progressive Scaling)
+    let availableMonsters = MONSTER_DATABASE.filter(m => lv >= (m.minLv || 0) && lv <= (m.maxLv || 999));
+
+    // Fallback: If player outlevels everything, pick from the highest tier
+    if (availableMonsters.length === 0) {
+      const maxAvailableLv = Math.max(...MONSTER_DATABASE.map(m => m.minLv || 0));
+      availableMonsters = MONSTER_DATABASE.filter(m => (m.minLv || 0) >= maxAvailableLv);
+    }
+
+    // Final defensive fallback: Use full database
+    if (availableMonsters.length === 0) availableMonsters = MONSTER_DATABASE;
+
+    const template = availableMonsters[Math.floor(Math.random() * availableMonsters.length)];
 
     const isBoss = isElite && template.name.includes('黑龍');
     // Weather Special enemies are roughly 2x stronger than normal
