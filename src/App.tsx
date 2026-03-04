@@ -4,6 +4,7 @@ import 'leaflet/dist/leaflet.css';
 import { Compass, Sword, Home, Users, Package, Settings as SettingsIcon, Book, Heart, Shield, Zap, ChevronRight, ChevronLeft, MapPin, Loader2, X, PlusCircle, ShieldAlert, TrainFront, Coins, Sparkles, Cpu, Waves, Diamond, Trophy, Copy, Check, ScrollText, TrendingUp } from 'lucide-react';
 import type { CharacterStats, Equipment, GameItem, Skill, MapPOI, Town, WeatherType, Enemy, AlchemyRecipe, BlacksmithRecipe, ElementType } from './types/game';
 import { MONSTER_DATABASE, SKILL_DATABASE, ITEM_DATABASE, EQUIPMENT_DATABASE, RARITY_COLORS, WEATHER_TYPES, TOWN_DATABASE, getPartnerAvatar, getRailwayPath, POI_NAMES, ELEMENT_META, getRegionByCoordinates, getRegionByCityName, getRegionalMaterials } from './types/game';
+import { UPDATE_NOTES } from './data/updates';
 import { CombatScreen } from './components/CombatScreen';
 import { PartnersTab } from './components/PartnersTab';
 import { HomeTab } from './components/HomeTab';
@@ -337,6 +338,7 @@ const App: React.FC = () => {
   useEffect(() => { isDoubleTabbedRef.current = isDoubleTabbed; }, [isDoubleTabbed]);
   const [showGuide, setShowGuide] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showUpdates, setShowUpdates] = useState(false);
 
   // --- Map Style Switcher State ---
   const [mapStyle, setMapStyle] = useState(() => {
@@ -2443,6 +2445,12 @@ const App: React.FC = () => {
                   </button>
                   <div className="border-t border-white/10 mt-1 pt-1">
                     <button
+                      onClick={() => { setShowUpdates(true); setIsProfileMenuOpen(false); }}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm text-gray-300 hover:bg-white/8 hover:text-white transition-colors"
+                    >
+                      <ScrollText size={14} /> 更新內容
+                    </button>
+                    <button
                       onClick={() => { setShowSettings(true); setIsProfileMenuOpen(false); }}
                       className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm text-gray-300 hover:bg-white/8 hover:text-white transition-colors"
                     >
@@ -2517,6 +2525,75 @@ const App: React.FC = () => {
             >
               關閉視窗
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ─── UPDATE NOTES MODAL (新) ─── */}
+      {showUpdates && (
+        <div className="fixed inset-0 z-[5000] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md anim-fade-in">
+          <div className="glass-panel w-full max-w-lg rounded-[2.5rem] p-6 sm:p-8 border border-white/20 shadow-2xl relative overflow-hidden anim-scale-in flex flex-col max-h-[90vh]">
+            <div className="absolute -left-20 -top-20 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl opacity-50 pointer-events-none" />
+
+            <div className="relative flex justify-between items-center mb-6 shrink-0">
+              <div>
+                <h2 className="text-2xl sm:text-3xl font-black text-white flex items-center gap-3">
+                  <ScrollText className="text-blue-400" size={28} /> 更新內容
+                </h2>
+                <p className="text-gray-400 text-xs mt-1">持續進化的遊戲世界</p>
+              </div>
+              <button
+                onClick={() => setShowUpdates(false)}
+                className="p-2 sm:p-3 rounded-2xl bg-white/5 hover:bg-white/10 transition-colors border border-white/10 text-gray-400 hover:text-white"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-6 relative">
+              {UPDATE_NOTES.map((note, idx) => (
+                <div key={idx} className="relative pl-6 sm:pl-8 pb-6 border-l-2 border-white/10 last:border-transparent last:pb-0">
+                  <div className="absolute left-[-9px] top-0 w-4 h-4 rounded-full bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.5)] border-2 border-slate-900" />
+
+                  <div className="mb-3">
+                    <div className="flex items-baseline gap-3 mb-1">
+                      <h3 className="text-lg sm:text-xl font-bold text-white tracking-wide">{note.version}</h3>
+                      <span className="text-xs text-gray-500 font-mono bg-black/30 px-2 py-0.5 rounded-md">{note.date}</span>
+                    </div>
+                    <div className="text-sm font-bold text-blue-300">{note.title}</div>
+                  </div>
+
+                  <ul className="space-y-2.5">
+                    {note.changes.map((change, cIdx) => {
+                      let tagColor = 'bg-gray-500 text-gray-100';
+                      let tagLabel = '系統';
+                      if (change.type === 'feature') {
+                        tagColor = 'bg-blue-500 text-white';
+                        tagLabel = '功能';
+                      } else if (change.type === 'fix') {
+                        tagColor = 'bg-red-500 text-white';
+                        tagLabel = '修復';
+                      } else if (change.type === 'balance') {
+                        tagColor = 'bg-orange-500 text-white';
+                        tagLabel = '平衡';
+                      }
+
+                      return (
+                        <li key={cIdx} className="flex gap-3 text-sm text-gray-300 bg-white/5 p-3 rounded-xl border border-white/5">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-black shrink-0 self-start ${tagColor} shadow-sm`}>
+                            {tagLabel}
+                          </span>
+                          <span className="leading-snug">{change.text}</span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              ))}
+            </div>
+            <div className="shrink-0 pt-4 mt-2 border-t border-white/10 text-center">
+              <p className="text-[10px] text-gray-500">感謝所有參與測試與給予建議的玩家！</p>
+            </div>
           </div>
         </div>
       )}
