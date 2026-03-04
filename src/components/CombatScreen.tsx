@@ -56,6 +56,12 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({
 
     useEffect(() => { logRef.current?.scrollTo({ top: 999999, behavior: 'smooth' }); }, [logs]);
 
+    // 同步來自外部（如使用道具 RPC）的權威狀態
+    useEffect(() => {
+        setPHp(player.hp);
+        setPMp(player.mp);
+    }, [player.hp, player.mp]);
+
     useEffect(() => {
         if (!auto || ended || awaitingRevive || !isPlayerTurn) return;
         const tickRate = 1500; // 稍快一點的自動節奏 (1.5秒)

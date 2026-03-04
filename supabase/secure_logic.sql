@@ -654,7 +654,7 @@ $$;
 
 
 -- 6. SECURE DRAW GOD
--- Logic: 100 incense cost, 2% chance success.
+-- Logic: 100 incense cost, 10% chance success.
 CREATE OR REPLACE FUNCTION public.secure_draw_god()
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -671,7 +671,7 @@ BEGIN
     SELECT * INTO v_profile FROM public.profiles WHERE id = v_user_id;
     IF v_profile.incense < 100 THEN RAISE EXCEPTION 'Insufficient incense'; END IF;
 
-    IF v_roll < 0.02 THEN
+    IF v_roll < 0.10 THEN
         v_god_pool := '[
             {"name": "天上聖母-媽祖", "avatar": "🏮", "rarity": 5, "resistanceType": "rainy", "description": "守護神，能引導勇者在雨天中如同晴天般疾行。"},
             {"name": "福德正神-土地公", "avatar": "⛰️", "rarity": 5, "resistanceType": "foggy", "description": "守護神，能看穿一切虛妄濃霧，保持視野清晰。"},
@@ -1018,6 +1018,7 @@ BEGIN
     IF v_cur_mp > (v_profile.max_mp + (v_hp_increase/2)) THEN v_cur_mp := (v_profile.max_mp + (v_hp_increase/2)); END IF;
 
     -- Update Profile
+    -- Update Profile
     UPDATE public.profiles
     SET 
         hp = v_cur_hp,
@@ -1026,33 +1027,18 @@ BEGIN
         defense = defense + v_def_increase,
         max_hp = max_hp + v_hp_increase,
         items = (
-            SELECT jsonb_agg(row_to_json(m))
-            FROM (
-                SELECT 
-                    (e->>'id') as id, 
-                    (e->>'name') as name, 
-                    (e->>'icon') as icon, 
-                    (e->>'type') as type, 
-                    (e->>'description') as description, 
-                    ((e->>'quantity')::int - (CASE WHEN e->>'id' = p_item_id THEN v_count ELSE 0 END))::int as quantity 
-                FROM jsonb_array_elements(v_profile.items) AS e
-            ) m
-            WHERE m.quantity > 0
+            SELECT jsonb_agg(
+                CASE 
+                    WHEN (e->>'id') = p_item_id THEN 
+                        e || jsonb_build_object('quantity', (e->>'quantity')::int - v_count)
+                    ELSE e 
+                END
+            )
+            FROM jsonb_array_elements(v_profile.items) AS e
+            WHERE (e->>'id' != p_item_id) OR ((e->>'quantity')::int > v_count)
         ),
         updated_at = now()
     WHERE id = v_user_id;
-
-    -- Increment daily craft count if applicable
-
-    IF v_recipe->>'target' IN ('item_str_seed', 'item_def_seed') THEN
-
-        UPDATE public.daily_craft_limits 
-
-        SET craft_count = craft_count + 1 
-
-        WHERE user_id = v_user_id AND item_id = v_recipe->>'target' AND craft_date = CURRENT_DATE;
-
-    END IF;
 
     -- Fetch final state for authoritative UI update
     SELECT * INTO v_profile FROM public.profiles WHERE id = v_user_id;

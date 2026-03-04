@@ -1,7 +1,7 @@
 ﻿import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap, Circle, Polyline, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Compass, Sword, Home, Users, Package, Settings as SettingsIcon, Book, Heart, Shield, Zap, ChevronRight, ChevronLeft, MapPin, Loader2, X, PlusCircle, ShieldAlert, TrainFront, Coins, Sparkles, Cpu, Flame, Waves, Diamond, Trophy, Copy, Check, ScrollText, TrendingUp } from 'lucide-react';
+import { Compass, Sword, Home, Users, Package, Settings as SettingsIcon, Book, Heart, Shield, Zap, ChevronRight, ChevronLeft, MapPin, Loader2, X, PlusCircle, ShieldAlert, TrainFront, Coins, Sparkles, Cpu, Waves, Diamond, Trophy, Copy, Check, ScrollText, TrendingUp } from 'lucide-react';
 import type { CharacterStats, Equipment, GameItem, Skill, MapPOI, Town, WeatherType, Enemy, AlchemyRecipe, BlacksmithRecipe, ElementType } from './types/game';
 import { MONSTER_DATABASE, SKILL_DATABASE, ITEM_DATABASE, EQUIPMENT_DATABASE, RARITY_COLORS, WEATHER_TYPES, TOWN_DATABASE, getPartnerAvatar, getRailwayPath, POI_NAMES, ELEMENT_META, getRegionByCoordinates, getRegionByCityName, getRegionalMaterials } from './types/game';
 import { CombatScreen } from './components/CombatScreen';
@@ -87,7 +87,7 @@ const createConfirmIcon = (label: string) => L.divIcon({
       <!-- Floating Card Confirm UI -->
       <div class="absolute bottom-10 flex flex-col items-center anim-fade-in-up">
         <div class="bg-black/95 backdrop-blur-2xl border border-game-accent/50 rounded-2xl p-2 shadow-[0_15px_40px_rgba(0,0,0,0.8)] flex flex-col items-center gap-2 min-w-[150px]">
-          <div class="text-[9px] font-black text-game-accent uppercase tracking-[0.2em] mb-0.5 opacity-80">${label}</div>
+          <div class="text-[13px] font-black text-game-accent uppercase tracking-wide mb-1 opacity-90">${label}</div>
           <div class="flex gap-1.5 w-full">
             <button id="btn-confirm-move" class="flex-1 bg-game-accent hover:bg-white hover:text-game-accent text-white py-2 px-3 rounded-xl font-black text-[11px] transition-all active:scale-90 shadow-lg shadow-game-accent/30 flex items-center justify-center gap-1.5">
               🚀 出發
@@ -190,6 +190,22 @@ const getRewardsByLevel = (lv: number) => ({
   exp: 15 + (lv - 1) * 10,
   gold: 10 + (lv - 1) * 5
 });
+
+// --- God System Stat Bonuses ---
+const getGodStatBonus = (p: CharacterStats) => {
+  if (!p.activeGodId) return { atk: 1, def: 1, hp: 1, dmg: 1 };
+  const god = p.gods.find(g => g.id === p.activeGodId);
+  if (!god) return { atk: 1, def: 1, hp: 1, dmg: 1 };
+
+  const lv = god.level;
+  if (god.name.includes('媽祖')) return { atk: 1, def: 1 + lv * 0.005, hp: 1, dmg: 1 };
+  if (god.name.includes('土地公')) return { atk: 1, def: 1, hp: 1 + lv * 0.005, dmg: 1 };
+  if (god.name.includes('太子')) return { atk: 1 + lv * 0.005, def: 1, hp: 1, dmg: 1 };
+  if (god.name.includes('玄天')) return { atk: 1, def: 1, hp: 1, dmg: 1 + lv * 0.01 };
+  if (god.name.includes('關公') || god.name.includes('關聖')) return { atk: 1 + lv * 0.01, def: 1 + lv * 0.01, hp: 1 + lv * 0.01, dmg: 1 };
+
+  return { atk: 1, def: 1, hp: 1, dmg: 1 };
+};
 
 const totalEquipAtk = (p: CharacterStats) => [p.equippedWeapon, p.equippedArmor, p.equippedHelmet, p.equippedBoots, p.equippedAccessory].reduce((s, e) => s + (e?.attack ?? 0), 0);
 const totalEquipDef = (p: CharacterStats) => [p.equippedWeapon, p.equippedArmor, p.equippedHelmet, p.equippedBoots, p.equippedAccessory].reduce((s, e) => s + (e?.defense ?? 0), 0);
@@ -340,6 +356,7 @@ const App: React.FC = () => {
 
   // --- Session Stats Logic ---
   const [isStatsView, setIsStatsView] = useState(false);
+  const [hasQuestReward, setHasQuestReward] = useState(false);
   const [sessionStartTime, setSessionStartTime] = useState<number | null>(null);
   const [sessionDuration, setSessionDuration] = useState(0);
   const [sessionStats, setSessionStats] = useState<SessionStats>({
@@ -648,32 +665,49 @@ const App: React.FC = () => {
 
 
   // Authoritative State Mapper: Maps DB profile fields to React state fields
-  const mapServerProfile = useCallback((data: any): CharacterStats => {
+  const checkQuestStatus = useCallback(async () => {
+    if (!session?.user?.id) return;
+    try {
+      const { data } = await supabase.rpc('get_or_reset_daily_quests', {
+        p_user_id: session.user.id
+      });
+      if (data) {
+        setHasQuestReward((data as any[]).some(q => q.progress >= q.required && !q.claimed));
+      }
+    } catch (err) {
+      console.error('Failed to check quest status:', err);
+    }
+  }, [session?.user?.id]);
+
+  useEffect(() => {
+    if (session) {
+      checkQuestStatus();
+      const interval = setInterval(checkQuestStatus, 5 * 60 * 1000); // 5 min
+      return () => clearInterval(interval);
+    }
+  }, [session, checkQuestStatus]);
+
+  // Authoritative State Mapper: Maps DB profile fields to React state fields
+  const mapServerProfile = useCallback((data: any) => {
     return {
+      ...data,
+      id: data.id,
       nickname: data.nickname,
       level: data.level,
-      exp: data.exp,
-      maxExp: data.max_exp,
       hp: data.hp,
       maxHp: data.max_hp,
-      mp: data.mp ?? 50,
-      maxMp: data.max_mp ?? (40 + (data.level * 10)),
-      attack: data.attack,
-      defense: data.defense,
+      mp: data.mp,
+      maxMp: data.max_mp,
+      exp: data.exp,
+      maxExp: data.max_exp,
       gold: data.gold,
-      baseMaterials: data.base_materials,
+      baseMaterials: data.base_materials ?? 0,
       lingQi: data.ling_qi ?? 0,
       techFragments: data.tech_fragments ?? 0,
       incense: data.incense ?? 0,
       saltCrystals: data.salt_crystals ?? 0,
       premiumGems: data.premium_gems ?? 0,
       buildings: data.buildings || [],
-      equipment: data.equipment || [],
-      equippedWeapon: data.equipped_weapon,
-      equippedArmor: data.equipped_armor,
-      equippedHelmet: data.equipped_helmet,
-      equippedBoots: data.equipped_boots,
-      equippedAccessory: data.equipped_accessory,
       items: (data.items || []).map((it: any) => {
         const dbItem = ITEM_DATABASE.find(d => d.id === it.id);
         return {
@@ -684,17 +718,22 @@ const App: React.FC = () => {
           icon: dbItem?.icon || it.icon || '🧪'
         };
       }),
+      equipment: data.equipment || [],
+      partners: data.partners || [],
+      equippedWeapon: data.equipped_weapon,
+      equippedArmor: data.equipped_armor,
+      equippedHelmet: data.equipped_helmet,
+      equippedBoots: data.equipped_boots,
+      equippedAccessory: data.equipped_accessory,
       skills: (data.skills || []).map((s: any) => ({
         id: s.id,
         level: s.level ?? 1,
         fragments: s.fragments ?? 0
       })),
-      partners: data.partners || [],
       gods: data.gods || [],
       activeGodId: data.active_god_id,
-      quests: Array.isArray(data.quests) ? data.quests : [], // Ensure Array
-      uid: data.uid || data.uid_12_code || 'G-0000', // Try fallback
-      id: data.id,
+      quests: Array.isArray(data.quests) ? data.quests : [],
+      uid: data.uid || data.uid_12_code || 'G-0000',
       updatedAt: data.updated_at ? Math.floor(new Date(data.updated_at).getTime()) : Math.floor(Date.now())
     };
   }, []);
@@ -1033,7 +1072,11 @@ const App: React.FC = () => {
 
   const [isCombatAction, setIsCombatAction] = useState(false);
   const [currentEnemy, setCurrentEnemy] = useState<Enemy | null>(null);
-  const [autoExplore, setAutoExplore] = useState(false);
+  const [autoExplore, setAutoExplore] = useState(() => localStorage.getItem('autoExplore_v1') === 'true');
+
+  useEffect(() => {
+    localStorage.setItem('autoExplore_v1', String(autoExplore));
+  }, [autoExplore]);
 
   // --- Session Stats Logic (Tracking Duration) ---
   useEffect(() => {
@@ -1144,6 +1187,8 @@ const App: React.FC = () => {
 
   const hasWeatherResistance = useCallback((type: WeatherType) => {
     if (!activeGod) return false;
+    // Lv.10 unlocks all weather resistance
+    if (activeGod.level >= 10) return true;
     return activeGod.resistanceType === type || activeGod.resistanceType === 'all';
   }, [activeGod]);
 
@@ -1563,6 +1608,7 @@ const App: React.FC = () => {
 
     // Quest: Kill and collection progress is now handled within server-side secure_resolve_combat
     // to prevent front-end spoofing. No further manual rpc calls needed here.
+    checkQuestStatus();
 
     // Collection progress is also integrated into secure_resolve_combat's loot logic.
 
@@ -1922,9 +1968,10 @@ const App: React.FC = () => {
 
 
 
-  const effectiveAtk = player ? player.attack + totalEquipAtk(player) + totalPartnerAtk(player) : 0;
-  const effectiveDef = player ? player.defense + totalEquipDef(player) + totalPartnerDef(player) : 0;
-  const effectiveMaxHp = player ? player.maxHp + totalEquipHp(player) + totalPartnerHp(player) : 0;
+  const godBonus = player ? getGodStatBonus(player) : { atk: 1, def: 1, hp: 1, dmg: 1 };
+  const effectiveAtk = player ? Math.floor((player.attack + totalEquipAtk(player) + totalPartnerAtk(player)) * godBonus.atk) : 0;
+  const effectiveDef = player ? Math.floor((player.defense + totalEquipDef(player) + totalPartnerDef(player)) * godBonus.def) : 0;
+  const effectiveMaxHp = player ? Math.floor((player.maxHp + totalEquipHp(player) + totalPartnerHp(player)) * godBonus.hp) : 0;
   const effectiveHeal = player ? totalPartnerHeal(player) : 0;
 
   // Interaction Handler for POIs (Refactored to handle interactions gracefully)
@@ -2062,7 +2109,7 @@ const App: React.FC = () => {
       };
       setLootMessage({
         title: '虔誠供奉',
-        items: [{ name: '香火', quantity: incenseGain, icon: '🏮' }]
+        items: [{ name: '香火', quantity: incenseGain, icon: '🕯️' }]
       });
       setPlayer(nextState);
       saveProfile(nextState);
@@ -2411,7 +2458,7 @@ const App: React.FC = () => {
               {[
                 { id: 'gold', label: '金幣 / TWD', val: Math.floor(player.gold), icon: <div className="text-2xl">💰</div>, desc: '在大台北地區通用的商業貨幣。', color: 'text-amber-400' },
                 { id: 'mats', label: '建材', val: Math.floor(player.baseMaterials), icon: <div className="text-2xl">🧱</div>, desc: '用於家園建築升級的基礎工業資源。', color: 'text-orange-400' },
-                { id: 'incense', label: '香火', val: player.incense, icon: <Flame className="text-red-400" size={24} />, desc: '來自全台各地廟宇的信仰力量，可用於祭祀。', color: 'text-red-400' },
+                { id: 'incense', label: '香火', val: player.incense, icon: <span className="text-2xl">🕯️</span>, desc: '來自全台各地廟宇的信仰力量，可用於祭祀。', color: 'text-red-400' },
                 { id: 'lingQi', label: '仙草靈氣', val: player.lingQi, icon: <Sparkles className="text-emerald-400" size={24} />, desc: '山林間採集而來的純淨靈氣，對技能極為重要。', color: 'text-emerald-400' },
                 { id: 'tech', label: '科技碎片', val: player.techFragments, icon: <Cpu className="text-sky-400" size={24} />, desc: '矽島科技重鎮的半導體零件，用於裝備開發。', color: 'text-sky-400' },
                 { id: 'salt', label: '海鹽結晶', val: player.saltCrystals, icon: <Waves className="text-blue-300" size={24} />, desc: '西南沿海精煉的鹽晶，生活物資的關鍵。', color: 'text-blue-300' },
@@ -2605,6 +2652,30 @@ const App: React.FC = () => {
                       </div>
                     </div>
 
+                    {activeGod && (
+                      <div className="mt-4 pt-3 border-t border-white/10">
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="w-8 h-8 rounded-lg bg-amber-400/20 flex items-center justify-center text-xl border border-amber-400/30 anim-god-glow">
+                            {activeGod.avatar}
+                          </div>
+                          <div>
+                            <div className="text-[11px] font-black text-amber-400 italic">目前護駕：{activeGod.name}</div>
+                            <div className="text-[9px] text-amber-400/60 font-bold uppercase tracking-widest">等級 Lv.{activeGod.level}</div>
+                          </div>
+                        </div>
+                        <div className="bg-amber-400/5 rounded-xl p-2 border border-amber-400/10">
+                          <div className="text-[10px] font-black text-amber-200/90 leading-relaxed">
+                            {activeGod.name.includes('媽祖') && `✦ 護駕屬性：物理防禦 +${(activeGod.level * 0.5).toFixed(1)}%`}
+                            {activeGod.name.includes('土地公') && `✦ 護駕屬性：生命上限 +${(activeGod.level * 0.5).toFixed(1)}%`}
+                            {activeGod.name.includes('太子') && `✦ 護駕屬性：物理攻擊 +${(activeGod.level * 0.5).toFixed(1)}%`}
+                            {activeGod.name.includes('玄天') && `✦ 護駕屬性：最終傷害 +${(activeGod.level * 1).toFixed(0)}%`}
+                            {(activeGod.name.includes('關公') || activeGod.name.includes('關聖')) && `✦ 護駕屬性：全體屬性 +${(activeGod.level * 1).toFixed(0)}%`}
+                            {activeGod.level >= 10 && <div className="text-sky-400 mt-0.5 font-black">✦ 神恩通達：無視所有惡劣天氣</div>}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     <div className="space-y-2 border-t border-white/10 pt-3">
                       <div className="flex justify-between items-center text-xs">
                         <span className="text-gray-400">移動速度</span>
@@ -2673,17 +2744,17 @@ const App: React.FC = () => {
             {/* Bottom Right Area - Combat Logs / Stats */}
             {logOpacity > 0 && (
               <div
-                className={`fixed bottom-20 sm:bottom-8 z-[1000] flex flex-col gap-2 transition-all duration-500 ease-in-out pointer-events-none max-w-[calc(100vw-3rem)] w-[280px] sm:w-[320px] md:w-[380px] items-end ${isLogsExpanded ? 'right-4 sm:right-6' : '-right-[240px] sm:-right-[280px] md:-right-[340px]'}`}
+                className={`absolute bottom-6 z-[1000] flex flex-col gap-2 transition-all duration-500 ease-in-out pointer-events-none max-w-[calc(100vw-2rem)] w-[280px] sm:w-[320px] md:w-[380px] items-end ${isLogsExpanded ? 'right-4 sm:right-6' : '-right-[240px] sm:-right-[280px] md:-right-[340px]'}`}
                 style={{ opacity: logOpacity }}
               >
                 {/* Collapse/Expand Pull Tab */}
                 <button
                   onClick={() => setIsLogsExpanded(!isLogsExpanded)}
-                  className="absolute left-[-28px] top-1/2 -translate-y-1/2 w-7 h-16 bg-black/60 backdrop-blur-md rounded-l-xl border-l border-y border-white/20 pointer-events-auto flex items-center justify-center text-gray-400 hover:text-white transition-colors shadow-lg group"
+                  className="absolute left-[-36px] top-1/2 -translate-y-1/2 w-9 h-9 bg-black/70 backdrop-blur-md rounded-full border border-white/20 pointer-events-auto flex items-center justify-center text-gray-400 hover:text-white transition-all shadow-xl group hover:scale-110 active:scale-95"
                   title={isLogsExpanded ? "隱藏面板" : "展開面板"}
                 >
-                  <div className="flex flex-col items-center gap-1 opacity-60 group-hover:opacity-100">
-                    {isLogsExpanded ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+                  <div className="flex items-center justify-center opacity-70 group-hover:opacity-100 italic font-black transition-opacity">
+                    {isLogsExpanded ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
                   </div>
                 </button>
 
@@ -2699,35 +2770,35 @@ const App: React.FC = () => {
 
                 {isStatsView ? (
                   <div className="bg-black/80 backdrop-blur-[10px] rounded-2xl border border-white/20 p-4 pointer-events-auto shadow-[0_10px_30px_rgba(0,0,0,0.8)] flex flex-col gap-3 anim-fade-in-up w-full">
-                    <div className="text-center pb-2 border-b border-white/10">
-                      <div className="flex items-center justify-center gap-1.5 text-[10px] text-gray-400 tracking-wider mb-0.5">
-                        <span className={`w-1.5 h-1.5 rounded-full ${autoExplore ? 'bg-green-500 animate-[pulse_1.5s_ease-in-out_infinite]' : 'bg-gray-500'}`}></span>
+                    <div className="text-center pb-2.5 border-b border-white/10">
+                      <div className="flex items-center justify-center gap-1.5 text-[11px] md:text-xs text-gray-400 tracking-wider mb-1">
+                        <span className={`w-2 h-2 rounded-full ${autoExplore ? 'bg-green-500 animate-[pulse_1.5s_ease-in-out_infinite]' : 'bg-gray-500'}`}></span>
                         <span>本次掛機時長</span>
                       </div>
-                      <div className="text-xl font-black text-white tracking-widest drop-shadow-[0_0_8px_rgba(255,255,255,0.3)] tabular-nums">{formatDuration(sessionDuration)}</div>
+                      <div className="text-xl md:text-3xl font-black text-white tracking-widest drop-shadow-[0_0_8px_rgba(255,255,255,0.3)] tabular-nums">{formatDuration(sessionDuration)}</div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-2 text-sm">
-                      <div className="bg-white/5 rounded-xl p-2.5 border border-white/5 flex flex-col gap-1 relative overflow-hidden group">
+                      <div className="bg-white/5 rounded-xl p-3 border border-white/5 flex flex-col gap-1.5 relative overflow-hidden group">
                         <div className="absolute top-0 right-0 w-12 h-12 bg-sky-500/10 rounded-full blur-xl group-hover:bg-sky-500/20 transition-all duration-500"></div>
-                        <span className="text-[10px] text-gray-400 z-10 font-medium tracking-wide">🚀 累計經驗值</span>
-                        <div className="font-bold text-sky-400 flex items-baseline gap-1 z-10">
-                          <span className="text-lg tabular-nums">{sessionStats.exp.toLocaleString()}</span>
-                          <span className="text-[9px] font-normal text-sky-400/60 drop-shadow-none tabular-nums">({(sessionStats.exp / Math.max(1, sessionDuration / 60)).toFixed(0)}/min)</span>
+                        <span className="text-[11px] md:text-xs text-gray-400 z-10 font-medium tracking-wide">🚀 累計經驗值</span>
+                        <div className="font-bold text-sky-400 flex items-baseline gap-1.5 z-10">
+                          <span className="text-xl md:text-2xl tabular-nums">{sessionStats.exp.toLocaleString()}</span>
+                          <span className="text-[10px] md:text-[11px] font-normal text-sky-400/60 drop-shadow-none tabular-nums">({(sessionStats.exp / Math.max(1, sessionDuration / 60)).toFixed(0)}/min)</span>
                         </div>
                       </div>
-                      <div className="bg-white/5 rounded-xl p-2.5 border border-white/5 flex flex-col gap-1 relative overflow-hidden group">
+                      <div className="bg-white/5 rounded-xl p-3 border border-white/5 flex flex-col gap-1.5 relative overflow-hidden group">
                         <div className="absolute top-0 right-0 w-12 h-12 bg-amber-500/10 rounded-full blur-xl group-hover:bg-amber-500/20 transition-all duration-500"></div>
-                        <span className="text-[10px] text-gray-400 z-10 font-medium tracking-wide">💰 累計金幣</span>
-                        <div className="font-bold text-game-gold flex items-baseline gap-1 z-10">
-                          <span className="text-lg tabular-nums">{sessionStats.gold.toLocaleString()}</span>
-                          <span className="text-[9px] font-normal text-amber-400/60 drop-shadow-none tabular-nums">({(sessionStats.gold / Math.max(1, sessionDuration / 60)).toFixed(0)}/min)</span>
+                        <span className="text-[11px] md:text-xs text-gray-400 z-10 font-medium tracking-wide">💰 累計金幣</span>
+                        <div className="font-bold text-game-gold flex items-baseline gap-1.5 z-10">
+                          <span className="text-xl md:text-2xl tabular-nums">{sessionStats.gold.toLocaleString()}</span>
+                          <span className="text-[10px] md:text-[11px] font-normal text-amber-400/60 drop-shadow-none tabular-nums">({(sessionStats.gold / Math.max(1, sessionDuration / 60)).toFixed(0)}/min)</span>
                         </div>
                       </div>
-                      <div className="bg-white/5 rounded-xl p-2 border border-white/5 flex justify-between items-center col-span-2">
-                        <span className="text-[10px] text-gray-400 pl-1 font-medium tracking-wide">👾 總擊殺數</span>
-                        <span className="font-bold text-white text-base pr-1 tabular-nums">
-                          {sessionStats.kills.toLocaleString()} <span className="text-[10px] font-normal text-rose-400 ml-1">(菁英: {sessionStats.eliteKills})</span>
+                      <div className="bg-white/5 rounded-xl p-3 border border-white/5 flex justify-between items-center col-span-2">
+                        <span className="text-[11px] md:text-xs text-gray-400 pl-1 font-medium tracking-wide">👾 總擊殺數</span>
+                        <span className="font-bold text-white text-lg md:text-xl pr-1 tabular-nums">
+                          {sessionStats.kills.toLocaleString()} <span className="text-[11px] md:text-xs font-normal text-rose-400 ml-1">(菁英: {sessionStats.eliteKills})</span>
                         </span>
                       </div>
                     </div>
@@ -2738,7 +2809,7 @@ const App: React.FC = () => {
                         <span className="font-bold text-amber-200 tabular-nums">{sessionStats.partnerExp.toLocaleString()}</span>
                       </div>
                       <div className="flex-1 bg-white/5 rounded-lg px-2.5 py-2 border border-white/5 flex justify-between items-center">
-                        <span className="text-[10px] text-gray-400 font-medium">🏮 獲得香火</span>
+                        <span className="text-[10px] text-gray-400 font-medium">🕯️ 獲得香火</span>
                         <span className="font-bold text-orange-400 tabular-nums">{sessionStats.incense.toLocaleString()}</span>
                       </div>
                     </div>
@@ -2760,9 +2831,9 @@ const App: React.FC = () => {
                     </div>
                   </div>
                 ) : (
-                  <div className="flex flex-col-reverse gap-1.5 w-full items-end max-h-[300px] overflow-y-auto custom-scrollbar pointer-events-auto pr-1">
+                  <div className="flex flex-col-reverse gap-1.5 w-full items-end max-h-[400px] overflow-y-auto custom-scrollbar pointer-events-auto pr-1">
                     {combatLogs.length > 0 ? combatLogs.map(log => (
-                      <div key={log.id} className="text-[11px] md:text-[12px] font-bold px-3 py-2 bg-black/60 backdrop-blur-md rounded-xl border border-white/10 text-white shadow-sm flex flex-wrap items-center gap-x-2 gap-y-1 anim-fade-in-up w-fit max-w-full">
+                      <div key={log.id} className="text-[11px] md:text-[14px] font-bold px-3 py-2 bg-black/60 backdrop-blur-md rounded-xl border border-white/10 text-white shadow-sm flex flex-wrap items-center gap-x-2 gap-y-1 anim-fade-in-up w-fit max-w-full">
                         {log.type === 'win' ? (
                           <>
                             <span className="whitespace-nowrap">⚔️ 擊敗 {log.enemyName}</span>
@@ -2811,7 +2882,7 @@ const App: React.FC = () => {
 
             {/* Bottom Left Area - Auto Explore & Interactions */}
             {activeTab === 'explore' && !isCombatAction && !inTown && (
-              <div className="absolute bottom-20 sm:bottom-8 left-4 sm:left-6 z-[1000] flex flex-col gap-3 pointer-events-none items-start w-fit px-0">
+              <div className="absolute bottom-6 left-4 sm:left-6 z-[1000] flex flex-col gap-3 pointer-events-none items-start w-fit px-0">
 
                 {/* Contextual Interaction Card (Shown when clicking a POI or Town nearby) */}
                 {interactingLocation && (
@@ -2943,11 +3014,12 @@ const App: React.FC = () => {
                 userId={session.user.id}
                 onClose={() => setActiveTab('explore')}
                 cityId={inTown?.id}
+                onQuestsStatusUpdate={setHasQuestReward}
                 onReward={(gold, exp, currency) => {
                   const CURR_MAP: any = {
                     lingQi: { name: '仙草靈氣', icon: '🌿' },
                     techFragments: { name: '科技碎片', icon: '⚙️' },
-                    incense: { name: '香火', icon: '🏮' },
+                    incense: { name: '香火', icon: '🕯️' },
                     saltCrystals: { name: '海鹽結晶', icon: '🌊' },
                     premiumGems: { name: '台灣藍寶靈石', icon: '💎' }
                   };
@@ -3479,7 +3551,19 @@ const App: React.FC = () => {
       <div className="glass-panel px-2 py-2 flex justify-around items-center z-[1100]">
         {[
           { key: 'explore', icon: <Compass size={22} />, label: '探索' },
-          { key: 'quests', icon: <ScrollText size={22} />, label: '任務' },
+          {
+            key: 'quests', icon: (
+              <div className="relative">
+                <ScrollText size={22} />
+                {hasQuestReward && (
+                  <span className="absolute -top-1 -right-1 flex h-3 w-3 items-center justify-center">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500 border border-black/50 text-[7px] font-black text-white items-center justify-center leading-none">!</span>
+                  </span>
+                )}
+              </div>
+            ), label: '任務'
+          },
           { key: 'partners', icon: <Users size={22} />, label: '夥伴' },
           { key: 'home', icon: <Home size={22} />, label: '家園' },
           { key: 'bag', icon: <Package size={22} />, label: '行囊' },
@@ -3487,6 +3571,9 @@ const App: React.FC = () => {
           <button key={tab.key}
             onClick={() => {
               setActiveTab(tab.key);
+              if (tab.key === 'quests') {
+                // We'll re-check inside the panel, or we can leave it for now
+              }
             }}
             className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all ${activeTab === tab.key ? 'text-game-accent bg-game-accent/10 scale-105' : 'text-gray-500 hover:text-gray-300'}`}>
             <div className={`transition-transform duration-300 ${activeTab === tab.key ? '-translate-y-1' : ''}`}>

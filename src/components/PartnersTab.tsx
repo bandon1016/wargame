@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Star, Sparkles, UserPlus, Users, ShieldAlert, CheckCircle2, MinusCircle, PlusCircle, Loader2, X, Zap, AlertTriangle, ArrowRight, Home, Flame, Diamond, Search, Info } from 'lucide-react';
+import { Star, Sparkles, UserPlus, Users, ShieldAlert, CheckCircle2, MinusCircle, PlusCircle, Loader2, X, Zap, AlertTriangle, ArrowRight, Home, Flame, Diamond, Search, Info, Book } from 'lucide-react';
 import type { Partner, CharacterStats, God } from '../types/game';
 import { RARITY_COLORS, getPartnerAvatar } from '../types/game';
 import { supabase } from '../lib/supabase';
@@ -39,6 +39,7 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
     const [drawGodResult, setDrawGodResult] = useState<God | null>(null);
     const [godDrawLoading, setGodDrawLoading] = useState(false);
     const [godError, setGodError] = useState<string | null>(null);
+    const [isShowcaseOpen, setIsShowcaseOpen] = useState(false);
 
     // Synthesis states
     const [isSynthesisModalOpen, setIsSynthesisModalOpen] = useState(false);
@@ -180,7 +181,7 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
         const god = player.gods.find(g => g.id === godId);
         if (!god) return;
 
-        const cost = Math.floor(Math.pow(god.level, 1.8) * 1000);
+        const cost = god.level * 200;
         if (player.incense < cost) {
             alert(`香火不足！升級需要 ${cost} 香火`);
             return;
@@ -506,7 +507,7 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
                 {/* GACHA MODAL */}
                 {isModalOpen && (
                     <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md anim-fade-in">
-                        <div className={`glass-panel w-full ${drawn && drawn.length > 1 ? 'max-w-5xl' : 'max-w-sm md:max-w-3xl'} max-h-[90vh] md:max-h-[80vh] overflow-hidden rounded-[40px] p-6 md:p-8 border-2 border-amber-500/30 shadow-2xl relative flex flex-col md:flex-row text-center md:text-left bg-gradient-to-b md:bg-gradient-to-r from-amber-500/10 to-transparent transition-all duration-500`}>
+                        <div className={`glass-panel w-full ${drawn && drawn.length > 1 ? 'max-w-5xl' : 'max-w-sm md:max-w-3xl'} max-h-[95vh] md:max-h-[80vh] overflow-hidden rounded-[30px] md:rounded-[40px] ${drawn && drawn.length > 1 ? 'p-3 md:p-8' : 'p-6 md:p-8'} border-2 border-amber-500/30 shadow-2xl relative flex flex-col md:flex-row text-center md:text-left bg-gradient-to-b md:bg-gradient-to-r from-amber-500/10 to-transparent transition-all duration-500`}>
                             <div className="absolute inset-0 anim-shimmer pointer-events-none opacity-30" />
 
                             <button
@@ -517,15 +518,17 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
                             </button>
 
                             {/* Left Side: Info & Button */}
-                            <div className="flex-1 flex flex-col items-center md:border-r border-white/10 md:pr-8">
-                                <div className="w-24 h-24 bg-amber-500/20 rounded-full flex items-center justify-center mb-5 border-2 border-amber-500/40 mt-4 mx-auto">
+                            <div className={`flex-none md:flex-1 flex flex-col items-center md:border-r border-white/10 md:pr-8 ${drawn && drawn.length > 1 ? 'mb-2 md:mb-0' : ''}`}>
+                                <div className={`w-24 h-24 bg-amber-500/20 rounded-full flex items-center justify-center mb-5 border-2 border-amber-500/40 mt-4 mx-auto ${drawn && drawn.length > 1 ? 'hidden md:flex' : 'flex'}`}>
                                     <Sparkles size={48} className="text-game-gold anim-float" />
                                 </div>
 
-                                <h3 className="text-3xl font-black text-white mb-2 italic text-center">命運契約</h3>
-                                <p className="text-sm text-gray-400 mb-8 leading-relaxed text-center">呼喚隱眠於異界的靈魂<br />以金幣之力訂立命運之盟</p>
+                                <h3 className={`font-black text-white mb-2 italic text-center ${drawn && drawn.length > 1 ? 'text-xl md:text-3xl mt-2 md:mt-0' : 'text-3xl'}`}>命運契約</h3>
+                                {(!drawn || drawn.length === 1) && (
+                                    <p className="text-sm text-gray-400 mb-4 md:mb-8 leading-relaxed text-center">呼喚隱眠於異界的靈魂<br />以金幣之力訂立命運之盟</p>
+                                )}
 
-                                <div className="flex flex-col sm:flex-row gap-3 w-full max-w-[280px] sm:max-w-none justify-center mx-auto md:mx-0 mb-8">
+                                <div className={`flex gap-3 w-full max-w-[280px] sm:max-w-none justify-center mx-auto md:mx-0 ${drawn && drawn.length > 1 ? 'mb-2 md:mb-8 flex-row scale-90 md:scale-100' : 'mb-4 md:mb-8 flex-col sm:flex-row'}`}>
                                     <button
                                         onClick={gacha}
                                         disabled={anim}
@@ -585,7 +588,7 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
                             </div>
 
                             {/* Right Side: Result */}
-                            <div className="flex-1 flex flex-col items-center justify-center md:pl-8 mt-8 md:mt-0 min-h-[300px] w-full">
+                            <div className={`flex-1 flex flex-col items-center justify-center md:pl-8 ${drawn && drawn.length > 1 ? 'mt-1 md:mt-0 min-h-0' : 'mt-8 md:mt-0 min-h-[300px]'} w-full overflow-hidden`}>
                                 {drawn && !anim ? (
                                     drawn.length === 1 ? (
                                         <div className={`p-6 rounded-[32px] border-2 w-full max-w-[280px] animate-in zoom-in-95 duration-300 relative bg-black/40 shadow-2xl ${RARITY_COLORS[drawn[0].rarity!].border} ${RARITY_COLORS[drawn[0].rarity!].glow}`}>
@@ -599,9 +602,9 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
                                             </div>
                                         </div>
                                     ) : (
-                                        <div className="w-full">
+                                        <div className="w-full h-full flex flex-col">
                                             <div className="absolute top-4 right-4 bg-black/60 px-4 py-1.5 rounded-full border border-amber-500/30 text-xs font-black text-amber-500 whitespace-nowrap tracking-widest shadow-lg animate-pulse z-10 hidden md:block">10 PULLS</div>
-                                            <div className={`grid ${drawn.length > 5 ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4' : 'grid-cols-2 lg:grid-cols-3'} gap-2 sm:gap-4 md:gap-5 max-h-[65vh] md:max-h-[60vh] overflow-y-auto custom-scrollbar p-1 md:p-4`}>
+                                            <div className={`grid ${drawn.length > 5 ? 'grid-cols-2 xs:grid-cols-3 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4' : 'grid-cols-2 lg:grid-cols-3'} gap-2 sm:gap-4 md:gap-5 max-h-[65vh] md:max-h-[60vh] overflow-y-auto custom-scrollbar p-1 md:p-4`}>
                                                 {drawn.map((p, i) => (
                                                     <div
                                                         key={p.id}
@@ -636,26 +639,28 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
                                 )}
                             </div>
 
-                            {/* Mobile rules at bottom */}
-                            <div className="mt-8 pt-6 border-t border-white/5 w-full md:hidden">
-                                <h4 className="text-xs font-black text-gray-400 uppercase tracking-[0.2em] mb-4 flex items-center justify-center gap-2">
-                                    <ShieldAlert size={14} className="text-amber-500" /> 招募法則
-                                </h4>
-                                <div className="grid grid-cols-3 gap-0">
-                                    <div className="flex flex-col items-center">
-                                        <span className="text-game-gold font-black text-sm">1%</span>
-                                        <span className="text-[11px] text-gray-500 font-bold">傳奇 5★</span>
-                                    </div>
-                                    <div className="flex flex-col items-center border-x border-white/5">
-                                        <span className="text-purple-400 font-black text-sm">10%</span>
-                                        <span className="text-[11px] text-gray-500 font-bold">史詩 4★</span>
-                                    </div>
-                                    <div className="flex flex-col items-center">
-                                        <span className="text-sky-400 font-black text-sm">89%</span>
-                                        <span className="text-[11px] text-gray-500 font-bold">精英 3★</span>
+                            {/* Mobile rules at bottom - hide when results are shown to save space */}
+                            {!drawn && (
+                                <div className="mt-4 pt-4 border-t border-white/5 w-full md:hidden">
+                                    <h4 className="text-[11px] font-black text-gray-400 uppercase tracking-[0.2em] mb-3 flex items-center justify-center gap-2">
+                                        <ShieldAlert size={12} className="text-amber-500" /> 招募法則
+                                    </h4>
+                                    <div className="grid grid-cols-3 gap-0">
+                                        <div className="flex flex-col items-center">
+                                            <span className="text-game-gold font-black text-sm">1%</span>
+                                            <span className="text-[11px] text-gray-500 font-bold">傳奇 5★</span>
+                                        </div>
+                                        <div className="flex flex-col items-center border-x border-white/5">
+                                            <span className="text-purple-400 font-black text-sm">10%</span>
+                                            <span className="text-[11px] text-gray-500 font-bold">史詩 4★</span>
+                                        </div>
+                                        <div className="flex flex-col items-center">
+                                            <span className="text-sky-400 font-black text-sm">89%</span>
+                                            <span className="text-[11px] text-gray-500 font-bold">精英 3★</span>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
+                            )}
                         </div>
                     </div>
                 )}
@@ -780,19 +785,21 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
                                     };
                                     return (
                                         <div className="flex flex-col h-full">
-                                            <div className="flex items-center justify-between mb-4 sticky top-0 bg-black/40 p-2 z-10 backdrop-blur-md rounded-lg">
-                                                <div className="flex items-center gap-2">
-                                                    <p className="text-sm font-bold text-gray-400 hidden sm:block">請選擇 4 張同星級卡片做為材料</p>
-                                                    <p className="text-sm font-bold text-gray-400 sm:hidden">選 4 張素材</p>
+                                            <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 sticky top-0 bg-black/40 p-3 sm:p-2 z-10 backdrop-blur-md rounded-2xl sm:rounded-lg gap-3 sm:gap-2">
+                                                <div className="flex items-center justify-between w-full sm:w-auto">
+                                                    <p className="text-sm font-bold text-gray-400 hidden sm:block whitespace-nowrap">請選擇 4 張同星級卡片做為材料</p>
+                                                    <p className="text-sm font-bold text-gray-400 sm:hidden">選 {synthRarity} 張素材</p>
+                                                </div>
+                                                <div className="flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto">
                                                     <button
                                                         onClick={handleQuickSelect}
-                                                        className={`ml-2 font-black text-xs px-3 py-1.5 rounded-full border transition-all flex items-center gap-1.5 active:scale-95 ${theme.btn}`}
+                                                        className={`font-black text-xs px-3 py-1.5 rounded-full border transition-all flex items-center gap-1.5 active:scale-95 ${theme.btn}`}
                                                         title="一次選取 4 的倍數張閒置夥伴"
                                                     >
                                                         <Zap size={14} className="text-amber-400" /> 一鍵全選
                                                     </button>
+                                                    <span className={`text-xs px-3 py-1 rounded-full font-mono border shrink-0 ${theme.badge}`}>已選: {selectedMaterials.length} ({Math.floor(selectedMaterials.length / 4)} 次)</span>
                                                 </div>
-                                                <span className={`text-xs px-3 py-1 rounded-full font-mono border shrink-0 ${theme.badge}`}>已選: {selectedMaterials.length} ({Math.floor(selectedMaterials.length / 4)} 次)</span>
                                             </div>
 
                                             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
@@ -908,7 +915,7 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
                                         </h4>
                                         <div className="flex justify-around items-center">
                                             <div className="flex flex-col items-center">
-                                                <span className="text-red-400 font-black text-base">2.0%</span>
+                                                <span className="text-red-400 font-black text-base">10.0%</span>
                                                 <span className="text-[9px] text-gray-500 font-bold">神明降臨</span>
                                             </div>
                                             <div className="w-[1px] h-8 bg-white/5" />
@@ -969,8 +976,16 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
                                             <Users size={20} className="text-red-400" />
                                             目前降臨的神明 <span className="text-xs font-mono text-gray-500">({player.gods.length})</span>
                                         </h3>
-                                        <div className="text-[10px] font-bold text-red-400/70 border border-red-400/20 px-3 py-1 rounded-full uppercase tracking-widest">
-                                            只能選擇一位神明守護
+                                        <div className="flex items-center gap-2">
+                                            <div className="text-[10px] font-bold text-red-400/70 border border-red-400/20 px-3 py-1 rounded-full uppercase tracking-widest hidden sm:block">
+                                                只能選擇一位神明守護
+                                            </div>
+                                            <button
+                                                onClick={() => setIsShowcaseOpen(true)}
+                                                className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-full border border-red-500/20 text-[10px] font-black transition-all active:scale-95"
+                                            >
+                                                <Book size={12} /> 神明展示
+                                            </button>
                                         </div>
                                     </div>
 
@@ -983,7 +998,7 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
                                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 pb-24 md:pb-0">
                                             {player.gods.map(god => {
                                                 const isActive = player.activeGodId === god.id;
-                                                const upgradeCost = Math.floor(Math.pow(god.level, 1.8) * 1000);
+                                                const upgradeCost = god.level * 200;
                                                 return (
                                                     <div key={god.id} className={`p-4 sm:p-5 rounded-[24px] sm:rounded-[32px] border-2 transition-all relative group overflow-hidden ${isActive ? 'bg-amber-500/10 border-amber-400 shadow-[0_0_30px_rgba(251,191,36,0.25)]' : 'bg-black/30 border-white/5 hover:border-white/20'}`}>
                                                         {isActive && <div className="absolute top-0 right-0 bg-amber-400 text-game-dark text-[8px] sm:text-[10px] font-black px-3 sm:px-4 py-1 rounded-bl-xl shadow-lg anim-pulse-glow z-10">守護中</div>}
@@ -1003,19 +1018,31 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
                                                                     <p className="text-[10px] sm:text-[11px] font-bold text-gray-400 italic leading-snug">{god.description}</p>
                                                                 </div>
 
+                                                                <div className="flex items-center gap-2 mb-3">
+                                                                    <span className="text-[9px] sm:text-[10px] font-black uppercase text-amber-400 bg-amber-400/10 px-1.5 sm:px-2 py-0.5 rounded border border-amber-400/20 whitespace-nowrap shrink-0">等級加成</span>
+                                                                    <p className="text-[10px] sm:text-[11px] font-bold text-amber-200/80 tracking-tight">
+                                                                        {god.name.includes('媽祖') && `物理防禦 +${(god.level * 0.5).toFixed(1)}%`}
+                                                                        {god.name.includes('土地公') && `生命上限 +${(god.level * 0.5).toFixed(1)}%`}
+                                                                        {god.name.includes('太子') && `物理攻擊 +${(god.level * 0.5).toFixed(1)}%`}
+                                                                        {god.name.includes('玄天') && `最終傷害 +${(god.level * 1).toFixed(0)}%`}
+                                                                        {(god.name.includes('關公') || god.name.includes('關聖')) && `全體屬性 +${(god.level * 1).toFixed(0)}%`}
+                                                                        {god.level >= 10 && <span className="text-sky-400 ml-1.5">/ 全天氣護駕</span>}
+                                                                    </p>
+                                                                </div>
+
                                                                 <div className="grid grid-cols-2 gap-2 mt-auto">
                                                                     <button
                                                                         onClick={() => toggleGod(god.id)}
                                                                         className={`py-2 rounded-xl text-[10px] sm:text-xs font-black transition-all border ${isActive ? 'bg-amber-400 text-game-dark border-amber-500' : 'bg-white/5 text-white border-white/10 hover:bg-white/10'}`}
                                                                     >
-                                                                        {isActive ? '取消派遣' : '請求派遣'}
+                                                                        {isActive ? '請求退駕' : '請求護駕'}
                                                                     </button>
                                                                     <button
                                                                         onClick={() => upgradeGod(god.id)}
                                                                         className="py-2 bg-red-500/20 hover:bg-red-500 text-red-400 hover:text-white rounded-xl text-[10px] sm:text-xs font-black transition-all border border-red-500/30 flex flex-col items-center justify-center gap-0.5"
                                                                     >
                                                                         <span className="leading-none text-[9px] sm:text-xs">供奉升級</span>
-                                                                        <span className="text-[8px] sm:text-[9px] opacity-70 font-bold tabular-nums">-{upgradeCost} 🏮</span>
+                                                                        <span className="text-[8px] sm:text-[9px] opacity-70 font-bold tabular-nums">-{upgradeCost} 🕯️</span>
                                                                     </button>
                                                                 </div>
                                                             </div>
@@ -1037,8 +1064,55 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
                         </div>
                     </div>
                 )}
+
+                {/* GOD SHOWCASE MODAL */}
+                {isShowcaseOpen && (
+                    <div className="fixed inset-0 z-[2100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-xl animate-in fade-in duration-300">
+                        <div className="glass-panel w-full max-w-2xl max-h-[85vh] overflow-hidden rounded-[30px] md:rounded-[40px] border-2 border-red-500/30 shadow-[0_0_50px_rgba(239,68,68,0.2)] flex flex-col relative">
+                            {/* Header */}
+                            <div className="p-6 border-b border-white/5 flex items-center justify-between shrink-0">
+                                <h3 className="text-xl font-black text-white flex items-center gap-3 italic">
+                                    <Sparkles className="text-red-400" /> 聖所護駕神譜
+                                </h3>
+                                <button onClick={() => setIsShowcaseOpen(false)} className="p-2 rounded-full hover:bg-white/5 transition-colors text-gray-500 hover:text-white">
+                                    <X size={24} />
+                                </button>
+                            </div>
+
+                            {/* Content */}
+                            <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-4 custom-scrollbar">
+                                {[
+                                    { name: "天上聖母-媽祖", avatar: "🕯️", power: "慈航普渡", effect: "雨天免疫。每提升 1 級增加 0.5% 防禦，Lv.10 額外獲得全天氣抗性。", color: "from-sky-600/20 to-blue-600/20", border: "border-sky-500/30" },
+                                    { name: "福德正神-土地公", avatar: "⛰️", power: "地載萬物", effect: "霧天免疫。每提升 1 級增加 0.5% 最大生命，Lv.10 額外獲得全天氣抗性。", color: "from-amber-600/20 to-orange-600/20", border: "border-amber-500/30" },
+                                    { name: "中壇元帥-三太子", avatar: "🪭", power: "風火輪轉", effect: "酷暑免疫。每提升 1 級增加 0.5% 攻擊力，Lv.10 額外獲得全天氣抗性。", color: "from-red-600/20 to-orange-600/20", border: "border-red-500/30" },
+                                    { name: "玄天上帝", avatar: "🐢", power: "降魔伏妖", effect: "風暴免疫。每提升 1 級增加 1% 最終傷害加成，Lv.10 額外獲得全天氣抗性。", color: "from-blue-900/40 to-slate-900/40", border: "border-blue-700/30" },
+                                    { name: "關聖帝君-關公", avatar: "🗡️", power: "義薄雲天", effect: "戰鬥全能。每提升 1 級增加 1% 全屬性(攻/防/血)，Lv.10 額外獲得全天氣抗性。", color: "from-emerald-900/40 to-red-900/20", border: "border-emerald-600/30" }
+                                ].map((god) => (
+                                    <div key={god.name} className={`flex flex-col sm:flex-row gap-4 p-5 rounded-3xl border ${god.border} bg-gradient-to-br ${god.color} relative overflow-hidden group hover:scale-[1.02] transition-transform`}>
+                                        <div className="w-16 h-16 sm:w-20 sm:h-20 bg-black/40 rounded-2xl flex items-center justify-center text-4xl shrink-0 border border-white/10 group-hover:scale-110 transition-transform">{god.avatar}</div>
+                                        <div className="flex-1">
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <h4 className="text-lg font-black text-white">{god.name}</h4>
+                                                <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-red-500 text-white uppercase tracking-tighter">守護神</span>
+                                            </div>
+                                            <div className="text-red-400 text-xs font-black mb-2 flex items-center gap-1.5">
+                                                <Sparkles size={12} /> 加持：{god.power}
+                                            </div>
+                                            <p className="text-xs font-bold text-gray-400 leading-relaxed italic">{god.effect}</p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Footer */}
+                            <div className="p-4 bg-red-950/40 text-center text-[10px] md:text-[11px] font-black text-red-400/60 uppercase tracking-[0.2em] border-t border-white/5">
+                                誠心祈求，神明自會降臨守護
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
-        </div>
+        </div >
     );
 };
 
