@@ -2031,7 +2031,7 @@ const App: React.FC = () => {
 
 
 
-  const godBonus = player ? getGodStatBonus(player) : { atk: 1, def: 1, hp: 1, dmg: 1 };
+
   const effectiveAtk = player ? getEffectiveAtk(player) : 0;
   const effectiveDef = player ? getEffectiveDef(player) : 0;
   const effectiveMaxHp = player ? getEffectiveMaxHp(player) : 0;
