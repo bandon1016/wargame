@@ -2,6 +2,48 @@
 -- SECURITY MIGRATION: MOVING GAME LOGIC TO BACKEND
 -- ==========================================
 
+-- 0. HELPER FUNCTIONS
+-- Calculate authoritative Max HP (Base + Equip + Partner) * God bonus
+CREATE OR REPLACE FUNCTION public.secure_calculate_effective_max_hp(p_p public.profiles)
+RETURNS integer AS $$
+DECLARE
+    v_e_hp integer := 0;
+    v_pt_hp integer := 0;
+    v_g_mult float := 1.0;
+    v_god jsonb;
+BEGIN
+    -- 1. Equipment HP
+    v_e_hp := COALESCE((p_p.equipped_weapon->>'hp')::int, 0) +
+              COALESCE((p_p.equipped_armor->>'hp')::int, 0) +
+              COALESCE((p_p.equipped_helmet->>'hp')::int, 0) +
+              COALESCE((p_p.equipped_boots->>'hp')::int, 0) +
+              COALESCE((p_p.equipped_accessory->>'hp')::int, 0);
+
+    -- 2. Partner HP
+    SELECT SUM(CASE 
+        WHEN (elem->>'role' = 'tank' OR elem->>'role' = 'healer') THEN (elem->>'power')::int * 3
+        ELSE (elem->>'power')::int
+    END) INTO v_pt_hp
+    FROM jsonb_array_elements(COALESCE(p_p.partners, '[]'::jsonb)) AS elem
+    WHERE (elem->>'isDeployed')::boolean = true;
+
+    -- 3. God HP Bonus
+    IF p_p.active_god_id IS NOT NULL THEN
+        SELECT elem INTO v_god 
+        FROM jsonb_array_elements(COALESCE(p_p.gods, '[]'::jsonb)) AS elem 
+        WHERE elem->>'id' = p_p.active_god_id;
+        
+        IF v_god IS NOT NULL THEN
+            IF v_god->>'name' LIKE '%土地公%' THEN v_g_mult := 1.0 + (v_god->>'level')::int * 0.005;
+            ELSIF v_god->>'name' LIKE '%關公%' OR v_god->>'name' LIKE '%關聖%' THEN v_g_mult := 1.0 + (v_god->>'level')::int * 0.01;
+            END IF;
+        END IF;
+    END IF;
+
+    RETURN floor((p_p.max_hp + v_e_hp + COALESCE(v_pt_hp, 0)) * v_g_mult);
+END;
+$$ LANGUAGE plpgsql;
+
 -- 1. SECURE EQUIPMENT SELLING
 -- Logic: Verify item exists in user's inventory, ensure it is NOT equipped, add gold, remove item.
 CREATE OR REPLACE FUNCTION public.secure_sell_equipment(p_equipment_id text)
@@ -212,8 +254,25 @@ BEGIN
     END LOOP;
 
     -- 3. 恢復與屬性校正
-    v_hp := CASE WHEN v_up THEN v_mhp WHEN (v_is_elite OR v_is_boss OR v_is_weather_special) THEN LEAST(v_mhp, p_player_hp + floor(v_mhp * 0.3)) ELSE p_player_hp END;
-    v_mp := CASE WHEN v_up THEN v_mmp WHEN (v_is_elite OR v_is_boss OR v_is_weather_special) THEN LEAST(v_mmp, p_player_mp + (v_mmp * 0.3)) ELSE LEAST(v_mmp, p_player_mp + (v_mmp * 0.1)) END;
+    DECLARE
+        v_eff_mhp integer;
+        v_temp_p public.profiles;
+    BEGIN
+        v_temp_p := v_p;
+        v_temp_p.max_hp := v_mhp; -- 使用更新後的基礎生命值 (考慮升級)
+        v_eff_mhp := public.secure_calculate_effective_max_hp(v_temp_p);
+        
+        v_hp := CASE 
+            WHEN v_up THEN v_eff_mhp 
+            WHEN (v_is_elite OR v_is_boss OR v_is_weather_special) THEN LEAST(v_eff_mhp, p_player_hp + floor(v_eff_mhp * 0.3)) 
+            ELSE p_player_hp 
+        END;
+        v_mp := CASE 
+            WHEN v_up THEN v_mmp 
+            WHEN (v_is_elite OR v_is_boss OR v_is_weather_special) THEN LEAST(v_mmp, p_player_mp + (v_mmp * 0.3)) 
+            ELSE LEAST(v_mmp, p_player_mp + (v_mmp * 0.1)) 
+        END;
+    END;
 
     -- 4. 氣候強敵稀有掉落 (1% 機率)
     IF v_is_weather_special AND random() < 0.01 THEN
@@ -1011,11 +1070,18 @@ BEGIN
     END IF;
 
     -- Update stats
-    v_cur_hp := (v_profile.hp + v_hp_recover);
-    IF v_cur_hp > v_profile.max_hp + v_hp_increase THEN v_cur_hp := v_profile.max_hp + v_hp_increase; END IF;
-    
-    v_cur_mp := (v_profile.mp + v_mp_recover);
-    IF v_cur_mp > (v_profile.max_mp + (v_hp_increase/2)) THEN v_cur_mp := (v_profile.max_mp + (v_hp_increase/2)); END IF;
+    DECLARE
+        v_eff_max_hp integer;
+    BEGIN
+        v_eff_max_hp := public.secure_calculate_effective_max_hp(v_profile);
+        
+        v_cur_hp := (v_profile.hp + v_hp_recover);
+        IF v_cur_hp > v_eff_max_hp + v_hp_increase THEN v_cur_hp := v_eff_max_hp + v_hp_increase; END IF;
+        
+        v_cur_mp := (v_profile.mp + v_mp_recover);
+        -- MP cap is still base max_mp but grows with hp_seed
+        IF v_cur_mp > (v_profile.max_mp + (v_hp_increase/2)) THEN v_cur_mp := (v_profile.max_mp + (v_hp_increase/2)); END IF;
+    END;
 
     -- Update Profile
     -- Update Profile

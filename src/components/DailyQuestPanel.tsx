@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { CheckCircle, Loader2, RefreshCw, Gift, Trophy, Target, X } from 'lucide-react';
+import { CheckCircle, Loader2, RefreshCw, Gift, Trophy, Target } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { DAILY_QUEST_POOL, WEEKLY_QUEST_POOL, CITY_QUEST_POOL } from '../types/game';
 import type { DailyQuest } from '../types/game';
@@ -16,7 +16,7 @@ interface QuestRow {
 
 interface DailyQuestPanelProps {
     userId: string;
-    onClose: () => void;
+    onClose?: () => void;
     onReward: (gold: number, exp: number, currency?: { type: string; amount: number }) => void;
     cityId?: string | null;
     onQuestsStatusUpdate?: (hasRewards: boolean) => void;
@@ -30,7 +30,7 @@ const CURRENCY_ICONS: Record<string, string> = {
     premiumGems: '💎',
 };
 
-export const DailyQuestPanel: React.FC<DailyQuestPanelProps> = ({ userId, onReward, cityId, onQuestsStatusUpdate, onClose }) => {
+export const DailyQuestPanel: React.FC<DailyQuestPanelProps> = ({ userId, onReward, cityId, onQuestsStatusUpdate }) => {
     const [quests, setQuests] = useState<QuestRow[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -109,7 +109,7 @@ export const DailyQuestPanel: React.FC<DailyQuestPanelProps> = ({ userId, onRewa
     const completedWaitClaim = quests.filter(q => q.progress >= q.required && !q.claimed).length;
 
     return (
-        <div className="w-full h-full flex flex-col bg-slate-950 px-4 py-6 md:px-8 max-w-4xl mx-auto">
+        <div className="w-full h-full flex flex-col bg-slate-950 px-4 py-6 md:px-8">
             {/* COMPACT HEADER */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 shrink-0">
                 <div className="flex items-center gap-3">
@@ -117,8 +117,8 @@ export const DailyQuestPanel: React.FC<DailyQuestPanelProps> = ({ userId, onRewa
                         <Trophy size={20} className="text-white fill-current" />
                     </div>
                     <div>
-                        <h2 className="text-xl font-black text-white italic tracking-tight">冒險公會佈告欄</h2>
-                        <div className="flex items-center gap-2 text-[10px] font-bold text-gray-500 uppercase tracking-widest mt-0.5">
+                        <h2 className="text-2xl font-black text-white italic tracking-tight">冒險公會佈告欄</h2>
+                        <div className="flex items-center gap-2 text-xs font-bold text-gray-500 uppercase tracking-widest mt-0.5">
                             <span className="text-emerald-500">Active Quests</span>
                             <span>•</span>
                             <span>{completedWaitClaim} Rewards ready</span>
@@ -139,13 +139,6 @@ export const DailyQuestPanel: React.FC<DailyQuestPanelProps> = ({ userId, onRewa
                         title="重整任務清單"
                     >
                         <RefreshCw size={18} className={refreshing ? 'animate-spin' : ''} />
-                    </button>
-                    <button
-                        onClick={onClose}
-                        className="p-2.5 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 text-gray-400 hover:text-white transition-all"
-                        title="關閉"
-                    >
-                        <X size={18} />
                     </button>
                 </div>
             </div>
@@ -217,13 +210,13 @@ const CompactQuestRow: React.FC<{
                     {row.claimed ? <CheckCircle size={18} className="text-gray-500" /> : (row.period === 'daily' ? '📜' : '🛡️')}
                 </div>
                 <div className="min-w-0">
-                    <div className="flex items-center gap-2 mb-0.5">
-                        <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded ${row.period === 'daily' ? 'bg-blue-500/20 text-blue-400' : 'bg-amber-500/20 text-amber-400'}`}>
+                    <div className="flex items-center gap-2 mb-1">
+                        <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${row.period === 'daily' ? 'bg-blue-500/20 text-blue-400' : 'bg-amber-500/20 text-amber-400'}`}>
                             {row.period === 'daily' ? 'Daily' : 'Weekly'}
                         </span>
-                        <h4 className="font-extrabold text-sm text-white truncate">{def.title}</h4>
+                        <h4 className="font-extrabold text-base text-white truncate">{def.title}</h4>
                     </div>
-                    <p className="text-[11px] text-gray-500 truncate">{def.description}</p>
+                    <p className="text-sm text-gray-400 truncate">{def.description}</p>
                 </div>
             </div>
 
@@ -236,10 +229,10 @@ const CompactQuestRow: React.FC<{
 
             {/* Right: Progress & Action */}
             <div className="flex items-center gap-4 w-full sm:w-auto">
-                <div className="flex-1 sm:w-32">
+                <div className="flex-1 sm:w-36">
                     <div className="flex justify-between items-center mb-1">
-                        <span className={`text-[10px] font-black ${isDone ? 'text-emerald-400' : 'text-gray-500'}`}>{row.progress}/{row.required} {def.unit}</span>
-                        <span className="text-[10px] text-gray-600 font-bold">{pct}%</span>
+                        <span className={`text-xs font-black ${isDone ? 'text-emerald-400' : 'text-gray-500'}`}>{row.progress}/{row.required} {def.unit}</span>
+                        <span className="text-xs text-gray-600 font-bold">{pct}%</span>
                     </div>
                     <div className="h-1.5 bg-black/40 rounded-full overflow-hidden">
                         <div

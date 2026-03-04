@@ -218,6 +218,11 @@ const totalPartnerDef = (p: CharacterStats) => p.partners.filter(pt => pt.isDepl
 const totalPartnerHp = (p: CharacterStats) => p.partners.filter(pt => pt.isDeployed).reduce((s, pt) => s + (pt.role === 'tank' || pt.role === 'healer' ? pt.power * 3 : pt.power), 0);
 const totalPartnerHeal = (p: CharacterStats) => p.partners.filter(pt => pt.isDeployed).reduce((s, pt) => s + (pt.role === 'healer' ? pt.power : 0), 0);
 
+// Authoritative Effective Stats (Base + Equip + Partner) * God Bonus
+const getEffectiveAtk = (p: CharacterStats) => Math.floor((p.attack + totalEquipAtk(p) + totalPartnerAtk(p)) * getGodStatBonus(p).atk);
+const getEffectiveDef = (p: CharacterStats) => Math.floor((p.defense + totalEquipDef(p) + totalPartnerDef(p)) * getGodStatBonus(p).def);
+const getEffectiveMaxHp = (p: CharacterStats) => Math.floor((p.maxHp + totalEquipHp(p) + totalPartnerHp(p)) * getGodStatBonus(p).hp);
+
 export const getSkillUpgradeInfo = (currentLevel: number) => {
   if (currentLevel >= 10) return null;
   const targetLv = currentLevel + 1;
@@ -1214,7 +1219,7 @@ const App: React.FC = () => {
       if (hasWeatherResistance(weather)) return; // God protection
       setPlayer(prev => {
         if (!prev) return prev;
-        const effectiveMaxHp = prev.maxHp + totalEquipHp(prev) + totalPartnerHp(prev);
+        const effectiveMaxHp = getEffectiveMaxHp(prev);
         const drain = Math.max(1, Math.floor(effectiveMaxHp * effect.envHpTickDmg));
         const newHp = Math.max(0, prev.hp - drain);
         return { ...prev, hp: newHp };
@@ -1422,9 +1427,9 @@ const App: React.FC = () => {
     let hp, eAtk, eDef;
 
     if (isElite || isBoss || isWeatherSpecial) {
-      const pHP = p.maxHp + totalEquipHp(p) + totalPartnerHp(p);
-      const pATK = p.attack + totalEquipAtk(p) + totalPartnerAtk(p);
-      const pDEF = p.defense + totalEquipDef(p) + totalPartnerDef(p);
+      const pHP = getEffectiveMaxHp(p);
+      const pATK = getEffectiveAtk(p);
+      const pDEF = getEffectiveDef(p);
 
       const diffMultiplier = isBoss ? 1.5 : (isWeatherSpecial ? 1.2 : 1.0);
 
@@ -1459,8 +1464,8 @@ const App: React.FC = () => {
       hp, maxHp: hp,
       attack: eAtk,
       defense: eDef,
-      expReward: Math.floor(getRewardsByLevel(lv).exp * (isElite ? 2.5 : 1) * (isWeatherSpecial ? 3 : 1)),
-      goldReward: Math.floor(getRewardsByLevel(lv).gold * (isElite ? 2.5 : 1) * (isWeatherSpecial ? 3 : 1)),
+      expReward: Math.floor(getRewardsByLevel(monsterLv).exp * (isElite ? 2.5 : 1) * (isWeatherSpecial ? 3 : 1)),
+      goldReward: Math.floor(getRewardsByLevel(monsterLv).gold * (isElite ? 2.5 : 1) * (isWeatherSpecial ? 3 : 1)),
       lootTable: [],
       // Metadata for backend resolution
       isElite,
@@ -2004,9 +2009,9 @@ const App: React.FC = () => {
 
 
   const godBonus = player ? getGodStatBonus(player) : { atk: 1, def: 1, hp: 1, dmg: 1 };
-  const effectiveAtk = player ? Math.floor((player.attack + totalEquipAtk(player) + totalPartnerAtk(player)) * godBonus.atk) : 0;
-  const effectiveDef = player ? Math.floor((player.defense + totalEquipDef(player) + totalPartnerDef(player)) * godBonus.def) : 0;
-  const effectiveMaxHp = player ? Math.floor((player.maxHp + totalEquipHp(player) + totalPartnerHp(player)) * godBonus.hp) : 0;
+  const effectiveAtk = player ? getEffectiveAtk(player) : 0;
+  const effectiveDef = player ? getEffectiveDef(player) : 0;
+  const effectiveMaxHp = player ? getEffectiveMaxHp(player) : 0;
   const effectiveHeal = player ? totalPartnerHeal(player) : 0;
 
   // Interaction Handler for POIs (Refactored to handle interactions gracefully)
@@ -2134,7 +2139,7 @@ const App: React.FC = () => {
       }
     } else if (poi.type === 'altar') {
       // Heal both HP and MP to full, and gain Incense
-      const currentMaxHp = player.maxHp + totalEquipHp(player) + totalPartnerHp(player);
+      const currentMaxHp = getEffectiveMaxHp(player);
       const incenseGain = Math.floor(Math.random() * 6) + 5; // 5-10 incense
       const nextState = {
         ...player,
@@ -3217,657 +3222,666 @@ const App: React.FC = () => {
         {/* ─── RANKING (排行) ─── */}
         {activeTab === 'ranking' && <RankingTab player={player!} />}
 
-        {/* ─── QUESTS (任務) ─── */}
         {activeTab === 'quests' && (
-          <div className="p-4 h-full overflow-y-auto w-full flex flex-col items-center bg-slate-950/40">
-            <div className="w-full max-w-6xl">
-              <DailyQuestPanel
-                userId={session.user.id}
-                onClose={() => setActiveTab('explore')}
-                cityId={inTown?.id}
-                onQuestsStatusUpdate={setHasQuestReward}
-                onReward={(gold, exp, currency) => {
-                  const CURR_MAP: any = {
-                    lingQi: { name: '仙草靈氣', icon: '🌿' },
-                    techFragments: { name: '科技碎片', icon: '⚙️' },
-                    incense: { name: '香火', icon: '🕯️' },
-                    saltCrystals: { name: '海鹽結晶', icon: '🌊' },
-                    premiumGems: { name: '台灣藍寶靈石', icon: '💎' }
-                  };
+          <DailyQuestPanel
+            userId={session.user.id}
+            onClose={() => setActiveTab('explore')}
+            cityId={inTown?.id}
+            onQuestsStatusUpdate={setHasQuestReward}
+            onReward={(gold, exp, currency) => {
+              const CURR_MAP: any = {
+                lingQi: { name: '仙草靈氣', icon: '🌿' },
+                techFragments: { name: '科技碎片', icon: '⚙️' },
+                incense: { name: '香火', icon: '🕯️' },
+                saltCrystals: { name: '海鹽結晶', icon: '🌊' },
+                premiumGems: { name: '台灣藍寶靈石', icon: '💎' }
+              };
 
-                  const rewardItems = [];
-                  if (currency) {
-                    const info = CURR_MAP[currency.type] || { name: currency.type, icon: '💎' };
-                    rewardItems.push({ name: info.name, quantity: currency.amount, icon: info.icon });
-                  }
+              const rewardItems = [];
+              if (currency) {
+                const info = CURR_MAP[currency.type] || { name: currency.type, icon: '💎' };
+                rewardItems.push({ name: info.name, quantity: currency.amount, icon: info.icon });
+              }
 
-                  // 彈出獲取獎勵視窗
-                  setLootMessage({
-                    title: '📜 任務委託達成！',
-                    gold: gold,
-                    exp: exp,
-                    items: rewardItems
-                  });
+              // 彈出獲取獎勵視窗
+              setLootMessage({
+                title: '📜 任務委託達成！',
+                gold: gold,
+                exp: exp,
+                items: rewardItems
+              });
 
-                  setPlayer(prev => {
-                    if (!prev) return null;
-                    const updated = {
-                      ...prev,
-                      gold: prev.gold + gold,
-                      exp: prev.exp + exp,
-                      ...(currency ? { [currency.type]: (prev[currency.type as keyof typeof prev] as number || 0) + currency.amount } : {})
-                    };
-                    saveProfile(updated);
-                    return updated;
-                  });
-                }}
-              />
-            </div>
-          </div>
+              setPlayer(prev => {
+                if (!prev) return null;
+                const updated = {
+                  ...prev,
+                  gold: prev.gold + gold,
+                  exp: prev.exp + exp,
+                  ...(currency ? { [currency.type]: (prev[currency.type as keyof typeof prev] as number || 0) + currency.amount } : {})
+                };
+                saveProfile(updated);
+                return updated;
+              });
+            }}
+          />
         )}
 
         {/* ─── STATS (勇者) ─── */}
-        {activeTab === 'stats' && (
-          <div className="p-5 h-full overflow-y-auto w-full space-y-5 flex flex-col">
-            <div className="glass-panel p-6 rounded-3xl bg-gradient-to-br from-indigo-900/20 to-transparent border border-white/10 flex flex-col md:flex-row gap-6 items-center">
-              <div className="relative group">
-                <div className="absolute inset-0 bg-game-accent/20 blur-xl rounded-full opacity-50 group-hover:opacity-100 transition-opacity" />
-                <div className="w-24 h-24 rounded-3xl border-2 border-game-accent bg-slate-900 flex items-center justify-center text-5xl relative z-10 shadow-2xl">
-                  🧙‍♂️
+        {
+          activeTab === 'stats' && (
+            <div className="p-5 h-full overflow-y-auto w-full space-y-5 flex flex-col">
+              <div className="glass-panel p-6 rounded-3xl bg-gradient-to-br from-indigo-900/20 to-transparent border border-white/10 flex flex-col md:flex-row gap-6 items-center">
+                <div className="relative group">
+                  <div className="absolute inset-0 bg-game-accent/20 blur-xl rounded-full opacity-50 group-hover:opacity-100 transition-opacity" />
+                  <div className="w-24 h-24 rounded-3xl border-2 border-game-accent bg-slate-900 flex items-center justify-center text-5xl relative z-10 shadow-2xl">
+                    🧙‍♂️
+                  </div>
+                </div>
+                <div className="flex-1 text-center md:text-left">
+                  <div className="flex flex-col items-center md:items-start">
+                    <div className="flex items-center gap-3">
+                      {isEditingNickname ? (
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={tempNickname}
+                            onChange={(e) => setTempNickname(e.target.value)}
+                            className="bg-black/40 border border-game-accent/50 rounded-lg px-3 py-1 text-white font-bold outline-none focus:border-game-accent w-40"
+                            autoFocus
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleSaveNickname();
+                              if (e.key === 'Escape') setIsEditingNickname(false);
+                            }}
+                          />
+                          <button onClick={handleSaveNickname} className="text-game-accent hover:text-white transition-colors">
+                            <PlusCircle size={20} />
+                          </button>
+                        </div>
+                      ) : (
+                        <h2 className="text-2xl font-black flex items-center gap-2">
+                          {player.nickname || '勇者'}
+                          <button
+                            onClick={() => {
+                              setTempNickname(player.nickname || '勇者');
+                              setIsEditingNickname(true);
+                            }}
+                            className="text-gray-500 hover:text-game-accent transition-colors p-1"
+                          >
+                            <SettingsIcon size={16} />
+                          </button>
+                        </h2>
+                      )}
+                      <span className="text-sm text-game-accent font-bold bg-game-accent/15 px-3 py-1 rounded-full border border-game-accent/30 tracking-tight">Lv.{player.level}</span>
+                    </div>
+                    {/* UID Display */}
+                    <div className="flex items-center gap-2 mt-1 px-1.5 py-0.5 bg-white/5 rounded-lg border border-white/5 group/uid">
+                      <span className="text-[11px] font-mono text-gray-500 uppercase tracking-tight">UID:</span>
+                      <span className="text-[11px] font-mono font-bold text-gray-300">{player.uid || '--------'}</span>
+                      <button
+                        onClick={() => {
+                          if (player.uid) {
+                            navigator.clipboard.writeText(player.uid);
+                            setCopiedUid(true);
+                            setTimeout(() => setCopiedUid(false), 2000);
+                          }
+                        }}
+                        className="p-1 text-gray-500 hover:text-game-accent transition-colors"
+                        title="複製 UID"
+                      >
+                        {copiedUid ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} className="group-hover/uid:scale-110" />}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-black/20">
+                    <table className="w-full text-sm text-left">
+                      <thead className="bg-white/5 text-sm uppercase text-gray-400 font-bold border-b border-white/5">
+                        <tr>
+                          <th className="px-4 py-2 font-black">屬性與說明</th>
+                          <th className="px-4 py-2 font-black text-right">數值</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5">
+                        <tr className="hover:bg-white/5 transition-colors">
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2 text-gray-300 font-bold mb-1"><TrendingUp size={14} className="text-game-accent" /> 經驗進度</div>
+                            <div className="text-[12px] text-gray-500 font-normal leading-relaxed">當前獲得的經驗點數，集滿後可提升等級。</div>
+                            <div className="mt-2 w-full h-1.5 bg-white/10 rounded-full overflow-hidden border border-white/5">
+                              <div
+                                className="h-full bg-gradient-to-r from-game-accent to-indigo-500 transition-all duration-500"
+                                style={{ width: `${Math.min(100, (player.exp / player.maxExp) * 100)}%` }}
+                              />
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 font-mono font-bold text-gray-300 text-sm text-right whitespace-nowrap">
+                            <div className="text-base text-white">{player.exp.toLocaleString()} / {player.maxExp.toLocaleString()}</div>
+                            <div className="text-[10px] text-gray-500 font-bold tracking-tight">{((player.exp / player.maxExp) * 100).toFixed(2)}%</div>
+                          </td>
+                        </tr>
+                        <tr className="hover:bg-white/5 transition-colors">
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2 text-gray-300 font-bold mb-1"><Sword size={14} className="text-red-400" /> 攻擊力</div>
+                            <div className="text-[12px] text-gray-500 font-normal leading-relaxed">決定對魔物造成的基礎傷害量，受武器與夥伴加成。</div>
+                          </td>
+                          <td className="px-4 py-3 font-mono font-bold text-red-400 text-lg text-right whitespace-nowrap">{effectiveAtk}</td>
+                        </tr>
+                        <tr className="hover:bg-white/5 transition-colors">
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2 text-gray-300 font-bold mb-1"><Shield size={14} className="text-blue-400" /> 物理防禦</div>
+                            <div className="text-[12px] text-gray-500 font-normal leading-relaxed">抵消魔物的攻擊傷害，減少探險過程中的體力損耗。</div>
+                          </td>
+                          <td className="px-4 py-3 font-mono font-bold text-blue-400 text-lg text-right whitespace-nowrap">{effectiveDef}</td>
+                        </tr>
+                        <tr className="hover:bg-white/5 transition-colors">
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2 text-gray-300 font-bold mb-1"><Heart size={14} className="text-red-400" /> 生命上限</div>
+                            <div className="text-[12px] text-gray-500 font-normal leading-relaxed">勇者的最大體力承載量，提升等級或裝備可增加。</div>
+                          </td>
+                          <td className="px-4 py-3 font-mono font-bold text-red-400 text-lg text-right whitespace-nowrap">{effectiveMaxHp}</td>
+                        </tr>
+                        <tr className="hover:bg-white/5 transition-colors">
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2 text-gray-300 font-bold mb-1"><PlusCircle size={14} className="text-emerald-400" /> 治癒能力</div>
+                            <div className="text-[12px] text-gray-500 font-normal leading-relaxed">戰鬥中每回合自動恢復的生命值，由輔助型夥伴提供。</div>
+                          </td>
+                          <td className="px-4 py-3 font-mono font-bold text-emerald-400 text-lg text-right whitespace-nowrap">{effectiveHeal}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
-              <div className="flex-1 text-center md:text-left">
-                <div className="flex flex-col items-center md:items-start">
-                  <div className="flex items-center gap-3">
-                    {isEditingNickname ? (
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="text"
-                          value={tempNickname}
-                          onChange={(e) => setTempNickname(e.target.value)}
-                          className="bg-black/40 border border-game-accent/50 rounded-lg px-3 py-1 text-white font-bold outline-none focus:border-game-accent w-40"
-                          autoFocus
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') handleSaveNickname();
-                            if (e.key === 'Escape') setIsEditingNickname(false);
-                          }}
-                        />
-                        <button onClick={handleSaveNickname} className="text-game-accent hover:text-white transition-colors">
-                          <PlusCircle size={20} />
-                        </button>
-                      </div>
-                    ) : (
-                      <h2 className="text-2xl font-black flex items-center gap-2">
-                        {player.nickname || '勇者'}
-                        <button
-                          onClick={() => {
-                            setTempNickname(player.nickname || '勇者');
-                            setIsEditingNickname(true);
-                          }}
-                          className="text-gray-500 hover:text-game-accent transition-colors p-1"
-                        >
-                          <SettingsIcon size={16} />
-                        </button>
-                      </h2>
-                    )}
-                    <span className="text-sm text-game-accent font-bold bg-game-accent/15 px-3 py-1 rounded-full border border-game-accent/30 tracking-tight">Lv.{player.level}</span>
+
+              {/* My Skills */}
+              <div className="glass-panel p-5 rounded-3xl">
+                <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><Book size={18} className="text-game-accent" /> 我的技能</h3>
+                {player.skills.length === 0 ? (
+                  <div className="text-center py-12 text-gray-500 italic bg-black/10 rounded-2xl border border-dashed border-white/5">
+                    目前尚未領悟任何技能...
                   </div>
-                  {/* UID Display */}
-                  <div className="flex items-center gap-2 mt-1 px-1.5 py-0.5 bg-white/5 rounded-lg border border-white/5 group/uid">
-                    <span className="text-[11px] font-mono text-gray-500 uppercase tracking-tight">UID:</span>
-                    <span className="text-[11px] font-mono font-bold text-gray-300">{player.uid || '--------'}</span>
-                    <button
-                      onClick={() => {
-                        if (player.uid) {
-                          navigator.clipboard.writeText(player.uid);
-                          setCopiedUid(true);
-                          setTimeout(() => setCopiedUid(false), 2000);
-                        }
-                      }}
-                      className="p-1 text-gray-500 hover:text-game-accent transition-colors"
-                      title="複製 UID"
-                    >
-                      {copiedUid ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} className="group-hover/uid:scale-110" />}
-                    </button>
-                  </div>
-                </div>
-                <div className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-black/20">
-                  <table className="w-full text-sm text-left">
-                    <thead className="bg-white/5 text-sm uppercase text-gray-400 font-bold border-b border-white/5">
-                      <tr>
-                        <th className="px-4 py-2 font-black">屬性與說明</th>
-                        <th className="px-4 py-2 font-black text-right">數值</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-white/5">
-                      <tr className="hover:bg-white/5 transition-colors">
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2 text-gray-300 font-bold mb-1"><TrendingUp size={14} className="text-game-accent" /> 經驗進度</div>
-                          <div className="text-[12px] text-gray-500 font-normal leading-relaxed">當前獲得的經驗點數，集滿後可提升等級。</div>
-                          <div className="mt-2 w-full h-1.5 bg-white/10 rounded-full overflow-hidden border border-white/5">
-                            <div
-                              className="h-full bg-gradient-to-r from-game-accent to-indigo-500 transition-all duration-500"
-                              style={{ width: `${Math.min(100, (player.exp / player.maxExp) * 100)}%` }}
-                            />
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {player.skills.map(playerSkill => {
+                      const skInfo = SKILL_DATABASE.find(s => s.id === playerSkill.id);
+                      if (!skInfo) return null;
+                      const upgrade = getSkillUpgradeInfo(playerSkill.level);
+                      const currentPower = skInfo.basePower + (playerSkill.level - 1) * skInfo.powerGrowth;
+                      const currentMpCost = skInfo.baseMpCost + (playerSkill.level - 1) * skInfo.mpCostGrowth;
+
+                      return (
+                        <div key={playerSkill.id} className="p-4 rounded-2xl bg-white/5 border border-white/10 flex flex-col gap-3 hover:bg-white/10 transition-colors">
+                          <div className="flex items-center gap-4">
+                            <div className="text-3xl filter drop-shadow-md">{skInfo.icon}</div>
+                            <div className="flex-1 min-w-0">
+                              <div className="font-bold text-sm text-white flex gap-2 items-center">
+                                {skInfo.name} <span className="text-game-accent text-xs">Lv.{playerSkill.level}</span>
+                              </div>
+                              <div className="text-[11px] text-gray-400 truncate mt-1">{skInfo.description}</div>
+                              {skInfo.debuff && (
+                                <div className="text-[10px] text-game-accent mt-1 p-1.5 bg-game-accent/5 rounded border border-game-accent/10 whitespace-normal">
+                                  {skInfo.debuff.type === 'reflect' ? '🛡️' : skInfo.debuff.type === 'regen' ? '💚' : '💢'}
+                                  附有【{
+                                    { burn: '持續燃燒', freeze: '持續凍傷', rend: '持續撕裂', shock: '持續電擊', reflect: '反射傷害', regen: '每回合自動恢復HP' }[skInfo.debuff.type] || '狀態'
+                                  }效果】：
+                                  {skInfo.debuff.baseChance + (playerSkill.level - 1) * skInfo.debuff.chanceGrowth}% 機率觸發，
+                                  {skInfo.debuff.baseDamage + (playerSkill.level - 1) * skInfo.debuff.damageGrowth}{skInfo.debuff.type === 'reflect' ? '%' : '點'}
+                                  持續 {Math.floor(skInfo.debuff.baseDuration + (playerSkill.level - 1) * skInfo.debuff.durationGrowth)} 回合
+                                </div>
+                              )}
+                            </div>
+                            <div className="text-right">
+                              <div className="text-[10px] font-black tracking-tighter text-blue-400 bg-blue-400/10 px-2 py-0.5 rounded border border-blue-400/20 mb-1">
+                                消耗 {currentMpCost} MP
+                              </div>
+                              {skInfo.durationTurns && !skInfo.debuff ? (
+                                <div className="text-[10px] font-black tracking-tighter text-emerald-400 bg-emerald-400/10 px-2 py-0.5 rounded border border-emerald-400/20">
+                                  持續 {skInfo.durationTurns} 回合
+                                </div>
+                              ) : null}
+                              {skInfo.type !== 'buff' && (
+                                <div className="text-[10px] font-black tracking-tighter text-game-accent bg-game-accent/10 px-2 py-0.5 rounded border border-game-accent/20">
+                                  威力 {currentPower}
+                                </div>
+                              )}
+                            </div>
                           </div>
-                        </td>
-                        <td className="px-4 py-3 font-mono font-bold text-gray-300 text-sm text-right whitespace-nowrap">
-                          <div className="text-base text-white">{player.exp.toLocaleString()} / {player.maxExp.toLocaleString()}</div>
-                          <div className="text-[10px] text-gray-500 font-bold tracking-tight">{((player.exp / player.maxExp) * 100).toFixed(2)}%</div>
-                        </td>
-                      </tr>
-                      <tr className="hover:bg-white/5 transition-colors">
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2 text-gray-300 font-bold mb-1"><Sword size={14} className="text-red-400" /> 攻擊力</div>
-                          <div className="text-[12px] text-gray-500 font-normal leading-relaxed">決定對魔物造成的基礎傷害量，受武器與夥伴加成。</div>
-                        </td>
-                        <td className="px-4 py-3 font-mono font-bold text-red-400 text-lg text-right whitespace-nowrap">{effectiveAtk}</td>
-                      </tr>
-                      <tr className="hover:bg-white/5 transition-colors">
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2 text-gray-300 font-bold mb-1"><Shield size={14} className="text-blue-400" /> 物理防禦</div>
-                          <div className="text-[12px] text-gray-500 font-normal leading-relaxed">抵消魔物的攻擊傷害，減少探險過程中的體力損耗。</div>
-                        </td>
-                        <td className="px-4 py-3 font-mono font-bold text-blue-400 text-lg text-right whitespace-nowrap">{effectiveDef}</td>
-                      </tr>
-                      <tr className="hover:bg-white/5 transition-colors">
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2 text-gray-300 font-bold mb-1"><Heart size={14} className="text-red-400" /> 生命上限</div>
-                          <div className="text-[12px] text-gray-500 font-normal leading-relaxed">勇者的最大體力承載量，提升等級或裝備可增加。</div>
-                        </td>
-                        <td className="px-4 py-3 font-mono font-bold text-red-400 text-lg text-right whitespace-nowrap">{effectiveMaxHp}</td>
-                      </tr>
-                      <tr className="hover:bg-white/5 transition-colors">
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2 text-gray-300 font-bold mb-1"><PlusCircle size={14} className="text-emerald-400" /> 治癒能力</div>
-                          <div className="text-[12px] text-gray-500 font-normal leading-relaxed">戰鬥中每回合自動恢復的生命值，由輔助型夥伴提供。</div>
-                        </td>
-                        <td className="px-4 py-3 font-mono font-bold text-emerald-400 text-lg text-right whitespace-nowrap">{effectiveHeal}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
+                          {/* Upgrade Section */}
+                          {upgrade ? (
+                            <div className="mt-2 pt-3 border-t border-white/10 flex items-center justify-between">
+                              <div className="flex gap-3 text-[11px]">
+                                <span className={playerSkill.fragments >= upgrade.fragments ? "text-emerald-400" : "text-red-400"}>
+                                  碎片: {playerSkill.fragments}/{upgrade.fragments}
+                                </span>
+                                <span className={player.gold >= upgrade.gold ? "text-game-gold" : "text-red-400"}>
+                                  💰 {upgrade.gold}
+                                </span>
+                                <span className="text-gray-400">成功率 {upgrade.successRate}%</span>
+                              </div>
+                              <button
+                                onClick={() => handleUpgradeSkill(playerSkill.id)}
+                                disabled={playerSkill.fragments < upgrade.fragments || player.gold < upgrade.gold}
+                                className="bg-game-accent/20 hover:bg-game-accent/40 disabled:opacity-30 disabled:hover:bg-game-accent/20 text-game-accent px-3 py-1 rounded text-xs font-bold transition-colors"
+                              >
+                                升級
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="mt-2 pt-3 border-t border-white/10 text-center text-[11px] text-gray-500 font-bold">
+                              已達最大等級 (Lv.MAX)
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
+          )
+        }
 
-            {/* My Skills */}
-            <div className="glass-panel p-5 rounded-3xl">
-              <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><Book size={18} className="text-game-accent" /> 我的技能</h3>
-              {player.skills.length === 0 ? (
-                <div className="text-center py-12 text-gray-500 italic bg-black/10 rounded-2xl border border-dashed border-white/5">
-                  目前尚未領悟任何技能...
+        {/* ─── BAG (行囊) ─── */}
+        {
+          activeTab === 'bag' && (
+            <div className="p-5 h-full overflow-y-auto w-full space-y-5">
+              {/* Equipment Slots */}
+              <div className="glass-panel rounded-2xl p-6 relative">
+                <div className="absolute inset-0 overflow-hidden rounded-2xl pointer-events-none">
+                  <div className="absolute -right-10 -top-10 w-40 h-40 bg-game-accent/5 rounded-full blur-3xl" />
                 </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {player.skills.map(playerSkill => {
-                    const skInfo = SKILL_DATABASE.find(s => s.id === playerSkill.id);
-                    if (!skInfo) return null;
-                    const upgrade = getSkillUpgradeInfo(playerSkill.level);
-                    const currentPower = skInfo.basePower + (playerSkill.level - 1) * skInfo.powerGrowth;
-                    const currentMpCost = skInfo.baseMpCost + (playerSkill.level - 1) * skInfo.mpCostGrowth;
-
+                <h3 className="text-base font-bold mb-4 flex items-center gap-2">⚔️ 當前裝備</h3>
+                <div className="grid grid-cols-5 gap-3">
+                  {(['weapon', 'armor', 'helmet', 'boots', 'accessory'] as const).map(slot => {
+                    const slotKey = `equipped${slot.charAt(0).toUpperCase() + slot.slice(1)}` as keyof CharacterStats;
+                    const eq = player[slotKey] as Equipment | undefined;
+                    const r = eq ? RARITY_COLORS[eq.rarity] : null;
                     return (
-                      <div key={playerSkill.id} className="p-4 rounded-2xl bg-white/5 border border-white/10 flex flex-col gap-3 hover:bg-white/10 transition-colors">
-                        <div className="flex items-center gap-4">
-                          <div className="text-3xl filter drop-shadow-md">{skInfo.icon}</div>
-                          <div className="flex-1 min-w-0">
-                            <div className="font-bold text-sm text-white flex gap-2 items-center">
-                              {skInfo.name} <span className="text-game-accent text-xs">Lv.{playerSkill.level}</span>
-                            </div>
-                            <div className="text-[11px] text-gray-400 truncate mt-1">{skInfo.description}</div>
-                            {skInfo.debuff && (
-                              <div className="text-[10px] text-game-accent mt-1 p-1.5 bg-game-accent/5 rounded border border-game-accent/10 whitespace-normal">
-                                {skInfo.debuff.type === 'reflect' ? '🛡️' : skInfo.debuff.type === 'regen' ? '💚' : '💢'}
-                                附有【{
-                                  { burn: '持續燃燒', freeze: '持續凍傷', rend: '持續撕裂', shock: '持續電擊', reflect: '反射傷害', regen: '每回合自動恢復HP' }[skInfo.debuff.type] || '狀態'
-                                }效果】：
-                                {skInfo.debuff.baseChance + (playerSkill.level - 1) * skInfo.debuff.chanceGrowth}% 機率觸發，
-                                {skInfo.debuff.baseDamage + (playerSkill.level - 1) * skInfo.debuff.damageGrowth}{skInfo.debuff.type === 'reflect' ? '%' : '點'}
-                                持續 {Math.floor(skInfo.debuff.baseDuration + (playerSkill.level - 1) * skInfo.debuff.durationGrowth)} 回合
-                              </div>
-                            )}
-                          </div>
-                          <div className="text-right">
-                            <div className="text-[10px] font-black tracking-tighter text-blue-400 bg-blue-400/10 px-2 py-0.5 rounded border border-blue-400/20 mb-1">
-                              消耗 {currentMpCost} MP
-                            </div>
-                            {skInfo.durationTurns && !skInfo.debuff ? (
-                              <div className="text-[10px] font-black tracking-tighter text-emerald-400 bg-emerald-400/10 px-2 py-0.5 rounded border border-emerald-400/20">
-                                持續 {skInfo.durationTurns} 回合
-                              </div>
-                            ) : null}
-                            {skInfo.type !== 'buff' && (
-                              <div className="text-[10px] font-black tracking-tighter text-game-accent bg-game-accent/10 px-2 py-0.5 rounded border border-game-accent/20">
-                                威力 {currentPower}
-                              </div>
-                            )}
-                          </div>
+                      <div key={slot} className="tooltip-wrap" onClick={() => eq && unequipItem(slot)}>
+                        <div className={`inv-slot ${r ? `border-2 ${r.border} ${r.bg} ${r.glow} cursor-pointer` : ''}`}>
+                          {eq ? <span className="text-3xl">{EQUIPMENT_DATABASE.find(e => e.id === eq.id)?.icon ?? eq.icon}</span> : <span className="text-gray-600 text-[10px] font-bold uppercase tracking-tighter">{slot === 'weapon' ? '武器' : slot === 'armor' ? '護甲' : slot === 'helmet' ? '頭盔' : slot === 'boots' ? '鞋子' : '飾品'}</span>}
                         </div>
-                        {/* Upgrade Section */}
-                        {upgrade ? (
-                          <div className="mt-2 pt-3 border-t border-white/10 flex items-center justify-between">
-                            <div className="flex gap-3 text-[11px]">
-                              <span className={playerSkill.fragments >= upgrade.fragments ? "text-emerald-400" : "text-red-400"}>
-                                碎片: {playerSkill.fragments}/{upgrade.fragments}
-                              </span>
-                              <span className={player.gold >= upgrade.gold ? "text-game-gold" : "text-red-400"}>
-                                💰 {upgrade.gold}
-                              </span>
-                              <span className="text-gray-400">成功率 {upgrade.successRate}%</span>
+                        {eq && (
+                          <div className="tooltip-text">
+                            <div className={`font-bold ${r?.text}`}>{eq.name}</div>
+                            <div className="text-gray-400 text-[11px]">{eq.description}</div>
+                            <div className="mt-1 text-[11px] space-x-2">
+                              {eq.attack > 0 && <span className="text-red-400">ATK +{eq.attack}</span>}
+                              {eq.defense > 0 && <span className="text-blue-400">DEF +{eq.defense}</span>}
+                              {eq.hp > 0 && <span className="text-green-400">HP +{eq.hp}</span>}
                             </div>
-                            <button
-                              onClick={() => handleUpgradeSkill(playerSkill.id)}
-                              disabled={playerSkill.fragments < upgrade.fragments || player.gold < upgrade.gold}
-                              className="bg-game-accent/20 hover:bg-game-accent/40 disabled:opacity-30 disabled:hover:bg-game-accent/20 text-game-accent px-3 py-1 rounded text-xs font-bold transition-colors"
-                            >
-                              升級
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="mt-2 pt-3 border-t border-white/10 text-center text-[11px] text-gray-500 font-bold">
-                            已達最大等級 (Lv.MAX)
+                            <div className="mt-2 text-[10px] text-game-accent font-bold">點擊脫下</div>
                           </div>
                         )}
                       </div>
                     );
                   })}
                 </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* ─── BAG (行囊) ─── */}
-        {activeTab === 'bag' && (
-          <div className="p-5 h-full overflow-y-auto w-full space-y-5">
-            {/* Equipment Slots */}
-            <div className="glass-panel rounded-2xl p-6 relative">
-              <div className="absolute inset-0 overflow-hidden rounded-2xl pointer-events-none">
-                <div className="absolute -right-10 -top-10 w-40 h-40 bg-game-accent/5 rounded-full blur-3xl" />
               </div>
-              <h3 className="text-base font-bold mb-4 flex items-center gap-2">⚔️ 當前裝備</h3>
-              <div className="grid grid-cols-5 gap-3">
-                {(['weapon', 'armor', 'helmet', 'boots', 'accessory'] as const).map(slot => {
-                  const slotKey = `equipped${slot.charAt(0).toUpperCase() + slot.slice(1)}` as keyof CharacterStats;
-                  const eq = player[slotKey] as Equipment | undefined;
-                  const r = eq ? RARITY_COLORS[eq.rarity] : null;
-                  return (
-                    <div key={slot} className="tooltip-wrap" onClick={() => eq && unequipItem(slot)}>
-                      <div className={`inv-slot ${r ? `border-2 ${r.border} ${r.bg} ${r.glow} cursor-pointer` : ''}`}>
-                        {eq ? <span className="text-3xl">{EQUIPMENT_DATABASE.find(e => e.id === eq.id)?.icon ?? eq.icon}</span> : <span className="text-gray-600 text-[10px] font-bold uppercase tracking-tighter">{slot === 'weapon' ? '武器' : slot === 'armor' ? '護甲' : slot === 'helmet' ? '頭盔' : slot === 'boots' ? '鞋子' : '飾品'}</span>}
-                      </div>
-                      {eq && (
-                        <div className="tooltip-text">
-                          <div className={`font-bold ${r?.text}`}>{eq.name}</div>
-                          <div className="text-gray-400 text-[11px]">{eq.description}</div>
-                          <div className="mt-1 text-[11px] space-x-2">
-                            {eq.attack > 0 && <span className="text-red-400">ATK +{eq.attack}</span>}
-                            {eq.defense > 0 && <span className="text-blue-400">DEF +{eq.defense}</span>}
-                            {eq.hp > 0 && <span className="text-green-400">HP +{eq.hp}</span>}
+
+              {/* Unequipped Equipment */}
+              {player.equipment.length > 0 && (
+                <div className="glass-panel rounded-2xl p-5">
+                  <h3 className="text-base font-bold mb-4 flex items-center gap-2">🎒 背包裝備</h3>
+                  <div className="flex flex-wrap gap-3">
+                    {player.equipment.map((eq, index) => {
+                      const r = RARITY_COLORS[eq.rarity];
+                      return (
+                        <div key={`${eq.id}-${index}`} className="tooltip-wrap" onClick={() => equipItem(eq)}>
+                          <div className={`inv-slot border-2 ${r.border} ${r.bg} ${r.glow} cursor-pointer hover:scale-105 transition-transform`}>
+                            <span className="text-3xl">{EQUIPMENT_DATABASE.find(e => e.id === eq.id)?.icon ?? eq.icon}</span>
                           </div>
-                          <div className="mt-2 text-[10px] text-game-accent font-bold">點擊脫下</div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Unequipped Equipment */}
-            {player.equipment.length > 0 && (
-              <div className="glass-panel rounded-2xl p-5">
-                <h3 className="text-base font-bold mb-4 flex items-center gap-2">🎒 背包裝備</h3>
-                <div className="flex flex-wrap gap-3">
-                  {player.equipment.map((eq, index) => {
-                    const r = RARITY_COLORS[eq.rarity];
-                    return (
-                      <div key={`${eq.id}-${index}`} className="tooltip-wrap" onClick={() => equipItem(eq)}>
-                        <div className={`inv-slot border-2 ${r.border} ${r.bg} ${r.glow} cursor-pointer hover:scale-105 transition-transform`}>
-                          <span className="text-3xl">{EQUIPMENT_DATABASE.find(e => e.id === eq.id)?.icon ?? eq.icon}</span>
-                        </div>
-                        <div className="tooltip-text">
-                          <div className={`font-bold ${r.text}`}>{eq.name}</div>
-                          <div className="text-gray-400 text-[11px] font-bold uppercase">{r.label} · {eq.slot === 'weapon' ? '武器' : eq.slot === 'armor' ? '護甲' : eq.slot === 'helmet' ? '頭盔' : eq.slot === 'boots' ? '鞋子' : '飾品'}</div>
-                          <div className="mt-1 text-[11px] space-x-2">
-                            {eq.attack > 0 && <span className="text-red-400">ATK +{eq.attack}</span>}
-                            {eq.defense > 0 && <span className="text-blue-400">DEF +{eq.defense}</span>}
-                            {eq.hp > 0 && <span className="text-green-400">HP +{eq.hp}</span>}
+                          <div className="tooltip-text">
+                            <div className={`font-bold ${r.text}`}>{eq.name}</div>
+                            <div className="text-gray-400 text-[11px] font-bold uppercase">{r.label} · {eq.slot === 'weapon' ? '武器' : eq.slot === 'armor' ? '護甲' : eq.slot === 'helmet' ? '頭盔' : eq.slot === 'boots' ? '鞋子' : '飾品'}</div>
+                            <div className="mt-1 text-[11px] space-x-2">
+                              {eq.attack > 0 && <span className="text-red-400">ATK +{eq.attack}</span>}
+                              {eq.defense > 0 && <span className="text-blue-400">DEF +{eq.defense}</span>}
+                              {eq.hp > 0 && <span className="text-green-400">HP +{eq.hp}</span>}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Items */}
-            <div className="glass-panel rounded-2xl p-5 mb-10">
-              <h3 className="text-base font-bold mb-4 flex items-center gap-2">🧪 道具行李</h3>
-              {player.items.length === 0 ? (
-                <div className="text-center text-gray-500 py-8 text-sm">背包空空如也…去探索看看吧！</div>
-              ) : (
-                <div className="flex flex-wrap gap-3">
-                  {player.items.map(item => {
-                    const itemDef = ITEM_DATABASE.find(id => id.id === item.id);
-                    const description = item.description || itemDef?.description || '普通道具';
-                    return (
-                      <div key={item.id} className="tooltip-wrap" onClick={() => {
-                        if (item.type === 'potion' || item.type === 'consumable') {
-                          setBatchUseItem(item);
-                          setBatchAmount(1);
-                        }
-                      }}>
-                        <div className={`inv-slot ${(item.type === 'potion' || item.type === 'consumable') ? 'cursor-pointer hover:ring-2 hover:ring-game-accent/50' : 'opacity-80'}`}>
-                          <span className="text-2xl">{itemDef?.icon ?? item.icon}</span>
-                          <span className="inv-qty">×{item.quantity}</span>
-                        </div>
-                        <div className="tooltip-text">
-                          <div className="font-bold">{item.name}</div>
-                          <div className="text-gray-400 text-[11px]">{description}</div>
-                          {(item.type === 'potion' || item.type === 'consumable') && <div className="mt-1 text-[10px] text-game-accent font-bold">點擊使用 / 批次使用</div>}
-                        </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
               )}
-            </div>
 
-            {/* Batch Use Modal */}
-            {batchUseItem && (
-              <div className="fixed inset-0 z-[3000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm anim-fade-in">
-                <div className="glass-panel w-full max-w-xs rounded-3xl p-6 border border-white/20 shadow-2xl scale-110">
-                  <h3 className="text-lg font-bold mb-4 flex items-center gap-2">使用道具</h3>
-                  <div className="flex items-center gap-4 mb-6 bg-white/5 p-4 rounded-2xl border border-white/5">
-                    <div className="text-4xl">{batchUseItem.icon}</div>
-                    <div>
-                      <div className="font-bold text-white">{batchUseItem.name}</div>
-                      <div className="text-[10px] text-gray-400">目前持有: {batchUseItem.quantity}</div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    <div>
-                      <div className="flex justify-between text-xs text-gray-400 mb-2">
-                        <span>選擇數量</span>
-                        <span className="text-game-accent font-bold">{batchAmount} / {batchUseItem.quantity}</span>
-                      </div>
-                      <input
-                        type="range"
-                        min="1"
-                        max={batchUseItem.quantity}
-                        value={batchAmount}
-                        onChange={(e) => setBatchAmount(parseInt(e.target.value))}
-                        className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-game-accent"
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <button
-                        onClick={() => setBatchUseItem(null)}
-                        className="py-3 rounded-xl bg-white/5 hover:bg-white/10 text-gray-400 font-bold text-sm transition-all"
-                      >
-                        取消
-                      </button>
-                      <button
-                        onClick={handleBatchUseItem}
-                        className="py-3 rounded-xl bg-gradient-to-r from-game-accent to-indigo-500 text-white font-bold text-sm shadow-lg shadow-game-accent/20 hover:scale-[1.02] active:scale-95 transition-all"
-                      >
-                        確認使用
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Combat Overlay */}
-        {isCombatAction && currentEnemy && (
-          <CombatScreen
-            player={{
-              ...player,
-              attack: effectiveAtk,
-              // Rainy slightly lowers player defense, unless resistant
-              defense: (weather === 'rainy' && !hasWeatherResistance('rainy')) ? Math.max(0, effectiveDef - 2) : effectiveDef,
-              maxHp: effectiveMaxHp,
-              heal: effectiveHeal
-            }}
-            enemy={currentEnemy}
-            weather={weather}
-            hasWeatherResistance={hasWeatherResistance}
-            isMinimized={isCombatMinimized}
-            onMaximize={() => setActiveTab('explore')}
-            onMinimize={() => setIsCombatMinimized(true)}
-            onWin={(exp: number, gold: number, skill?: Skill, loot?: GameItem[], eq?: Equipment, finalHp?: number, finalMp?: number) => {
-              handleCombatWin(exp, gold, skill, loot, eq, finalHp, finalMp);
-            }}
-            onLose={(finalHp?: number, finalMp?: number) => {
-              handleCombatLose(finalHp, finalMp);
-            }}
-            onFlee={() => { setIsCombatAction(false); setAutoExplore(false); }}
-            autoExplore={autoExplore}
-            onAutoHeal={() => {
-              const pot = player.items.find(i => i.type === 'potion' && i.id !== 'item_revive_pot');
-              if (pot) useItem(pot, true);
-            }}
-            onRevive={() => {
-              const revivePot = player.items.find(i => i.id === 'item_revive_pot');
-              if (revivePot) useItem(revivePot, true);
-            }}
-            onUseItem={(it: GameItem) => useItem(it, true)}
-          />
-        )}
-
-        {/* Merchant Shop Overlay */}
-        {isMerchantOpen && (
-          <div className="absolute inset-0 z-[2500] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm anim-fade-in-up">
-            <div className="glass-panel w-full max-w-md rounded-3xl p-6 border border-amber-500/30 shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
-              <div className="flex justify-between items-center mb-6">
-                <div>
-                  <h3 className="text-xl font-black text-amber-400 flex items-center gap-2">👳‍♂️ 流浪商人商店</h3>
-                  <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-1">珍稀物資收購中</p>
-                </div>
-                <button onClick={async () => {
-                  setIsMerchantOpen(false);
-                  if (activeMerchantPoiRef.current) {
-                    const poiId = activeMerchantPoiRef.current;
-                    await supabase.rpc('resolve_poi_combat', { p_poi_id: poiId, p_win: true });
-                    setPois(prev => prev.filter(p => p.id !== poiId));
-                    activeMerchantPoiRef.current = null;
-                  }
-                }} className="p-2 rounded-xl bg-white/5 hover:bg-white/10 transition-colors">
-                  <X size={20} />
-                </button>
-              </div>
-
-              <div className="flex items-center gap-2 bg-amber-500/10 p-3 rounded-2xl border border-amber-500/20 mb-4">
-                <div className="text-2xl">💰</div>
-                <div>
-                  <div className="text-[10px] text-amber-400 font-bold">你的資金</div>
-                  <div className="text-lg font-mono font-bold">{Math.floor(player.gold)} <span className="text-xs font-sans">金幣</span></div>
-                </div>
-              </div>
-
-              <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
-                <p className="text-xs font-bold text-gray-400 mb-2 px-1">你可以販售以下獲得的物品：</p>
+              {/* Items */}
+              <div className="glass-panel rounded-2xl p-5 mb-10">
+                <h3 className="text-base font-bold mb-4 flex items-center gap-2">🧪 道具行李</h3>
                 {player.items.length === 0 ? (
-                  <div className="text-center py-12 text-gray-500 italic text-sm">背包空空如也...</div>
+                  <div className="text-center text-gray-500 py-8 text-sm">背包空空如也…去探索看看吧！</div>
                 ) : (
-                  player.items.map(item => {
-                    let sellPrice = 10;
-                    if (item.type === 'gem') sellPrice = 200;
-                    if (item.type === 'material') sellPrice = 15;
-                    if (item.type === 'potion') sellPrice = 50;
-                    if (item.id === 'item_revive_pot') sellPrice = 500;
-
-                    return (
-                      <div key={item.id} className="flex items-center gap-3 bg-white/5 p-3 rounded-2xl border border-white/5 hover:bg-white/10 transition-all group">
-                        <div className="text-3xl bg-white/5 w-12 h-12 rounded-xl flex items-center justify-center border border-white/10">{ITEM_DATABASE.find(i => i.id === item.id)?.icon ?? item.icon}</div>
-                        <div className="flex-1">
-                          <div className="font-bold text-sm">{item.name}</div>
-                          <div className="text-[10px] text-gray-500">持有: {item.quantity}</div>
+                  <div className="flex flex-wrap gap-3">
+                    {player.items.map(item => {
+                      const itemDef = ITEM_DATABASE.find(id => id.id === item.id);
+                      const description = item.description || itemDef?.description || '普通道具';
+                      return (
+                        <div key={item.id} className="tooltip-wrap" onClick={() => {
+                          if (item.type === 'potion' || item.type === 'consumable') {
+                            setBatchUseItem(item);
+                            setBatchAmount(1);
+                          }
+                        }}>
+                          <div className={`inv-slot ${(item.type === 'potion' || item.type === 'consumable') ? 'cursor-pointer hover:ring-2 hover:ring-game-accent/50' : 'opacity-80'}`}>
+                            <span className="text-2xl">{itemDef?.icon ?? item.icon}</span>
+                            <span className="inv-qty">×{item.quantity}</span>
+                          </div>
+                          <div className="tooltip-text">
+                            <div className="font-bold">{item.name}</div>
+                            <div className="text-gray-400 text-[11px]">{description}</div>
+                            {(item.type === 'potion' || item.type === 'consumable') && <div className="mt-1 text-[10px] text-game-accent font-bold">點擊使用 / 批次使用</div>}
+                          </div>
                         </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Batch Use Modal */}
+              {batchUseItem && (
+                <div className="fixed inset-0 z-[3000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm anim-fade-in">
+                  <div className="glass-panel w-full max-w-xs rounded-3xl p-6 border border-white/20 shadow-2xl scale-110">
+                    <h3 className="text-lg font-bold mb-4 flex items-center gap-2">使用道具</h3>
+                    <div className="flex items-center gap-4 mb-6 bg-white/5 p-4 rounded-2xl border border-white/5">
+                      <div className="text-4xl">{batchUseItem.icon}</div>
+                      <div>
+                        <div className="font-bold text-white">{batchUseItem.name}</div>
+                        <div className="text-[10px] text-gray-400">目前持有: {batchUseItem.quantity}</div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div>
+                        <div className="flex justify-between text-xs text-gray-400 mb-2">
+                          <span>選擇數量</span>
+                          <span className="text-game-accent font-bold">{batchAmount} / {batchUseItem.quantity}</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="1"
+                          max={batchUseItem.quantity}
+                          value={batchAmount}
+                          onChange={(e) => setBatchAmount(parseInt(e.target.value))}
+                          className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-game-accent"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
                         <button
-                          onClick={() => handleSellItem(item)}
-                          className="px-4 py-2 bg-amber-600/20 hover:bg-amber-600 text-amber-400 hover:text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border border-amber-500/20"
+                          onClick={() => setBatchUseItem(null)}
+                          className="py-3 rounded-xl bg-white/5 hover:bg-white/10 text-gray-400 font-bold text-sm transition-all"
                         >
-                          <span className="font-mono">{sellPrice}</span> 金幣 販售
+                          取消
+                        </button>
+                        <button
+                          onClick={handleBatchUseItem}
+                          className="py-3 rounded-xl bg-gradient-to-r from-game-accent to-indigo-500 text-white font-bold text-sm shadow-lg shadow-game-accent/20 hover:scale-[1.02] active:scale-95 transition-all"
+                        >
+                          確認使用
                         </button>
                       </div>
-                    );
-                  })
-                )}
-              </div>
-
-              <button
-                onClick={async () => {
-                  setIsMerchantOpen(false);
-                  if (activeMerchantPoiRef.current) {
-                    const poiId = activeMerchantPoiRef.current;
-                    await supabase.rpc('resolve_poi_combat', { p_poi_id: poiId, p_win: true });
-                    setPois(prev => prev.filter(p => p.id !== poiId));
-                    activeMerchantPoiRef.current = null;
-                  }
-                }}
-                className="w-full mt-6 py-3.5 rounded-2xl bg-white/5 hover:bg-white/10 text-white font-bold transition-all border border-white/10 active:scale-95"
-              >
-                結束交易
-              </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
-        )}
+          )
+        }
+
+        {/* Combat Overlay */}
+        {
+          isCombatAction && currentEnemy && (
+            <CombatScreen
+              player={{
+                ...player,
+                attack: effectiveAtk,
+                // Rainy slightly lowers player defense, unless resistant
+                defense: (weather === 'rainy' && !hasWeatherResistance('rainy')) ? Math.max(0, effectiveDef - 2) : effectiveDef,
+                maxHp: effectiveMaxHp,
+                heal: effectiveHeal
+              }}
+              enemy={currentEnemy}
+              weather={weather}
+              hasWeatherResistance={hasWeatherResistance}
+              isMinimized={isCombatMinimized}
+              onMaximize={() => setActiveTab('explore')}
+              onMinimize={() => setIsCombatMinimized(true)}
+              onWin={(exp: number, gold: number, skill?: Skill, loot?: GameItem[], eq?: Equipment, finalHp?: number, finalMp?: number) => {
+                handleCombatWin(exp, gold, skill, loot, eq, finalHp, finalMp);
+              }}
+              onLose={(finalHp?: number, finalMp?: number) => {
+                handleCombatLose(finalHp, finalMp);
+              }}
+              onFlee={() => { setIsCombatAction(false); setAutoExplore(false); }}
+              autoExplore={autoExplore}
+              onAutoHeal={() => {
+                const pot = player.items.find(i => i.type === 'potion' && i.id !== 'item_revive_pot');
+                if (pot) useItem(pot, true);
+              }}
+              onRevive={() => {
+                const revivePot = player.items.find(i => i.id === 'item_revive_pot');
+                if (revivePot) useItem(revivePot, true);
+              }}
+              onUseItem={(it: GameItem) => useItem(it, true)}
+            />
+          )
+        }
+
+        {/* Merchant Shop Overlay */}
+        {
+          isMerchantOpen && (
+            <div className="absolute inset-0 z-[2500] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm anim-fade-in-up">
+              <div className="glass-panel w-full max-w-md rounded-3xl p-6 border border-amber-500/30 shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
+                <div className="flex justify-between items-center mb-6">
+                  <div>
+                    <h3 className="text-xl font-black text-amber-400 flex items-center gap-2">👳‍♂️ 流浪商人商店</h3>
+                    <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-1">珍稀物資收購中</p>
+                  </div>
+                  <button onClick={async () => {
+                    setIsMerchantOpen(false);
+                    if (activeMerchantPoiRef.current) {
+                      const poiId = activeMerchantPoiRef.current;
+                      await supabase.rpc('resolve_poi_combat', { p_poi_id: poiId, p_win: true });
+                      setPois(prev => prev.filter(p => p.id !== poiId));
+                      activeMerchantPoiRef.current = null;
+                    }
+                  }} className="p-2 rounded-xl bg-white/5 hover:bg-white/10 transition-colors">
+                    <X size={20} />
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2 bg-amber-500/10 p-3 rounded-2xl border border-amber-500/20 mb-4">
+                  <div className="text-2xl">💰</div>
+                  <div>
+                    <div className="text-[10px] text-amber-400 font-bold">你的資金</div>
+                    <div className="text-lg font-mono font-bold">{Math.floor(player.gold)} <span className="text-xs font-sans">金幣</span></div>
+                  </div>
+                </div>
+
+                <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+                  <p className="text-xs font-bold text-gray-400 mb-2 px-1">你可以販售以下獲得的物品：</p>
+                  {player.items.length === 0 ? (
+                    <div className="text-center py-12 text-gray-500 italic text-sm">背包空空如也...</div>
+                  ) : (
+                    player.items.map(item => {
+                      let sellPrice = 10;
+                      if (item.type === 'gem') sellPrice = 200;
+                      if (item.type === 'material') sellPrice = 15;
+                      if (item.type === 'potion') sellPrice = 50;
+                      if (item.id === 'item_revive_pot') sellPrice = 500;
+
+                      return (
+                        <div key={item.id} className="flex items-center gap-3 bg-white/5 p-3 rounded-2xl border border-white/5 hover:bg-white/10 transition-all group">
+                          <div className="text-3xl bg-white/5 w-12 h-12 rounded-xl flex items-center justify-center border border-white/10">{ITEM_DATABASE.find(i => i.id === item.id)?.icon ?? item.icon}</div>
+                          <div className="flex-1">
+                            <div className="font-bold text-sm">{item.name}</div>
+                            <div className="text-[10px] text-gray-500">持有: {item.quantity}</div>
+                          </div>
+                          <button
+                            onClick={() => handleSellItem(item)}
+                            className="px-4 py-2 bg-amber-600/20 hover:bg-amber-600 text-amber-400 hover:text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border border-amber-500/20"
+                          >
+                            <span className="font-mono">{sellPrice}</span> 金幣 販售
+                          </button>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+
+                <button
+                  onClick={async () => {
+                    setIsMerchantOpen(false);
+                    if (activeMerchantPoiRef.current) {
+                      const poiId = activeMerchantPoiRef.current;
+                      await supabase.rpc('resolve_poi_combat', { p_poi_id: poiId, p_win: true });
+                      setPois(prev => prev.filter(p => p.id !== poiId));
+                      activeMerchantPoiRef.current = null;
+                    }
+                  }}
+                  className="w-full mt-6 py-3.5 rounded-2xl bg-white/5 hover:bg-white/10 text-white font-bold transition-all border border-white/10 active:scale-95"
+                >
+                  結束交易
+                </button>
+              </div>
+            </div>
+          )
+        }
 
         {/* Town Overlay */}
-        {inTown && (
-          <TownScreen
-            town={inTown}
-            player={player!}
-            userId={session.user.id}
-            onLeave={() => { setInTown(null); setInitialFacility(null); }}
-            onCraftAlchemy={handleCraftAlchemy}
-            onCraftEquipment={handleCraftEquipment}
-            onTravel={handleTravel}
-            onSellEquipment={handleSellEquipment}
-            forgingRecipeId={forgingRecipeId}
-            initialFacility={initialFacility}
-          />
-        )}
-      </div>
+        {
+          inTown && (
+            <TownScreen
+              town={inTown}
+              player={player!}
+              userId={session.user.id}
+              onLeave={() => { setInTown(null); setInitialFacility(null); }}
+              onCraftAlchemy={handleCraftAlchemy}
+              onCraftEquipment={handleCraftEquipment}
+              onTravel={handleTravel}
+              onSellEquipment={handleSellEquipment}
+              forgingRecipeId={forgingRecipeId}
+              initialFacility={initialFacility}
+            />
+          )
+        }
+      </div >
 
       {/* ═══════════ BOTTOM NAV ═══════════ */}
-      <div className="glass-panel px-2 py-2 flex justify-around items-center z-[1100]">
-        {[
-          { key: 'explore', icon: <Compass size={22} />, label: '探索' },
-          {
-            key: 'quests', icon: (
-              <div className="relative">
-                <ScrollText size={22} />
-                {hasQuestReward && (
-                  <span className="absolute -top-1 -right-1 flex h-3 w-3 items-center justify-center">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500 border border-black/50 text-[7px] font-black text-white items-center justify-center leading-none">!</span>
-                  </span>
-                )}
+      < div className="glass-panel px-2 py-2 flex justify-around items-center z-[1100]" >
+        {
+          [
+            { key: 'explore', icon: <Compass size={22} />, label: '探索' },
+            {
+              key: 'quests', icon: (
+                <div className="relative">
+                  <ScrollText size={22} />
+                  {hasQuestReward && (
+                    <span className="absolute -top-1 -right-1 flex h-3 w-3 items-center justify-center">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500 border border-black/50 text-[7px] font-black text-white items-center justify-center leading-none">!</span>
+                    </span>
+                  )}
+                </div>
+              ), label: '任務'
+            },
+            { key: 'partners', icon: <Users size={22} />, label: '夥伴' },
+            { key: 'home', icon: <Home size={22} />, label: '家園' },
+            { key: 'bag', icon: <Package size={22} />, label: '行囊' },
+          ].map(tab => (
+            <button key={tab.key}
+              onClick={() => {
+                setActiveTab(tab.key);
+                if (tab.key === 'quests') {
+                  // We'll re-check inside the panel, or we can leave it for now
+                }
+              }}
+              className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all ${activeTab === tab.key ? 'text-game-accent bg-game-accent/10 scale-105' : 'text-gray-500 hover:text-gray-300'}`}>
+              <div className={`transition-transform duration-300 ${activeTab === tab.key ? '-translate-y-1' : ''}`}>
+                {tab.icon}
               </div>
-            ), label: '任務'
-          },
-          { key: 'partners', icon: <Users size={22} />, label: '夥伴' },
-          { key: 'home', icon: <Home size={22} />, label: '家園' },
-          { key: 'bag', icon: <Package size={22} />, label: '行囊' },
-        ].map(tab => (
-          <button key={tab.key}
-            onClick={() => {
-              setActiveTab(tab.key);
-              if (tab.key === 'quests') {
-                // We'll re-check inside the panel, or we can leave it for now
-              }
-            }}
-            className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all ${activeTab === tab.key ? 'text-game-accent bg-game-accent/10 scale-105' : 'text-gray-500 hover:text-gray-300'}`}>
-            <div className={`transition-transform duration-300 ${activeTab === tab.key ? '-translate-y-1' : ''}`}>
-              {tab.icon}
-            </div>
-            <span className="text-[10px] font-medium">{tab.label}</span>
-          </button>
-        ))}
-      </div>
+              <span className="text-[10px] font-medium">{tab.label}</span>
+            </button>
+          ))
+        }
+      </div >
       {/* Onboarding Welcome Modal */}
-      {showOnboarding && (
-        <div className="fixed inset-0 z-[5000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm anim-fade-in">
-          <div className="glass-panel w-full max-w-lg rounded-[2.5rem] p-8 md:p-10 border border-white/20 shadow-2xl relative overflow-hidden anim-scale-in">
-            {/* Background Accent */}
-            <div className="absolute -right-20 -top-20 w-64 h-64 bg-game-accent/10 rounded-full blur-3xl" />
-            <div className="absolute -left-20 -bottom-20 w-64 h-64 bg-game-gold/10 rounded-full blur-3xl" />
+      {
+        showOnboarding && (
+          <div className="fixed inset-0 z-[5000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm anim-fade-in">
+            <div className="glass-panel w-full max-w-lg rounded-[2.5rem] p-8 md:p-10 border border-white/20 shadow-2xl relative overflow-hidden anim-scale-in">
+              {/* Background Accent */}
+              <div className="absolute -right-20 -top-20 w-64 h-64 bg-game-accent/10 rounded-full blur-3xl" />
+              <div className="absolute -left-20 -bottom-20 w-64 h-64 bg-game-gold/10 rounded-full blur-3xl" />
 
-            <div className="relative">
-              <div className="flex justify-center mb-6">
-                <div className="w-20 h-20 bg-gradient-to-br from-game-accent to-indigo-600 rounded-3xl flex items-center justify-center shadow-lg shadow-game-accent/20 rotate-3">
-                  <Compass size={44} className="text-white animate-pulse" />
+              <div className="relative">
+                <div className="flex justify-center mb-6">
+                  <div className="w-20 h-20 bg-gradient-to-br from-game-accent to-indigo-600 rounded-3xl flex items-center justify-center shadow-lg shadow-game-accent/20 rotate-3">
+                    <Compass size={44} className="text-white animate-pulse" />
+                  </div>
                 </div>
+
+                <h2 className="text-3xl font-black text-white text-center mb-2 italic">✨ 歡迎來到《浪跡戰域》 ✨</h2>
+                <p className="text-gray-400 text-center text-sm mb-8 leading-relaxed">
+                  在這裡，現實與魔幻的地貌交錯。你將扮演一名失去記憶的冒險者，在這個以真實地理為藍本的奇幻島嶼上展開史詩旅程！
+                </p>
+
+                <div className="space-y-5 mb-10 text-sm">
+                  <div className="flex gap-4 group">
+                    <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center flex-shrink-0 group-hover:bg-game-accent/20 transition-colors">
+                      <MapPin size={20} className="text-game-accent" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-white mb-0.5">🌍 探索與生存</h4>
+                      <p className="text-gray-400 leading-snug">點擊地圖在地圖上移動。靠近標記去搜括寶藏或挑戰魔物獲取經驗金幣！</p>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-4 group">
+                    <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center flex-shrink-0 group-hover:bg-game-gold/20 transition-colors">
+                      <Sword size={20} className="text-game-gold" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-white mb-0.5">⚒️ 資源與鍛造</h4>
+                      <p className="text-gray-400 leading-snug">收集的素材可回城鎮進行鍛造。**每個城市都有獨特專屬的夢幻裝備！**</p>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-4 group">
+                    <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center flex-shrink-0 group-hover:bg-sky-400/20 transition-colors">
+                      <TrainFront size={20} className="text-sky-400" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-white mb-0.5">🚂 城市鐵路</h4>
+                      <p className="text-gray-400 leading-snug">前往各大城鎮的「火車站」，支付金幣即可快速且精準地跨城市移動！</p>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-4 group">
+                    <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center flex-shrink-0 group-hover:bg-amber-500/20 transition-colors">
+                      <Users size={20} className="text-amber-500" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-white mb-0.5">🤝 命運契約</h4>
+                      <p className="text-gray-400 leading-snug">遭遇強敵時，可於選單進行「命運契約」，招募靈魂夥伴並肩作戰！</p>
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleCloseOnboarding}
+                  className="w-full bg-gradient-to-r from-game-accent to-indigo-600 hover:from-game-accent/80 hover:to-indigo-500 text-white font-black py-4 rounded-2xl transition-all shadow-xl shadow-game-accent/20 active:scale-[0.98] flex items-center justify-center gap-2 group"
+                >
+                  準備好開始你的傳奇了嗎？
+                  <ChevronRight size={20} className="group-hover:translate-x-1 transition-transform" />
+                </button>
               </div>
-
-              <h2 className="text-3xl font-black text-white text-center mb-2 italic">✨ 歡迎來到《浪跡戰域》 ✨</h2>
-              <p className="text-gray-400 text-center text-sm mb-8 leading-relaxed">
-                在這裡，現實與魔幻的地貌交錯。你將扮演一名失去記憶的冒險者，在這個以真實地理為藍本的奇幻島嶼上展開史詩旅程！
-              </p>
-
-              <div className="space-y-5 mb-10 text-sm">
-                <div className="flex gap-4 group">
-                  <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center flex-shrink-0 group-hover:bg-game-accent/20 transition-colors">
-                    <MapPin size={20} className="text-game-accent" />
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-white mb-0.5">🌍 探索與生存</h4>
-                    <p className="text-gray-400 leading-snug">點擊地圖在地圖上移動。靠近標記去搜括寶藏或挑戰魔物獲取經驗金幣！</p>
-                  </div>
-                </div>
-
-                <div className="flex gap-4 group">
-                  <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center flex-shrink-0 group-hover:bg-game-gold/20 transition-colors">
-                    <Sword size={20} className="text-game-gold" />
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-white mb-0.5">⚒️ 資源與鍛造</h4>
-                    <p className="text-gray-400 leading-snug">收集的素材可回城鎮進行鍛造。**每個城市都有獨特專屬的夢幻裝備！**</p>
-                  </div>
-                </div>
-
-                <div className="flex gap-4 group">
-                  <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center flex-shrink-0 group-hover:bg-sky-400/20 transition-colors">
-                    <TrainFront size={20} className="text-sky-400" />
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-white mb-0.5">🚂 城市鐵路</h4>
-                    <p className="text-gray-400 leading-snug">前往各大城鎮的「火車站」，支付金幣即可快速且精準地跨城市移動！</p>
-                  </div>
-                </div>
-
-                <div className="flex gap-4 group">
-                  <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center flex-shrink-0 group-hover:bg-amber-500/20 transition-colors">
-                    <Users size={20} className="text-amber-500" />
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-white mb-0.5">🤝 命運契約</h4>
-                    <p className="text-gray-400 leading-snug">遭遇強敵時，可於選單進行「命運契約」，招募靈魂夥伴並肩作戰！</p>
-                  </div>
-                </div>
-              </div>
-
-              <button
-                onClick={handleCloseOnboarding}
-                className="w-full bg-gradient-to-r from-game-accent to-indigo-600 hover:from-game-accent/80 hover:to-indigo-500 text-white font-black py-4 rounded-2xl transition-all shadow-xl shadow-game-accent/20 active:scale-[0.98] flex items-center justify-center gap-2 group"
-              >
-                準備好開始你的傳奇了嗎？
-                <ChevronRight size={20} className="group-hover:translate-x-1 transition-transform" />
-              </button>
             </div>
           </div>
-        </div>
-      )}
-    </div>
+        )
+      }
+    </div >
   );
 };
 
