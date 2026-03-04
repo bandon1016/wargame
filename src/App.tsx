@@ -1577,32 +1577,6 @@ const App: React.FC = () => {
     isRpcPendingRef.current = false;
   }, [player, currentEnemy, fetchPois, session, saveProfile, mapServerProfile]);
 
-  const togglePartnerDeployment = useCallback((partnerId: string) => {
-    if (isCombatAction) {
-      alert('戰鬥中無法變更陣容配置！');
-      return;
-    }
-    setPlayer(prev => {
-      if (!prev) return prev;
-      const partner = prev.partners.find(p => p.id === partnerId);
-      if (!partner) return prev;
-
-      const isCurrentlyDeployed = partner.isDeployed;
-      const deployedCount = prev.partners.filter(p => p.isDeployed).length;
-
-      if (!isCurrentlyDeployed && deployedCount >= 5) {
-        alert('最多只能派遣 5 位夥伴上陣！');
-        return prev;
-      }
-
-      const nextPartners = prev.partners.map(p =>
-        p.id === partnerId ? { ...p, isDeployed: !p.isDeployed } : p
-      );
-      const nextState = { ...prev, partners: nextPartners };
-      saveProfile(nextState);
-      return nextState;
-    });
-  }, [isCombatAction, saveProfile]);
 
   // ─── Weather Effects & Encounter Rate Logic ───
 
