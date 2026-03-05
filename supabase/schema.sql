@@ -239,6 +239,14 @@ declare
   v_db_updated_at_ms bigint;
   v_dist_deg double precision;
   v_meters int;
+  v_gold_produced float8 := 0;
+  v_mat_produced float8 := 0;
+  v_b jsonb;
+  v_p_id text;
+  v_p jsonb;
+  v_g_pm float8 := 0;
+  v_m_pm float8 := 0;
+  v_min float8;
 begin
   -- 1. 取得現有資料
   select * into v_profile from public.profiles where id = auth.uid();
@@ -279,14 +287,56 @@ begin
     return v_profile;
   end if;
 
-  -- 3.5 自動計算移動距離並更新任務進度
-  -- 以經緯度差估算公尺 (1度約 111km)
+  -- 3.5 自動計算移動距離 (Walk Quest)
   v_dist_deg := sqrt(pow(p_lat - v_profile.current_location_lat, 2) + pow(p_lng - v_profile.current_location_lng, 2));
   v_meters := floor(v_dist_deg * 111000);
 
-  -- 安全校驗：僅在移動距離合理時(2m ~ 5km)更新任務，避免 GPS 跳躍或瞬移
   IF v_meters > 2 AND v_meters < 5000 THEN
     PERFORM public.increment_walk_quests(auth.uid(), v_meters, p_lat, p_lng);
+  END IF;
+
+  -- 3.6 自動計算建築產能 (離線與掛網收益)
+  -- 以分鐘為單位計算經過時間，最大限制 24 小時 (1440 分鐘)
+  v_min := EXTRACT(EPOCH FROM (now() - v_profile.updated_at)) / 60.0;
+  IF v_min > 1440 THEN v_min := 1440; END IF;
+
+  IF v_min > 0.001 THEN
+    FOR v_b IN SELECT * FROM jsonb_array_elements(v_profile.buildings)
+    LOOP
+      DECLARE
+        v_gb float8 := 0; v_mb float8 := 0;
+        v_bt text := v_b->>'type'; v_bn text := v_b->>'name';
+        v_bp float8 := (v_b->>'baseProduction')::float8;
+      BEGIN
+        FOR v_p_id IN SELECT * FROM jsonb_array_elements_text(COALESCE(v_b->'assignedPartners', '[]'::jsonb))
+        LOOP
+          -- 從現有夥伴 JSON 中尋找配置的夥伴數據以計算職業加成
+          SELECT pt INTO v_p FROM jsonb_array_elements(v_profile.partners) pt WHERE pt->>'id' = v_p_id;
+          IF v_p IS NOT NULL THEN
+            DECLARE
+              v_rar int := (v_p->>'rarity')::int;
+              v_rol text := v_p->>'role';
+              v_m float8 := CASE WHEN v_rar = 5 THEN 0.05 WHEN v_rar = 4 THEN 0.03 ELSE 0.02 END;
+            BEGIN
+              IF v_rol = 'tank' AND (v_bt = 'material_camp' OR v_bn LIKE '%營地%' OR v_bn LIKE '%工坊%') THEN
+                v_mb := v_mb + v_m;
+              ELSIF v_rol = 'healer' AND v_bt = 'gold_mine' THEN
+                v_gb := v_gb + v_m;
+              END IF;
+            END;
+          END IF;
+        END LOOP;
+        
+        IF v_bt = 'gold_mine' THEN 
+            v_g_pm := v_g_pm + (v_bp * (1 + v_gb));
+        ELSIF v_bt = 'material_camp' THEN 
+            v_m_pm := v_m_pm + (v_bp * (1 + v_mb));
+        END IF;
+      END;
+    END LOOP;
+    
+    v_gold_produced := v_min * v_g_pm;
+    v_mat_produced := v_min * v_m_pm;
   END IF;
 
   -- 4. 正常更新資料
@@ -305,11 +355,11 @@ begin
     walk_start_lng = CASE WHEN p_walk_data ? 'start_lng' THEN (p_walk_data->>'start_lng')::double precision ELSE walk_start_lng END,
     walk_started_at = CASE WHEN p_walk_data ? 'started_at' THEN (p_walk_data->>'started_at')::timestamp with time zone ELSE walk_started_at END,
     walk_duration_seconds = CASE WHEN p_walk_data ? 'duration' THEN (p_walk_data->>'duration')::double precision ELSE walk_duration_seconds END,
-    active_god_id = p_active_god_id,
+    active_god_id = COALESCE(p_active_god_id, active_god_id),
     partners = COALESCE(p_partners, partners),
     buildings = COALESCE(p_buildings, buildings),
-    gold = COALESCE(p_gold, gold),
-    base_materials = COALESCE(p_base_materials, base_materials),
+    gold = COALESCE(p_gold, gold + v_gold_produced),
+    base_materials = COALESCE(p_base_materials, base_materials + v_mat_produced),
     equipment = COALESCE(p_equipment, equipment),
     items = COALESCE(p_items, items),
     skills = COALESCE(p_skills, skills),

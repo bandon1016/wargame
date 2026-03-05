@@ -1023,8 +1023,8 @@ const App: React.FC = () => {
       p_active_god_id: p.activeGodId,
       p_partners: p.partners,
       p_buildings: p.buildings,
-      p_gold: p.gold,
-      p_base_materials: p.baseMaterials,
+      p_gold: null, // Fully managed by server
+      p_base_materials: null, // Fully managed by server
       p_equipment: p.equipment,
       p_items: p.items,
       p_skills: null, // Fully managed by server RPCs (secure_upgrade_skill, secure_resolve_combat) to prevent overwrite race conditions
@@ -1034,11 +1034,11 @@ const App: React.FC = () => {
       p_equipped_helmet: p.equippedHelmet,
       p_equipped_boots: p.equippedBoots,
       p_equipped_accessory: p.equippedAccessory,
-      p_ling_qi: p.lingQi,
-      p_tech_fragments: p.techFragments,
-      p_incense: p.incense,
-      p_salt_crystals: p.saltCrystals,
-      p_premium_gems: p.premiumGems,
+      p_ling_qi: null, // Fully managed by server
+      p_tech_fragments: null, // Fully managed by server
+      p_incense: null, // Fully managed by server
+      p_salt_crystals: null, // Fully managed by server
+      p_premium_gems: null, // Fully managed by server
       p_last_updated_at: p.updatedAt
     });
 
@@ -1107,9 +1107,9 @@ const App: React.FC = () => {
           });
 
           if (b.type === 'gold_mine') {
-            dg += (b.baseProduction * (1 + goldBonus)) / 60;
+            dg += (b.baseProduction * (1 + goldBonus));
           } else if (b.type === 'material_camp') {
-            dm += (b.baseProduction * (1 + matBonus)) / 60;
+            dm += (b.baseProduction * (1 + matBonus));
           }
         });
 
@@ -1118,7 +1118,7 @@ const App: React.FC = () => {
         }
         return { ...p, gold: p.gold + dg, baseMaterials: p.baseMaterials + dm };
       });
-    }, 1000);
+    }, 60000);
     return () => window.clearInterval(t);
   }, []);
 
