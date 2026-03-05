@@ -1518,9 +1518,11 @@ const App: React.FC = () => {
       eAtk = Math.floor(baseAtk);
       eDef = Math.floor(baseDef);
     } else {
-      hp = Math.floor((template.baseHp + lv * 8) * statMultiplier);
-      eAtk = Math.floor((template.baseAtk + lv * 2) * statMultiplier);
-      eDef = Math.floor((template.baseDef + Math.floor(lv * 0.8)) * statMultiplier);
+      // [FIX] 怪物強度純由玩家等級決定，不受怪物類型模板影響
+      // 怪物類型（史萊姆、黑龍等）只影響外觀與元素，不影響強度
+      hp = Math.floor(lv * 12 * statMultiplier);
+      eAtk = Math.floor(lv * 2.5 * statMultiplier);
+      eDef = Math.floor(lv * 1.0 * statMultiplier);
     }
 
     // Calculate the actual monster level for prefix naming
