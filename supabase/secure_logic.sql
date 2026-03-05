@@ -480,13 +480,13 @@ BEGIN
         updated_at=now(),
         items = (
             SELECT jsonb_agg(row_to_json(m)) FROM (
-                SELECT id, name, icon, type, description, SUM(quantity)::int as quantity FROM (
+                SELECT id, MAX(name) as name, MAX(icon) as icon, MAX(type) as type, MAX(description) as description, SUM(quantity)::int as quantity FROM (
                     SELECT (elem->>'id') as id, (elem->>'name') as name, (elem->>'icon') as icon, (elem->>'type') as type, (elem->>'description') as description, (elem->>'quantity')::int as quantity
                     FROM jsonb_array_elements(COALESCE(v_p.items, '[]'::jsonb) || v_loots) AS elem
                     WHERE (elem->>'id') NOT IN ('currency_incense', 'p_exp') 
                       AND (elem->>'id') NOT LIKE 'frag_%' 
                       AND (elem->>'id') NOT LIKE 'skill_%'
-                ) t GROUP BY id, name, icon, type, description
+                ) t GROUP BY id
             ) m
         )
     WHERE id = v_u;
@@ -997,61 +997,16 @@ BEGIN
     SET 
         gold = gold - v_gold_cost,
         items = (
-            -- 1. Deduct mats from inventory
-            -- 2. Add target item
-            -- For simplicity in SL, we assume the client syncs the remainder, 
-            -- but for TRUE SECURITY, we should do the subtraction here.
-            -- Let's do it right.
-            WITH sub AS (
-                SELECT 
-                    (elem->>'id') as id,
-                    (elem->>'name') as name,
-                    (elem->>'icon') as icon,
-                    (elem->>'type') as type,
-                    (elem->>'quantity')::integer as q
-                FROM jsonb_array_elements(v_profile.items) AS elem
-            ),
-            reqs AS (
-                SELECT (r->>'id') as id, (r->>'q')::integer as q
-                FROM jsonb_array_elements(v_recipe->'mats') AS r
-            ),
-            deducted AS (
-                SELECT 
-                    sub.id, sub.name, sub.icon, sub.type,
-                    sub.q - COALESCE(reqs.q, 0) as new_q
-                FROM sub
-                LEFT JOIN reqs ON sub.id = reqs.id
-            ),
-            final_list AS (
-                SELECT * FROM deducted WHERE new_q > 0
-                UNION ALL
-                -- Add target item (placeholder values, in real app these should come from ITEM_DATABASE)
-                SELECT 
-                    v_recipe->>'target', 
-                    COALESCE(v_recipe->>'name', '製作道具'), 
-                    COALESCE(v_recipe->>'icon', '🧪'), 
-                    COALESCE(v_recipe->>'type', 'potion'), 
-                    1
-                WHERE NOT EXISTS (SELECT 1 FROM deducted WHERE id = v_recipe->>'target')
-            ),
-            updated_list AS (
-                SELECT 
-                    id, name, icon, type,
-                    CASE WHEN id = v_recipe->>'target' THEN new_q + 1 ELSE new_q END as quantity
-                FROM deducted
-                WHERE id IN (SELECT id FROM deducted WHERE new_q > 0 OR id = v_recipe->>'target')
-            )
-            -- Simpler path: let's just do a manual merge logic for now to keep the code readable.
-            -- Actually, let's use the GROUP BY approach from secure_resolve_combat.
             SELECT jsonb_agg(row_to_json(m))
             FROM (
-                SELECT id, name, icon, type, description, SUM(quantity)::int as quantity
+                SELECT id, MAX(name) as name, MAX(icon) as icon, MAX(type) as type, MAX(description) as description, SUM(quantity)::int as quantity
                 FROM (
-                    -- Old items with negative quantities for mats
+                    -- Old items
                     SELECT (e->>'id') as id, (e->>'name') as name, (e->>'icon') as icon, (e->>'type') as type, (e->>'description') as description, (e->>'quantity')::int as quantity 
-                    FROM jsonb_array_elements(v_profile.items) AS e
+                    FROM jsonb_array_elements(COALESCE(v_profile.items, '[]'::jsonb)) AS e
                     UNION ALL
-                    SELECT (r->>'id'), 'mats', '', '', '', -(r->>'q')::int 
+                    -- Deduct mats (properties as NULL to let MAX choose existing ones)
+                    SELECT (r->>'id'), NULL, NULL, NULL, NULL, -(r->>'q')::int 
                     FROM jsonb_array_elements(v_recipe->'mats') AS r
                     UNION ALL
                     -- Add target item (quantity 1)
@@ -1063,7 +1018,7 @@ BEGIN
                         COALESCE(v_recipe->>'desc', '煉金產出的道具'), 
                         1
                 ) t
-                GROUP BY id, name, icon, type, description
+                GROUP BY id
                 HAVING SUM(quantity) > 0
             ) m
         ),
@@ -1148,15 +1103,15 @@ BEGIN
         items = (
             SELECT jsonb_agg(row_to_json(m))
             FROM (
-                SELECT id, name, icon, type, description, SUM(quantity)::int as quantity
+                SELECT id, MAX(name) as name, MAX(icon) as icon, MAX(type) as type, MAX(description) as description, SUM(quantity)::int as quantity
                 FROM (
                     SELECT (e->>'id') as id, (e->>'name') as name, (e->>'icon') as icon, (e->>'type') as type, (e->>'description') as description, (e->>'quantity')::int as quantity 
                     FROM jsonb_array_elements(v_profile.items) AS e
                     UNION ALL
-                    SELECT (r->>'id'), 'mats', '', '', '', -(r->>'q')::int 
+                    SELECT (r->>'id'), NULL, NULL, NULL, NULL, -(r->>'q')::int 
                     FROM jsonb_array_elements(v_recipe->'mats') AS r
                 ) t
-                GROUP BY id, name, icon, type, description
+                GROUP BY id
                 HAVING SUM(quantity) > 0
             ) m
         ),

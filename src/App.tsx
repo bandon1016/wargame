@@ -1084,6 +1084,15 @@ const App: React.FC = () => {
     saveProfileRef.current = saveProfile;
   }, [saveProfile]);
 
+  const immediateSaveTimerRef = React.useRef<any>(null);
+  const debouncedSaveProfile = useCallback((newState?: CharacterStats, forceLocation?: [number, number]) => {
+    if (immediateSaveTimerRef.current) clearTimeout(immediateSaveTimerRef.current);
+    immediateSaveTimerRef.current = setTimeout(() => {
+      saveProfile(newState, forceLocation);
+      immediateSaveTimerRef.current = null;
+    }, 500); // 500ms debounce for manual movement
+  }, [saveProfile]);
+
   // Resource tick
   useEffect(() => {
     const t = window.setInterval(() => {
@@ -1164,12 +1173,12 @@ const App: React.FC = () => {
 
     setPosition(p => {
       const next: [number, number] = d === 'n' ? [p[0] + s, p[1]] : d === 's' ? [p[0] - s, p[1]] : d === 'e' ? [p[0], p[1] + s] : [p[0], p[1] - s];
-      // Immediate save when manually moving to clear any active targetPosition in DB
-      saveProfileRef.current?.(undefined, next);
+      // Debounced save when manually moving
+      debouncedSaveProfile(undefined, next);
       return next;
     });
     setTargetPosition(null); // Cancel click-to-move if using D-Pad
-  }, []);
+  }, [debouncedSaveProfile]);
 
   // Keyboard Support (WASD) - Continuous Smooth Movement
   useEffect(() => {
@@ -1238,8 +1247,8 @@ const App: React.FC = () => {
     walkStartRef.current = null;
     walkStartedAtRef.current = null;
     walkDurationSecRef.current = 0;
-    // Immediate save to clear walking/targeting persistence when manual control takes over
-    saveProfileRef.current?.();
+    // Debounced save to clear walking/targeting persistence when manual control takes over
+    debouncedSaveProfile();
     if ('vibrate' in navigator) navigator.vibrate(10); // Subtle haptic feedback
   };
 
