@@ -344,7 +344,7 @@ export const CITY_QUEST_POOL: DailyQuest[] = [
 
 // ── 加值商城系統 ──────────────────────────────────────────────────
 export interface ActiveBuffs {
-    eliteEncounterExpiry?: number;  // 冥幽七里香：自動探索 5% 菁英怪
+    eliteEncounterExpiry?: number;  // 冥幽七里香：自動探索 2% 菁英怪
     hsrPassExpiry?: number;         // 高鐵通行票：火車速度 ×2
     luckyCloverExpiry?: number;     // 幸運四葉草：素材掉落率 +20%
     goddessBlessingExpiry?: number; // 女神的恩典：夥伴 EXP +20%
@@ -365,7 +365,7 @@ export interface PremiumShopItem {
 export const PREMIUM_SHOP_ITEMS: PremiumShopItem[] = [
     {
         id: 'ps_elite_lure', name: '冥幽七里香', icon: '🌸',
-        description: '使用後 24 小時內，自動探索時有 5% 機率遇到菁英怪。',
+        description: '使用後 24 小時內，自動探索時有 2% 機率遇到菁英怪。',
         price: 50, buffKey: 'eliteEncounterExpiry', durationMs: 24 * 60 * 60 * 1000,
         category: 'combat',
     },
