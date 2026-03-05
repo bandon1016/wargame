@@ -350,10 +350,10 @@ BEGIN
             END;
         END IF;
 
-        -- 5.1 通用材料掉落 (鐵礦石、藥草，各 40% 機率)
+        -- 5.1 通用材料掉落 (鐵礦石、藥草，各 15% 機率)
         DECLARE
             v_common_q int;
-            v_chance float := (CASE WHEN v_lucky_active THEN 0.48 ELSE 0.40 END);
+            v_chance float := (CASE WHEN v_lucky_active THEN 0.18 ELSE 0.15 END);
         BEGIN
             -- 鐵礦石
             IF random() < v_chance THEN
