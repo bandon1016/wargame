@@ -347,7 +347,7 @@ export interface ActiveBuffs {
     eliteEncounterExpiry?: number;  // 冥幽七里香：自動探索 5% 菁英怪
     hsrPassExpiry?: number;         // 高鐵通行票：火車速度 ×2
     luckyCloverExpiry?: number;     // 幸運四葉草：素材掉落率 +20%
-    goddessBlessingExpiry?: number; // 女神的恩典：夥伴 EXP +50%
+    goddessBlessingExpiry?: number; // 女神的恩典：夥伴 EXP +20%
     hornOfPlentyExpiry?: number;    // 豐饒角：自動探索金幣/資源 ×1~1.5
 }
 
@@ -383,7 +383,7 @@ export const PREMIUM_SHOP_ITEMS: PremiumShopItem[] = [
     },
     {
         id: 'ps_goddess_blessing', name: '女神的恩典', icon: '👼',
-        description: '使用後 24 小時內，夥伴獲得的經驗值 (EXP) 增加 50%。',
+        description: '使用後 24 小時內，夥伴獲得的經驗值 (EXP) 增加 20%。',
         price: 60, buffKey: 'goddessBlessingExpiry', durationMs: 24 * 60 * 60 * 1000,
         category: 'resource',
     },
