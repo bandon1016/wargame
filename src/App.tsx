@@ -339,6 +339,8 @@ const App: React.FC = () => {
   const isDoubleTabbedRef = React.useRef(isDoubleTabbed);
   const isRpcPendingRef = React.useRef(false); // New flag to block auto-save during RPCs
   const [isMaintenance, setIsMaintenance] = useState(false);
+  const isMaintenanceRef = React.useRef(isMaintenance);
+  useEffect(() => { isMaintenanceRef.current = isMaintenance; }, [isMaintenance]);
   useEffect(() => { isDoubleTabbedRef.current = isDoubleTabbed; }, [isDoubleTabbed]);
   const [showGuide, setShowGuide] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -657,7 +659,15 @@ const App: React.FC = () => {
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'app_settings', filter: 'key=eq.maintenance_mode' },
         (payload) => {
-          setIsMaintenance(payload.new.value === 'true');
+          const isNowMaintenance = payload.new.value === 'true';
+
+          // [FIX] 如果原本是維護中 (isMaintenanceRef 是 true)，且新值變為 false (維護結束)
+          // 則強制重新整理網頁，確保所有玩家拿到最新代碼與狀態
+          if (isMaintenanceRef.current && !isNowMaintenance) {
+            window.location.reload();
+          }
+
+          setIsMaintenance(isNowMaintenance);
         }
       )
       .on(
