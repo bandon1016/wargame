@@ -447,7 +447,16 @@ const App: React.FC = () => {
 
   // Ref to saveProfile - avoids forward-reference issues since saveProfile is declared later via useCallback
   const saveProfileRef = React.useRef<((newState?: CharacterStats, forceLocation?: [number, number]) => Promise<void>) | null>(null);
-  const lastSyncedHeavyDataRef = React.useRef<string>('');
+
+  // Track hashes for individual large collections for granular selective sync
+  const lastSyncedHashRef = React.useRef({
+    partners: '',
+    buildings: '',
+    equipment: '',
+    items: '',
+    equippedGear: '',
+    pushSettings: ''
+  });
   const lastSyncedStatusRef = React.useRef<{ lat: number, lng: number, hp: number, mp: number, ts: number }>({ lat: 0, lng: 0, hp: 0, mp: 0, ts: 0 });
 
   // Railway Animation Loop (Time-Based - cross-device safe)
@@ -1034,22 +1043,29 @@ const App: React.FC = () => {
         walk_started_at: null,
       };
 
-    // bandwidth optimization: only send heavy data if changed
-    const currentHeavyData = JSON.stringify({
-      p: p.partners,
-      b: p.buildings,
-      e: p.equipment,
-      i: p.items,
-      ew: p.equippedWeapon,
-      ea: p.equippedArmor,
-      eh: p.equippedHelmet,
-      eb: p.equippedBoots,
-      ex: p.equippedAccessory,
-      ps: p.pushSettings,
-      ag: p.activeGodId
-    });
+    // granular bandwidth optimization: send individual heavy collections only if changed
+    const currentPartnersHash = JSON.stringify(p.partners);
+    const hasPartnersChanged = currentPartnersHash !== lastSyncedHashRef.current.partners;
 
-    const hasHeavyDataChanged = currentHeavyData !== lastSyncedHeavyDataRef.current;
+    const currentBuildingsHash = JSON.stringify(p.buildings);
+    const hasBuildingsChanged = currentBuildingsHash !== lastSyncedHashRef.current.buildings;
+
+    const currentEqHash = JSON.stringify(p.equipment);
+    const hasEqChanged = currentEqHash !== lastSyncedHashRef.current.equipment;
+
+    const currentItemsHash = JSON.stringify(p.items);
+    const hasItemsChanged = currentItemsHash !== lastSyncedHashRef.current.items;
+
+    // Bundle equipped items together to simplify checking, as they are small but related
+    const currentEquippedGearHash = JSON.stringify({
+      ew: p.equippedWeapon, ea: p.equippedArmor, eh: p.equippedHelmet, eb: p.equippedBoots, ex: p.equippedAccessory, ag: p.activeGodId
+    });
+    const hasEquippedGearChanged = currentEquippedGearHash !== lastSyncedHashRef.current.equippedGear;
+
+    const currentPushSettingsHash = JSON.stringify(p.pushSettings);
+    const hasPushSettingsChanged = currentPushSettingsHash !== lastSyncedHashRef.current.pushSettings;
+
+    const hasAnyHeavyDataChanged = hasPartnersChanged || hasBuildingsChanged || hasEqChanged || hasItemsChanged || hasEquippedGearChanged || hasPushSettingsChanged;
 
     // Stationary detection & Minimal Sync Logic
     const targetLat = forceLocation ? forceLocation[0] : positionRef.current[0];
@@ -1062,14 +1078,14 @@ const App: React.FC = () => {
     const timeSinceLastSync = now - lastSyncedStatusRef.current.ts;
 
     // Skip sync if: not moved much, health didn't change, no heavy data change, AND it's been less than 60s
-    if (!hasHeavyDataChanged && dist < 0.5 && hpDiff < 1 && mpDiff < 0.1 && timeSinceLastSync < 60000 && !forceLocation) {
+    if (!hasAnyHeavyDataChanged && dist < 0.5 && hpDiff < 1 && mpDiff < 0.1 && timeSinceLastSync < 60000 && !forceLocation) {
       // console.log('Sync Suppressed: No significant changes');
       return;
     }
 
     // Determine if we can use minimal location sync or need full profile sync
     // We use full profile sync if: heavy data changed OR travel/walk data exists (to ensure complex objects are saved)
-    const needsFullSync = hasHeavyDataChanged || isCurrentlyOnTrain || isCurrentlyWalking;
+    const needsFullSync = hasAnyHeavyDataChanged || isCurrentlyOnTrain || isCurrentlyWalking;
 
     let syncResult;
     if (needsFullSync) {
@@ -1091,27 +1107,27 @@ const App: React.FC = () => {
           started_at: walkSaveData.walk_started_at,
           duration: walkDurationSecRef.current
         },
-        p_active_god_id: hasHeavyDataChanged ? p.activeGodId : null,
-        p_partners: hasHeavyDataChanged ? p.partners : null,
-        p_buildings: hasHeavyDataChanged ? p.buildings : null,
+        p_active_god_id: hasEquippedGearChanged ? p.activeGodId : null,
+        p_partners: hasPartnersChanged ? p.partners : null,
+        p_buildings: hasBuildingsChanged ? p.buildings : null,
         p_gold: null,
         p_base_materials: null,
-        p_equipment: hasHeavyDataChanged ? p.equipment : null,
-        p_items: hasHeavyDataChanged ? p.items : null,
+        p_equipment: hasEqChanged ? p.equipment : null,
+        p_items: hasItemsChanged ? p.items : null,
         p_skills: null,
         p_gods: null,
-        p_equipped_weapon: hasHeavyDataChanged ? p.equippedWeapon : null,
-        p_equipped_armor: hasHeavyDataChanged ? p.equippedArmor : null,
-        p_equipped_helmet: hasHeavyDataChanged ? p.equippedHelmet : null,
-        p_equipped_boots: hasHeavyDataChanged ? p.equippedBoots : null,
-        p_equipped_accessory: hasHeavyDataChanged ? p.equippedAccessory : null,
+        p_equipped_weapon: hasEquippedGearChanged ? p.equippedWeapon : null,
+        p_equipped_armor: hasEquippedGearChanged ? p.equippedArmor : null,
+        p_equipped_helmet: hasEquippedGearChanged ? p.equippedHelmet : null,
+        p_equipped_boots: hasEquippedGearChanged ? p.equippedBoots : null,
+        p_equipped_accessory: hasEquippedGearChanged ? p.equippedAccessory : null,
         p_ling_qi: null,
         p_tech_fragments: null,
         p_incense: null,
         p_salt_crystals: null,
         p_premium_gems: null,
         p_last_updated_at: p.updatedAt,
-        p_push_settings: hasHeavyDataChanged ? p.pushSettings : null
+        p_push_settings: hasPushSettingsChanged ? p.pushSettings : null
       });
     } else {
       syncResult = await supabase.rpc('secure_sync_location', {
@@ -1128,13 +1144,20 @@ const App: React.FC = () => {
     if (syncError) {
       console.error('Save Profile Error:', (syncError as any).message);
     } else if (_updatedProfile) {
-      if (hasHeavyDataChanged) {
-        lastSyncedHeavyDataRef.current = currentHeavyData;
+      // Update hashes if sync was full sync AND successful
+      if (needsFullSync) {
+        if (hasPartnersChanged) lastSyncedHashRef.current.partners = currentPartnersHash;
+        if (hasBuildingsChanged) lastSyncedHashRef.current.buildings = currentBuildingsHash;
+        if (hasEqChanged) lastSyncedHashRef.current.equipment = currentEqHash;
+        if (hasItemsChanged) lastSyncedHashRef.current.items = currentItemsHash;
+        if (hasEquippedGearChanged) lastSyncedHashRef.current.equippedGear = currentEquippedGearHash;
+        if (hasPushSettingsChanged) lastSyncedHashRef.current.pushSettings = currentPushSettingsHash;
       }
+
       lastSyncedStatusRef.current = { lat: targetLat, lng: targetLng, hp: p.hp, mp: p.mp, ts: now };
 
       console.log('Profile Saved:',
-        hasHeavyDataChanged ? 'Full' : (needsFullSync ? 'Selective' : 'Minimal'),
+        hasAnyHeavyDataChanged ? 'Full (Granular)' : (needsFullSync ? 'Selective' : 'Minimal'),
         timeSinceLastSync > 60000 ? '(Heartbeat)' : ''
       );
       // Sync local state with authoritative server timestamp/data
