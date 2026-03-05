@@ -114,20 +114,22 @@ export const PremiumShopModal: React.FC<PremiumShopModalProps> = ({
 
                             return (
                                 <div key={item.id} className="bg-slate-800/60 rounded-xl border border-slate-700/50 p-4 flex flex-col hover:border-indigo-500/40 hover:bg-slate-800/80 transition-all group">
-                                    <div className="flex items-start gap-4 mb-4">
-                                        <div className="w-12 h-12 bg-slate-900 rounded-xl border border-slate-700 flex items-center justify-center text-3xl shadow-inner group-hover:scale-110 transition-transform">
+                                    <div className="flex items-start gap-4 mb-4 min-h-[52px]">
+                                        <div className="w-12 h-12 bg-slate-900 shrink-0 rounded-xl border border-slate-700 flex items-center justify-center text-3xl shadow-inner group-hover:scale-110 transition-transform">
                                             {item.icon}
                                         </div>
-                                        <div className="flex-1">
-                                            <h3 className="font-bold text-slate-100">{item.name}</h3>
-                                            {activeTimeLeft ? (
-                                                <div className="inline-flex items-center gap-1.5 mt-1 px-2 py-0.5 rounded text-xs font-medium bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                                                    <span>生效中</span>
-                                                    <span>剩餘 {activeTimeLeft}</span>
-                                                </div>
-                                            ) : (
-                                                <span className="text-xs text-slate-500 block mt-1">24小時時效</span>
-                                            )}
+                                        <div className="flex-1 flex flex-col justify-center h-full">
+                                            <h3 className="font-bold text-slate-100 leading-tight">{item.name}</h3>
+                                            <div className="mt-1 h-[24px] flex items-center">
+                                                {activeTimeLeft ? (
+                                                    <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                                        <span>生效中</span>
+                                                        <span>剩餘 {activeTimeLeft}</span>
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-xs text-slate-500 block">24小時時效</span>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
 
