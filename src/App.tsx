@@ -1452,7 +1452,7 @@ const App: React.FC = () => {
     // [NEW] 修正：當七里香生效時，無論普通遇敵結果如何，都有獨立的 5% 機率強制生成菁英怪
     if (autoExplore && playerRef.current?.activeBuffs?.eliteEncounterExpiry) {
       if (Date.now() < playerRef.current.activeBuffs.eliteEncounterExpiry) {
-        if (Math.random() < 0.05) {
+        if (Math.random() < 0.02) {
           currentIsElite = true;
         }
       }
