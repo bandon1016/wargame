@@ -17,6 +17,9 @@ Before making any modifications or adjustments, please follow the following docu
 
 5. For logic related to the influence of companions, homes, and character strength, please refer to `character_mechanics.md`.
 
+6. For technical details regarding performance adjustments, please refer to technical_specs.md
+
+
 For local automated development testing, the account is werboy5566@gmail.com, and the password is 5530021.
 
 
@@ -29,5 +32,7 @@ For local automated development testing, the account is werboy5566@gmail.com, an
 3. 有關財貨的相關設定，請參考 currency_mechanics.md
 4. 有關遊戲內城市設定，請參考 city_mechanics.md
 5. 有關夥伴、家園、角色強度影響力的相關邏輯，請參考 character_mechanics.md
+6. 有關效能調整的技術細節，請參考 technical_specs.md
+
 
 如有要執行本地自動開發測試，帳號為werboy5566@gmail.com，密碼為5530021

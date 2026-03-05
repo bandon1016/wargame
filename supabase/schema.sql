@@ -441,3 +441,69 @@ begin
   );
 end;
 $$;
+
+-- 8. RPC: 極簡位置同步 (針對單純位移優化 Payload)
+create or replace function public.secure_sync_location(
+  p_lat double precision,
+  p_lng double precision,
+  p_hp integer,
+  p_mp double precision,
+  p_last_updated_at bigint default null
+)
+returns public.profiles
+language plpgsql
+security definer
+as $$
+declare
+  v_profile public.profiles;
+  v_db_updated_at_ms bigint;
+  v_dist_deg double precision;
+  v_meters int;
+begin
+  -- 1. 取得現有資料
+  select * into v_profile from public.profiles where id = auth.uid();
+  
+  -- 2. 基本地理校驗
+  if p_lat < 21.0 or p_lat > 26.0 or p_lng < 119.0 or p_lng > 123.0 then
+    raise exception '非法地理位置';
+  end if;
+
+  -- 3. 版本檢核 (Optimistic Locking)
+  v_db_updated_at_ms := floor(extract(epoch from v_profile.updated_at) * 1000);
+  
+  if p_last_updated_at is not null and v_db_updated_at_ms > (p_last_updated_at + 5050) then
+    update public.profiles
+    set 
+        current_location_lat = p_lat,
+        current_location_lng = p_lng,
+        hp = p_hp,
+        mp = p_mp,
+        updated_at = now()
+    where id = auth.uid()
+    returning * into v_profile;
+    
+    return v_profile;
+  end if;
+
+  -- 4. 自動計算移動距離 (Walk Quest)
+  v_dist_deg := sqrt(pow(p_lat - v_profile.current_location_lat, 2) + pow(p_lng - v_profile.current_location_lng, 2));
+  v_meters := floor(v_dist_deg * 111000);
+
+  IF v_meters > 2 AND v_meters < 5000 THEN
+    PERFORM public.increment_walk_quests(auth.uid(), v_meters, p_lat, p_lng);
+  END IF;
+
+  -- 5. 執行更新
+  update public.profiles
+  set 
+    current_location_lat = p_lat,
+    current_location_lng = p_lng,
+    hp = p_hp,
+    mp = p_mp,
+    updated_at = now()
+  where id = auth.uid()
+  returning * into v_profile;
+
+  return v_profile;
+end;
+$$;

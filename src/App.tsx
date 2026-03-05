@@ -448,6 +448,7 @@ const App: React.FC = () => {
   // Ref to saveProfile - avoids forward-reference issues since saveProfile is declared later via useCallback
   const saveProfileRef = React.useRef<((newState?: CharacterStats, forceLocation?: [number, number]) => Promise<void>) | null>(null);
   const lastSyncedHeavyDataRef = React.useRef<string>('');
+  const lastSyncedStatusRef = React.useRef<{ lat: number, lng: number, hp: number, mp: number, ts: number }>({ lat: 0, lng: 0, hp: 0, mp: 0, ts: 0 });
 
   // Railway Animation Loop (Time-Based - cross-device safe)
   useEffect(() => {
@@ -1050,46 +1051,79 @@ const App: React.FC = () => {
 
     const hasHeavyDataChanged = currentHeavyData !== lastSyncedHeavyDataRef.current;
 
-    const { data: _updatedProfile, error: syncError } = await supabase.rpc('secure_sync_profile', {
-      p_lat: forceLocation ? forceLocation[0] : positionRef.current[0],
-      p_lng: forceLocation ? forceLocation[1] : positionRef.current[1],
-      p_hp: p.hp,
-      p_mp: p.mp,
-      p_travel_data: {
-        path: travelSaveData.travel_path,
-        started_at: travelSaveData.travel_started_at,
-        duration: travelSaveData.travel_duration_seconds
-      },
-      p_walk_data: {
-        target_lat: walkSaveData.walk_target_lat,
-        target_lng: walkSaveData.walk_target_lng,
-        start_lat: walkSaveData.walk_start_lat,
-        start_lng: walkSaveData.walk_start_lng,
-        started_at: walkSaveData.walk_started_at,
-        duration: walkDurationSecRef.current
-      },
-      p_active_god_id: hasHeavyDataChanged ? p.activeGodId : null,
-      p_partners: hasHeavyDataChanged ? p.partners : null,
-      p_buildings: hasHeavyDataChanged ? p.buildings : null,
-      p_gold: null, // Fully managed by server
-      p_base_materials: null, // Fully managed by server
-      p_equipment: hasHeavyDataChanged ? p.equipment : null,
-      p_items: hasHeavyDataChanged ? p.items : null,
-      p_skills: null, // Fully managed by server RPCs
-      p_gods: null, // Fully managed by server RPCs
-      p_equipped_weapon: hasHeavyDataChanged ? p.equippedWeapon : null,
-      p_equipped_armor: hasHeavyDataChanged ? p.equippedArmor : null,
-      p_equipped_helmet: hasHeavyDataChanged ? p.equippedHelmet : null,
-      p_equipped_boots: hasHeavyDataChanged ? p.equippedBoots : null,
-      p_equipped_accessory: hasHeavyDataChanged ? p.equippedAccessory : null,
-      p_ling_qi: null,
-      p_tech_fragments: null,
-      p_incense: null,
-      p_salt_crystals: null,
-      p_premium_gems: null,
-      p_last_updated_at: p.updatedAt,
-      p_push_settings: hasHeavyDataChanged ? p.pushSettings : null
-    });
+    // Stationary detection & Minimal Sync Logic
+    const targetLat = forceLocation ? forceLocation[0] : positionRef.current[0];
+    const targetLng = forceLocation ? forceLocation[1] : positionRef.current[1];
+    const now = Date.now();
+
+    const dist = Math.sqrt(Math.pow(targetLat - lastSyncedStatusRef.current.lat, 2) + Math.pow(targetLng - lastSyncedStatusRef.current.lng, 2)) * 111000;
+    const hpDiff = Math.abs(p.hp - lastSyncedStatusRef.current.hp);
+    const mpDiff = Math.abs(p.mp - lastSyncedStatusRef.current.mp);
+    const timeSinceLastSync = now - lastSyncedStatusRef.current.ts;
+
+    // Skip sync if: not moved much, health didn't change, no heavy data change, AND it's been less than 60s
+    if (!hasHeavyDataChanged && dist < 0.5 && hpDiff < 1 && mpDiff < 0.1 && timeSinceLastSync < 60000 && !forceLocation) {
+      // console.log('Sync Suppressed: No significant changes');
+      return;
+    }
+
+    // Determine if we can use minimal location sync or need full profile sync
+    // We use full profile sync if: heavy data changed OR travel/walk data exists (to ensure complex objects are saved)
+    const needsFullSync = hasHeavyDataChanged || isCurrentlyOnTrain || isCurrentlyWalking;
+
+    let syncResult;
+    if (needsFullSync) {
+      syncResult = await supabase.rpc('secure_sync_profile', {
+        p_lat: targetLat,
+        p_lng: targetLng,
+        p_hp: p.hp,
+        p_mp: p.mp,
+        p_travel_data: {
+          path: travelSaveData.travel_path,
+          started_at: travelSaveData.travel_started_at,
+          duration: travelSaveData.travel_duration_seconds
+        },
+        p_walk_data: {
+          target_lat: walkSaveData.walk_target_lat,
+          target_lng: walkSaveData.walk_target_lng,
+          start_lat: walkSaveData.walk_start_lat,
+          start_lng: walkSaveData.walk_start_lng,
+          started_at: walkSaveData.walk_started_at,
+          duration: walkDurationSecRef.current
+        },
+        p_active_god_id: hasHeavyDataChanged ? p.activeGodId : null,
+        p_partners: hasHeavyDataChanged ? p.partners : null,
+        p_buildings: hasHeavyDataChanged ? p.buildings : null,
+        p_gold: null,
+        p_base_materials: null,
+        p_equipment: hasHeavyDataChanged ? p.equipment : null,
+        p_items: hasHeavyDataChanged ? p.items : null,
+        p_skills: null,
+        p_gods: null,
+        p_equipped_weapon: hasHeavyDataChanged ? p.equippedWeapon : null,
+        p_equipped_armor: hasHeavyDataChanged ? p.equippedArmor : null,
+        p_equipped_helmet: hasHeavyDataChanged ? p.equippedHelmet : null,
+        p_equipped_boots: hasHeavyDataChanged ? p.equippedBoots : null,
+        p_equipped_accessory: hasHeavyDataChanged ? p.equippedAccessory : null,
+        p_ling_qi: null,
+        p_tech_fragments: null,
+        p_incense: null,
+        p_salt_crystals: null,
+        p_premium_gems: null,
+        p_last_updated_at: p.updatedAt,
+        p_push_settings: hasHeavyDataChanged ? p.pushSettings : null
+      });
+    } else {
+      syncResult = await supabase.rpc('secure_sync_location', {
+        p_lat: targetLat,
+        p_lng: targetLng,
+        p_hp: p.hp,
+        p_mp: p.mp,
+        p_last_updated_at: p.updatedAt
+      });
+    }
+
+    const { data: _updatedProfile, error: syncError } = syncResult;
 
     if (syncError) {
       console.error('Save Profile Error:', (syncError as any).message);
@@ -1097,7 +1131,12 @@ const App: React.FC = () => {
       if (hasHeavyDataChanged) {
         lastSyncedHeavyDataRef.current = currentHeavyData;
       }
-      console.log('Profile Saved Successfully', hasHeavyDataChanged ? '(Full)' : '(Location Only)');
+      lastSyncedStatusRef.current = { lat: targetLat, lng: targetLng, hp: p.hp, mp: p.mp, ts: now };
+
+      console.log('Profile Saved:',
+        hasHeavyDataChanged ? 'Full' : (needsFullSync ? 'Selective' : 'Minimal'),
+        timeSinceLastSync > 60000 ? '(Heartbeat)' : ''
+      );
       // Sync local state with authoritative server timestamp/data
       setPlayer(mapServerProfile(_updatedProfile));
     }
