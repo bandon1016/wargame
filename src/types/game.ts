@@ -486,6 +486,9 @@ export interface Enemy {
     lootTable: GameItem[];
     avatar: string; // emoji
     element: ElementType; // 屬性
+    isElite?: boolean;
+    isBoss?: boolean;
+    isWeatherSpecial?: boolean;
 }
 
 // 怪物列表 & 掉落資料
