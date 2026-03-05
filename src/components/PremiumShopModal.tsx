@@ -70,10 +70,10 @@ export const PremiumShopModal: React.FC<PremiumShopModalProps> = ({
     };
 
     return (
-        <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center p-4 sm:p-6 pb-24 sm:pb-6">
+        <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center sm:p-6">
             <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={onClose} />
 
-            <div className="relative w-full max-w-2xl bg-gradient-to-b from-indigo-950 to-slate-900 rounded-2xl border border-indigo-500/30 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="relative w-full h-full sm:h-auto sm:max-w-4xl bg-gradient-to-b from-indigo-950 to-slate-900 sm:rounded-2xl sm:border border-indigo-500/30 shadow-2xl overflow-hidden flex flex-col sm:max-h-[90vh]">
                 {/* Header */}
                 <div className="p-4 border-b border-indigo-500/20 bg-slate-900/50 flex justify-between items-center sticky top-0 z-10">
                     <div className="flex items-center gap-3">
@@ -106,7 +106,7 @@ export const PremiumShopModal: React.FC<PremiumShopModalProps> = ({
                         </div>
                     )}
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
                         {PREMIUM_SHOP_ITEMS.map(item => {
                             const isBuying = buyingId === item.id;
                             const currentTargetBuffExpiry = player.activeBuffs ? (player.activeBuffs[item.buffKey] as number) : undefined;
