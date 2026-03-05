@@ -447,6 +447,7 @@ const App: React.FC = () => {
 
   // Ref to saveProfile - avoids forward-reference issues since saveProfile is declared later via useCallback
   const saveProfileRef = React.useRef<((newState?: CharacterStats, forceLocation?: [number, number]) => Promise<void>) | null>(null);
+  const lastSyncedHeavyDataRef = React.useRef<string>('');
 
   // Railway Animation Loop (Time-Based - cross-device safe)
   useEffect(() => {
@@ -1032,6 +1033,23 @@ const App: React.FC = () => {
         walk_started_at: null,
       };
 
+    // bandwidth optimization: only send heavy data if changed
+    const currentHeavyData = JSON.stringify({
+      p: p.partners,
+      b: p.buildings,
+      e: p.equipment,
+      i: p.items,
+      ew: p.equippedWeapon,
+      ea: p.equippedArmor,
+      eh: p.equippedHelmet,
+      eb: p.equippedBoots,
+      ex: p.equippedAccessory,
+      ps: p.pushSettings,
+      ag: p.activeGodId
+    });
+
+    const hasHeavyDataChanged = currentHeavyData !== lastSyncedHeavyDataRef.current;
+
     const { data: _updatedProfile, error: syncError } = await supabase.rpc('secure_sync_profile', {
       p_lat: forceLocation ? forceLocation[0] : positionRef.current[0],
       p_lng: forceLocation ? forceLocation[1] : positionRef.current[1],
@@ -1050,33 +1068,36 @@ const App: React.FC = () => {
         started_at: walkSaveData.walk_started_at,
         duration: walkDurationSecRef.current
       },
-      p_active_god_id: p.activeGodId,
-      p_partners: p.partners,
-      p_buildings: p.buildings,
+      p_active_god_id: hasHeavyDataChanged ? p.activeGodId : null,
+      p_partners: hasHeavyDataChanged ? p.partners : null,
+      p_buildings: hasHeavyDataChanged ? p.buildings : null,
       p_gold: null, // Fully managed by server
       p_base_materials: null, // Fully managed by server
-      p_equipment: p.equipment,
-      p_items: p.items,
-      p_skills: null, // Fully managed by server RPCs (secure_upgrade_skill, secure_resolve_combat) to prevent overwrite race conditions
+      p_equipment: hasHeavyDataChanged ? p.equipment : null,
+      p_items: hasHeavyDataChanged ? p.items : null,
+      p_skills: null, // Fully managed by server RPCs
       p_gods: null, // Fully managed by server RPCs
-      p_equipped_weapon: p.equippedWeapon,
-      p_equipped_armor: p.equippedArmor,
-      p_equipped_helmet: p.equippedHelmet,
-      p_equipped_boots: p.equippedBoots,
-      p_equipped_accessory: p.equippedAccessory,
-      p_ling_qi: null, // Fully managed by server
-      p_tech_fragments: null, // Fully managed by server
-      p_incense: null, // Fully managed by server
-      p_salt_crystals: null, // Fully managed by server
-      p_premium_gems: null, // Fully managed by server
+      p_equipped_weapon: hasHeavyDataChanged ? p.equippedWeapon : null,
+      p_equipped_armor: hasHeavyDataChanged ? p.equippedArmor : null,
+      p_equipped_helmet: hasHeavyDataChanged ? p.equippedHelmet : null,
+      p_equipped_boots: hasHeavyDataChanged ? p.equippedBoots : null,
+      p_equipped_accessory: hasHeavyDataChanged ? p.equippedAccessory : null,
+      p_ling_qi: null,
+      p_tech_fragments: null,
+      p_incense: null,
+      p_salt_crystals: null,
+      p_premium_gems: null,
       p_last_updated_at: p.updatedAt,
-      p_push_settings: p.pushSettings
+      p_push_settings: hasHeavyDataChanged ? p.pushSettings : null
     });
 
     if (syncError) {
       console.error('Save Profile Error:', (syncError as any).message);
     } else if (_updatedProfile) {
-      console.log('Profile Saved Successfully');
+      if (hasHeavyDataChanged) {
+        lastSyncedHeavyDataRef.current = currentHeavyData;
+      }
+      console.log('Profile Saved Successfully', hasHeavyDataChanged ? '(Full)' : '(Location Only)');
       // Sync local state with authoritative server timestamp/data
       setPlayer(mapServerProfile(_updatedProfile));
     }
