@@ -350,6 +350,32 @@ BEGIN
             END;
         END IF;
 
+        -- 5.1 通用材料掉落 (鐵礦石、藥草，各 40% 機率)
+        DECLARE
+            v_common_q int;
+            v_chance float := (CASE WHEN v_lucky_active THEN 0.48 ELSE 0.40 END);
+        BEGIN
+            -- 鐵礦石
+            IF random() < v_chance THEN
+                v_common_q := CASE WHEN v_is_elite OR v_is_boss THEN floor(random() * 3 + 2) ELSE floor(random() * 2 + 1) END;
+                v_common_q := GREATEST(1, CEIL(v_common_q * v_horn_multiplier))::int;
+                v_loots := v_loots || jsonb_build_array(jsonb_build_object(
+                    'id', 'item_iron_ore', 'name', '鐵礦石', 'icon', '🔩', 'type', 'material', 
+                    'description', '可以用來鍛造基礎裝備的金屬原礦。', 'quantity', v_common_q
+                ));
+            END IF;
+            
+            -- 藥草
+            IF random() < v_chance THEN
+                v_common_q := CASE WHEN v_is_elite OR v_is_boss THEN floor(random() * 3 + 2) ELSE floor(random() * 2 + 1) END;
+                v_common_q := GREATEST(1, CEIL(v_common_q * v_horn_multiplier))::int;
+                v_loots := v_loots || jsonb_build_array(jsonb_build_object(
+                    'id', 'item_herb', 'name', '藥草', 'icon', '🌿', 'type', 'material', 
+                    'description', '生長在野外的普通草本植物，是煉製各類藥水的基本材料。', 'quantity', v_common_q
+                ));
+            END IF;
+        END;
+
         -- 5.5 台灣範圍「香火」隨機掉落
         IF v_reg != 'unknown' THEN
             -- 一般、掩人耳目: 10% 機率 (2~4個); 菁英、首領: 20% 機率 (3~7個)

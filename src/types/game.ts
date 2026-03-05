@@ -395,6 +395,15 @@ export const PREMIUM_SHOP_ITEMS: PremiumShopItem[] = [
     },
 ];
 
+export interface PushSettings {
+    enabled: boolean;
+    notifyDeath: boolean;
+    notifyBuilding: boolean;
+    notifyElite: boolean;
+    notifyTransport: boolean;
+    notifyWeather: boolean;
+}
+
 export interface CharacterStats {
     nickname?: string;
     role?: string;
@@ -436,6 +445,7 @@ export interface CharacterStats {
     quests: DailyQuest[];
     updatedAt?: number; // Unix timestamp (ms) for state versioning
     activeBuffs?: ActiveBuffs; // 加值商城 24 小時增益效果
+    pushSettings?: PushSettings; // 推播通知設定
 }
 
 export interface God {

@@ -1,7 +1,7 @@
 ﻿import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap, Circle, Polyline, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Compass, Sword, Home, Users, Package, Settings as SettingsIcon, Book, Heart, Shield, Zap, ChevronRight, ChevronLeft, MapPin, Loader2, X, PlusCircle, ShieldAlert, TrainFront, Coins, Sparkles, Cpu, Waves, Diamond, Trophy, Copy, Check, ScrollText, TrendingUp, Square, Crown, Rocket } from 'lucide-react';
+import { Compass, Sword, Home, Users, Package, Settings as SettingsIcon, Book, Heart, Shield, Zap, ChevronRight, ChevronLeft, MapPin, Loader2, X, PlusCircle, ShieldAlert, TrainFront, Coins, Sparkles, Cpu, Waves, Diamond, Trophy, Copy, Check, ScrollText, TrendingUp, Square, Crown, Rocket, Bell } from 'lucide-react';
 import type { CharacterStats, Equipment, GameItem, Skill, MapPOI, Town, WeatherType, Enemy, AlchemyRecipe, BlacksmithRecipe, ElementType } from './types/game';
 import { MONSTER_DATABASE, SKILL_DATABASE, ITEM_DATABASE, EQUIPMENT_DATABASE, RARITY_COLORS, WEATHER_TYPES, TOWN_DATABASE, getPartnerAvatar, getRailwayPath, POI_NAMES, ELEMENT_META, getRegionByCoordinates, getRegionByCityName, getRegionalMaterials, getDistance, getPathDistance, getInterpolatedPositionByDistance } from './types/game';
 import { UPDATE_NOTES } from './data/updates';
@@ -291,6 +291,22 @@ const isInTaiwan = (lat: number, lng: number) => {
   return isPointInPolygon(lat, lng, TAIWAN_MAIN_ISLAND_POLYGON) || isInPenghu(lat, lng) || isExternalIslands(lat, lng);
 };
 
+// Helper for Push Notification VAPID key conversion
+function urlBase64ToUint8Array(base64String: string) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding)
+    .replace(/\-/g, '+')
+    .replace(/_/g, '/');
+
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
+
 const App: React.FC = () => {
   const [position, setPosition] = useState<[number, number]>([25.0330, 121.5654]);
   const positionRef = React.useRef<[number, number]>(position);
@@ -345,6 +361,7 @@ const App: React.FC = () => {
   const [showGuide, setShowGuide] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showUpdates, setShowUpdates] = useState(false);
+  const [showPushSettings, setShowPushSettings] = useState(false);
 
   // --- Map Style Switcher State ---
   const [mapStyle, setMapStyle] = useState(() => {
@@ -464,6 +481,8 @@ const App: React.FC = () => {
         setTravelDepartedAt(null);
         setTravelDurationSec(0);
         setTravelProgress(0);
+
+        triggerPushNotification('transport', '抵達目的地', '您已搭乘交通工具順利抵達目的地城鎮！');
 
         // Trigger immediate save to sync the arrival position and clear travel data in DB
         setTimeout(() => saveProfileRef.current?.(undefined, finalPos), 50);
@@ -608,6 +627,9 @@ const App: React.FC = () => {
       setWeather(prev => {
         if (prev !== newWeather) {
           console.log(`Weather Changing: ${prev} -> ${newWeather}`);
+          if (newWeather === 'stormy') {
+            triggerPushNotification('weather', '惡劣天氣預警', '天空烏雲密佈，雷雨交加！請小心雷擊導致的體力流失。');
+          }
         }
         return newWeather;
       });
@@ -778,6 +800,14 @@ const App: React.FC = () => {
       uid: data.id ? data.id.substring(0, 8).toUpperCase() : 'G-0000',
       updatedAt: data.updated_at ? Math.floor(new Date(data.updated_at).getTime()) : Math.floor(Date.now()),
       activeBuffs: data.active_buffs || {},
+      pushSettings: data.push_settings || {
+        enabled: false,
+        notifyDeath: true,
+        notifyBuilding: true,
+        notifyElite: true,
+        notifyTransport: true,
+        notifyWeather: true
+      },
     };
   }, []);
 
@@ -1039,7 +1069,8 @@ const App: React.FC = () => {
       p_incense: null, // Fully managed by server
       p_salt_crystals: null, // Fully managed by server
       p_premium_gems: null, // Fully managed by server
-      p_last_updated_at: p.updatedAt
+      p_last_updated_at: p.updatedAt,
+      p_push_settings: p.pushSettings
     });
 
     if (syncError) {
@@ -1231,6 +1262,101 @@ const App: React.FC = () => {
     return () => cancelAnimationFrame(frameId);
   }, [isTraveling, activeTab, inTown, activePoiCombat, targetPosition]);
 
+  // Handle push notification setting toggle
+  const handlePushSettingChange = async (key: keyof NonNullable<CharacterStats['pushSettings']>) => {
+    if (!player || !session?.user?.id) return;
+
+    // Default settings if undefined
+    const currentSettings = player.pushSettings || {
+      enabled: false,
+      notifyDeath: true,
+      notifyBuilding: true,
+      notifyElite: true,
+      notifyTransport: true,
+      notifyWeather: true
+    };
+
+    // Toggle the specific key
+    const newSettings = { ...currentSettings, [key]: !currentSettings[key] };
+
+    // Request permission if enabling notifications for the first time
+    if (key === 'enabled' && newSettings.enabled) {
+      if ('Notification' in window) {
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted') {
+          alert('您已經封鎖了通知權限，請前往瀏覽器設定開啟。');
+          newSettings.enabled = false;
+        }
+      } else {
+        alert('您的瀏覽器不支援推播通知功能。');
+        newSettings.enabled = false;
+      }
+    }
+
+    // Optimistically update local state
+    const updatedPlayer = { ...player, pushSettings: newSettings };
+    setPlayer(updatedPlayer);
+
+    // If enabling push, handle the service worker subscription
+    if (key === 'enabled' && newSettings.enabled) {
+      try {
+        const registration = await navigator.serviceWorker.ready;
+        const publicVapidKey = 'BDMh3-E_D5Yv7Gj0O_M1iN7q-_9_M_Z_Z_Z_Z_Z_Z_Z_Z_Z_Z_Z_A'; // PLACEHOLDER: USER NEEDS TO REPLACE THIS
+
+        const subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
+        });
+
+        console.log('Push Subscription successful:', subscription);
+
+        // Save subscription credential to database
+        await supabase
+          .from('profiles')
+          .update({ push_subscription: subscription })
+          .eq('id', session.user.id);
+
+      } catch (err) {
+        console.error('Push subscription failed:', err);
+        // Fallback or user message
+        if (key === 'enabled') {
+          setPlayer({ ...player, pushSettings: { ...newSettings, enabled: false } });
+        }
+      }
+    }
+
+    // Sync to backend using the standard debounced save (which now includes push_settings in the RPC)
+    debouncedSaveProfile(updatedPlayer);
+  };
+
+  // Helper to trigger push notifications via Edge Function
+  const triggerPushNotification = useCallback(async (type: 'death' | 'building' | 'elite' | 'transport' | 'weather', title: string, body: string, url = '/') => {
+    if (!session?.user?.id || !player?.pushSettings?.enabled) return;
+
+    // Check individual setting
+    const settingKey = `notify${type.charAt(0).toUpperCase() + type.slice(1)}` as keyof NonNullable<CharacterStats['pushSettings']>;
+    if (player.pushSettings[settingKey] === false) return;
+
+    try {
+      await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-push`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
+          userId: session.user.id,
+          title,
+          body,
+          url,
+          type
+        })
+      });
+    } catch (err) {
+      console.error('Failed to trigger push notification:', err);
+    }
+  }, [session, player?.pushSettings]);
+
   const startMove = (d: 'n' | 's' | 'e' | 'w') => {
     moveDirRef.current = d;
     setTargetPosition(null);
@@ -1280,12 +1406,35 @@ const App: React.FC = () => {
         const effectiveMaxHp = getEffectiveMaxHp(prev);
         const drain = Math.max(1, Math.floor(effectiveMaxHp * effect.envHpTickDmg));
         const newHp = Math.max(0, prev.hp - drain);
+        if (newHp === 0 && prev.hp > 0) {
+          triggerPushNotification('death', '角色陣亡', '您在惡劣天氣中耗盡體力，已經回到最近的城鎮休息。');
+        }
         return { ...prev, hp: newHp };
       });
     }, 10000);
 
     return () => clearInterval(interval);
   }, [weather, activeTab, inTown, activePoiCombat, isTraveling, player, hasWeatherResistance]);
+  // Building Completion Notification Trigger
+  const notifiedBuildingsRef = React.useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!player || !player.pushSettings?.enabled || !player.pushSettings.notifyBuilding) return;
+
+    const interval = setInterval(() => {
+      const now = Date.now();
+      player.buildings.forEach(b => {
+        if (b.isUpgrading && b.upgradeEndsAt && now >= b.upgradeEndsAt) {
+          const key = `${b.id}_${b.level}`;
+          if (!notifiedBuildingsRef.current.has(key)) {
+            triggerPushNotification('building', '🏗️ 設施升級完成', `${b.name} 已成功升級至 Lv.${b.level + 1}！`);
+            notifiedBuildingsRef.current.add(key);
+          }
+        }
+      });
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [player, triggerPushNotification]);
 
 
   // Auto-Interaction detection when moving near Towns or POIs
@@ -1567,7 +1716,11 @@ const App: React.FC = () => {
     setInTown(null);
     setResolvedCombatRewards(null);
     setIsCombatAction(true);
-  }, [player?.level]);
+
+    if (enemy.isElite || enemy.isBoss) {
+      triggerPushNotification('elite', `發現${enemy.isBoss ? '首領' : '菁英'}級魔物！`, `遭遇了 ${enemy.name} (Lv.${enemy.level})，戰鬥已開始。`);
+    }
+  }, [player?.level, triggerPushNotification]);
 
   // Auto Explore Logic
   useEffect(() => {
@@ -1854,6 +2007,7 @@ const App: React.FC = () => {
 
     setPlayer(nextState);
     saveProfile(nextState);
+    triggerPushNotification('death', '角色陣亡', `您已被 ${currentEnemy?.name || '強大魔物'} 擊敗，目前正在恢復中。`);
     setIsCombatAction(false);
     setCurrentEnemy(null);
 
@@ -2661,6 +2815,12 @@ const App: React.FC = () => {
                     >
                       <MapPin size={14} /> 地圖樣式
                     </button>
+                    <button
+                      onClick={() => { setShowPushSettings(true); setIsProfileMenuOpen(false); }}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm text-gray-300 hover:bg-white/8 hover:text-white transition-colors"
+                    >
+                      <Bell size={14} /> 推播設定
+                    </button>
                     {session?.user?.email === 'werboy@gmail.com' && (
                       <button
                         onClick={() => { setShowAdminPanel(true); setIsProfileMenuOpen(false); }}
@@ -2887,6 +3047,73 @@ const App: React.FC = () => {
                 </p>
               </div>
 
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── PUSH SETTINGS MODAL ─── */}
+      {showPushSettings && (
+        <div className="fixed inset-0 z-[3000] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm anim-fade-in-up">
+          <div className="glass-panel w-full max-w-md rounded-3xl p-6 border border-gray-500/30 shadow-2xl flex flex-col relative overflow-hidden">
+            <button
+              onClick={() => setShowPushSettings(false)}
+              className="absolute top-4 right-4 w-10 h-10 rounded-full glass-panel flex items-center justify-center text-gray-400 hover:text-white transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+
+            <div className="flex items-center gap-3 mb-6">
+              <span className="text-3xl">🔔</span>
+              <div>
+                <h3 className="text-xl font-black text-white">推播設定</h3>
+                <p className="text-xs text-gray-400">管理在背景時接收的遊戲通知</p>
+              </div>
+            </div>
+
+            <div className="space-y-4 flex-1 overflow-y-auto pr-2 custom-scrollbar">
+              {/* Master Toggle */}
+              <div className="flex items-center justify-between p-4 bg-indigo-900/30 border border-indigo-500/30 rounded-xl">
+                <div>
+                  <div className="font-bold text-white mb-1">啟用推播通知</div>
+                  <div className="text-xs text-indigo-200">允許戰域在背景發送通知</div>
+                </div>
+                <button
+                  onClick={() => handlePushSettingChange('enabled')}
+                  className={`w-12 h-6 rounded-full transition-colors relative ${player?.pushSettings?.enabled ? 'bg-amber-500' : 'bg-gray-700'}`}
+                >
+                  <div className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-transform ${player?.pushSettings?.enabled ? 'translate-x-7' : 'translate-x-1'}`} />
+                </button>
+              </div>
+
+              {/* Individual toggles */}
+              <div className={`space-y-2 transition-opacity ${player?.pushSettings?.enabled ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
+                <h4 className="text-sm font-bold text-gray-400 px-2 mt-4 mb-2">通知情境</h4>
+
+                {[
+                  { key: 'notifyDeath', label: '玩家死亡', icon: '💀', desc: '在探索中不幸陣亡時' },
+                  { key: 'notifyBuilding', label: '建設完成', icon: '🏗️', desc: '家園設施升級或建築完工時' },
+                  { key: 'notifyElite', label: '遭遇強敵', icon: '👿', desc: '遇到菁英或首領怪時' },
+                  { key: 'notifyTransport', label: '交通抵達', icon: '🚆', desc: '搭乘火車/交通工具抵達目的地' },
+                  { key: 'notifyWeather', label: '天氣劇變', icon: '⛈️', desc: '進入雷爆或導致扣血的惡劣天氣' },
+                ].map(item => (
+                  <div key={item.key} className="flex items-center justify-between p-3 bg-white/5 border border-white/10 rounded-xl">
+                    <div className="flex items-center gap-3">
+                      <span className="text-xl">{item.icon}</span>
+                      <div>
+                        <div className="text-sm font-bold text-gray-200">{item.label}</div>
+                        <div className="text-[10px] text-gray-400">{item.desc}</div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handlePushSettingChange(item.key as keyof NonNullable<CharacterStats['pushSettings']>)}
+                      className={`w-10 h-5 rounded-full transition-colors relative ${player?.pushSettings?.[item.key as keyof NonNullable<CharacterStats['pushSettings']>] !== false ? 'bg-amber-500/80' : 'bg-gray-700'}`}
+                    >
+                      <div className={`w-3 h-3 rounded-full bg-white absolute top-1 transition-transform ${player?.pushSettings?.[item.key as keyof NonNullable<CharacterStats['pushSettings']>] !== false ? 'translate-x-6' : 'translate-x-1'}`} />
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>

@@ -41,6 +41,7 @@ export const TownScreen: React.FC<TownScreenProps> = ({ town, player, userId, on
     const [activeFacility, setActiveFacility] = useState<'inn' | 'market' | 'alchemy' | 'blacksmith' | 'station' | 'quest_board' | 'shipyard' | 'dock' | null>(initialFacility ?? null);
     const [localQuests, setLocalQuests] = useState<any[]>(quests || []);
     const [accepting, setAccepting] = useState<string | null>(null);
+    const [showMaterialInfo, setShowMaterialInfo] = useState(false);
 
     // Sync or Fetch quests when entering quest board
     useEffect(() => {
@@ -238,9 +239,19 @@ export const TownScreen: React.FC<TownScreenProps> = ({ town, player, userId, on
                             <div className="flex-1 w-full flex flex-col md:flex-row-reverse gap-6">
                                 {/* Right Side: Player Inventory for crafting materials */}
                                 <div className="w-full md:w-1/3 glass-panel p-6 rounded-2xl flex flex-col h-full bg-[#0a0e1a]/80">
-                                    <h3 className="text-emerald-400 font-bold mb-4 border-b border-emerald-500/20 pb-2 flex items-center gap-2">
-                                        <div className="w-6 h-6 rounded-full bg-emerald-900/50 flex flex-col items-center justify-center text-xs">🎒</div>
-                                        擁有素材
+                                    <h3 className="text-emerald-400 font-bold mb-4 border-b border-emerald-500/20 pb-2 flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-6 h-6 rounded-full bg-emerald-900/50 flex flex-col items-center justify-center text-xs">🎒</div>
+                                            擁有素材
+                                        </div>
+                                        {activeFacility === 'blacksmith' && (
+                                            <button
+                                                onClick={() => setShowMaterialInfo(true)}
+                                                className="text-[10px] bg-indigo-500/20 hover:bg-indigo-500/40 text-indigo-300 px-2 py-1 rounded border border-indigo-500/30 transition-colors flex items-center gap-1"
+                                            >
+                                                <RefreshCw size={10} /> 材料情報
+                                            </button>
+                                        )}
                                     </h3>
                                     <div className="flex items-center gap-3 mb-4 bg-yellow-900/20 p-3 rounded-xl border border-yellow-500/10">
                                         <span className="text-xl">💰</span>
@@ -660,6 +671,78 @@ export const TownScreen: React.FC<TownScreenProps> = ({ town, player, userId, on
                     </div>
                 )}
             </div>
+            {/* Material Information Modal */}
+            {showMaterialInfo && (
+                <div className="fixed inset-0 z-[3000] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in shadow-2xl">
+                    <div className="glass-panel w-full max-w-lg rounded-[30px] p-6 border border-white/10 flex flex-col relative bg-gradient-to-b from-slate-900 to-black max-h-[85vh] overflow-hidden">
+                        <div className="flex items-center justify-between mb-6">
+                            <h3 className="text-xl font-bold flex items-center gap-2 text-indigo-300">
+                                📜 材料情報 (取得管道)
+                            </h3>
+                            <button onClick={() => setShowMaterialInfo(false)} className="text-gray-400 hover:text-white p-2">
+                                <ChevronRight className="rotate-90" size={24} />
+                            </button>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto space-y-6 pr-2 custom-scrollbar text-sm">
+                            <div className="space-y-4">
+                                <Section title="🔵 北部區域 (台北/北海岸)" icon="🗼" items={[
+                                    { name: '科技廢料 ⚙️', desc: '地區特產。探索、擊敗一般或菁英怪物機率掉落。' },
+                                    { name: '魔法玻璃 🪷', desc: '地區特產。探索、擊敗一般或菁英怪物機率掉落。' },
+                                ]} />
+
+                                <Section title="🟢 中部區域 (台中/南投)" icon="⛰️" items={[
+                                    { name: '高山鐵礦 ⛰️', desc: '地區特產。中央山脈區域探索、擊敗怪物機率掉落。' },
+                                    { name: '神木枝枒 🍃', desc: '地區特產。森林區域探索、擊敗怪物機率掉落。' },
+                                    { name: '太古神木 🌲', desc: '中區稀有素材。主要在地圖隨機生成的菁英怪或首領身上產出。' },
+                                ]} />
+
+                                <Section title="🔴 南部區域 (嘉南/高屏/屏東)" icon="🏜️" items={[
+                                    { name: '炎漠紅砂 🏜️', desc: '地區特產。南部乾燥地帶探索、擊敗怪物機率掉落。' },
+                                    { name: '海淵珍珠 🦪', desc: '地區特產。沿海區域探索、擊敗海島怪物機率掉落。' },
+                                    { name: '熔岩紅砂 🌋', desc: '南區稀有素材。主要在南高平原生成的菁英怪或首領身上產出。' },
+                                    { name: '珊瑚碎片 🌺', desc: '恆春半島/屏東地區特產。沿海偵測、擊敗怪物掉落。' },
+                                ]} />
+
+                                <Section title="🟣 東部區域 (花蓮/台東)" icon="💠" items={[
+                                    { name: '花東水晶 💠', desc: '地區特產。東部靈脈區域探索、擊敗怪物機率掉落。' },
+                                    { name: '玄武岩礦石 🌑', desc: '地區特產。台東岩岸區域探索、擊敗怪物機率掉落。' },
+                                ]} />
+
+                                <Section title="🔧 其它通用素材" icon="🔩" items={[
+                                    { name: '鐵礦石 🔩 / 藥草 🌿', desc: '世界各處通用。任何地區的日常探索、擊敗一般怪皆有高機率獲取。' },
+                                    { name: '龍鱗碎片 🐲', desc: '傳說級素材。擊敗菁英怪物、世界首領、或極其罕見的「強力黑龍」100% 掉落。' },
+                                    { name: '魔力寶石 🔮', desc: '稀有財貨。主要產自菁英/首領怪物，或完成城市佈告欄的高級委託。' },
+                                ]} />
+                            </div>
+                        </div>
+
+                        <button
+                            onClick={() => setShowMaterialInfo(false)}
+                            className="w-full mt-6 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl transition-all shadow-lg"
+                        >
+                            我明白了
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
+
+// Helper component for material info sections
+const Section = ({ title, icon, items }: { title: string, icon: string, items: { name: string, desc: string }[] }) => (
+    <div className="space-y-3">
+        <h4 className="font-bold border-b border-indigo-500/30 pb-1 flex items-center gap-2">
+            <span>{icon}</span> {title}
+        </h4>
+        <div className="grid gap-3">
+            {items.map((it, idx) => (
+                <div key={idx} className="bg-white/5 p-3 rounded-xl border border-white/5">
+                    <div className="font-bold text-indigo-100">{it.name}</div>
+                    <div className="text-[11px] text-gray-400 mt-1 leading-relaxed">{it.desc}</div>
+                </div>
+            ))}
+        </div>
+    </div>
+);
