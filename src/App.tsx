@@ -570,18 +570,10 @@ const App: React.FC = () => {
     const lastPos = lastFetchedPosRef.current;
     const dist = lastPos ? Math.hypot(position[0] - lastPos[0], position[1] - lastPos[1]) : 999;
 
-    // Distance-based quest progress (approx 1 unit = 111km, so 0.0001 = 11.1m)
-    if (dist > 0.00001 && session?.user?.id) {
-      const meters = Math.floor(dist * 111000);
-      if (meters > 0) {
-        supabase.rpc('increment_walk_quests', {
-          p_user_id: session.user.id,
-          p_increment_meters: meters
-        }).then();
-      }
-    }
+    // Walk quests are now automatically handled by secure_sync_profile on the server side
+    // to ensure precision and prevent skipped updates during walking.
 
-    if (dist > 0.01) { // Approx 1km movement
+    if (dist > 0.01) { // Approx 1km movement or initial load
       fetchPois();
       lastFetchedPosRef.current = position;
     }

@@ -237,6 +237,8 @@ as $$
 declare
   v_profile public.profiles;
   v_db_updated_at_ms bigint;
+  v_dist_deg double precision;
+  v_meters int;
 begin
   -- 1. 取得現有資料
   select * into v_profile from public.profiles where id = auth.uid();
@@ -276,6 +278,16 @@ begin
     
     return v_profile;
   end if;
+
+  -- 3.5 自動計算移動距離並更新任務進度
+  -- 以經緯度差估算公尺 (1度約 111km)
+  v_dist_deg := sqrt(pow(p_lat - v_profile.current_location_lat, 2) + pow(p_lng - v_profile.current_location_lng, 2));
+  v_meters := floor(v_dist_deg * 111000);
+
+  -- 安全校驗：僅在移動距離合理時(2m ~ 5km)更新任務，避免 GPS 跳躍或瞬移
+  IF v_meters > 2 AND v_meters < 5000 THEN
+    PERFORM public.increment_walk_quests(auth.uid(), v_meters, p_lat, p_lng);
+  END IF;
 
   -- 4. 正常更新資料
   update public.profiles

@@ -1404,7 +1404,9 @@ $$;
 -- ==========================================
 CREATE OR REPLACE FUNCTION public.increment_walk_quests(
   p_user_id uuid,
-  p_increment_meters int
+  p_increment_meters int,
+  p_lat float8 DEFAULT NULL,
+  p_lng float8 DEFAULT NULL
 )
 RETURNS void
 LANGUAGE plpgsql
@@ -1413,12 +1415,23 @@ AS $$
 DECLARE
   v_today      date := current_date;
   v_week_start date := date_trunc('week', current_date)::date;
+  v_reg        text := 'unknown';
 BEGIN
   IF auth.uid() != p_user_id THEN
     RAISE EXCEPTION 'Unauthorized';
   END IF;
 
+  -- 區域判定 (與戰鬥結算邏輯一致)
+  IF p_lat IS NOT NULL AND p_lng IS NOT NULL THEN
+      IF (p_lng > 121.0 AND p_lat <= 24.5) THEN v_reg := 'east';
+      ELSIF (p_lat > 24.5) THEN v_reg := 'north';
+      ELSIF (p_lat > 23.5) THEN v_reg := 'central';
+      ELSIF (p_lat > 21.8) THEN v_reg := 'south';
+      END IF;
+  END IF;
+
   -- 更新所有走路類型任務（包含每日 dq_、每週 wq_、城市 cq_ 任務）
+  -- 根據區域過濾對應的城市任務
   UPDATE public.player_quests
   SET progress = LEAST(progress + p_increment_meters, required)
   WHERE user_id = p_user_id
@@ -1427,7 +1440,14 @@ BEGIN
     AND (
       quest_id LIKE 'dq_walk_%'
       OR quest_id LIKE 'wq_walk_%'
-      OR quest_id LIKE 'cq_%_walk'  -- 城市走路任務 (如 cq_tpe_walk, cq_ntpc_weekly 等走路型)
+      OR (quest_id LIKE 'cq_tpe_%' AND v_reg = 'north')
+      OR (quest_id LIKE 'cq_ntpc_%' AND v_reg = 'north')
+      OR (quest_id LIKE 'cq_txg_%' AND v_reg = 'central')
+      OR (quest_id LIKE 'cq_tnn_%' AND v_reg = 'south')
+      OR (quest_id LIKE 'cq_khh_%' AND v_reg = 'south')
+      OR (quest_id LIKE 'cq_hun_%' AND v_reg = 'east')
+      OR (quest_id LIKE 'cq_pif_%' AND v_reg = 'south')
+      OR quest_id LIKE 'cq_%_walk' -- 舊有的城市走路任務
     );
 END;
 $$;
