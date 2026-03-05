@@ -209,7 +209,10 @@ CREATE OR REPLACE FUNCTION public.secure_resolve_combat(
     p_skill_reward_id text DEFAULT null, p_skill_reward_name text DEFAULT null,
     p_lat float8 DEFAULT null, p_lng float8 DEFAULT null,
     p_monster_level integer DEFAULT null,
-    p_is_auto_explore boolean DEFAULT false
+    p_is_auto_explore boolean DEFAULT false,
+    p_is_elite boolean DEFAULT null,
+    p_is_boss boolean DEFAULT null,
+    p_is_weather_special boolean DEFAULT null
 ) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER AS $$
 DECLARE
     v_u uuid := auth.uid(); v_p public.profiles;
@@ -221,13 +224,14 @@ DECLARE
     v_p_exp int := 0;
     v_base_g int := 0;
     v_bonus_g int := 0;
-    -- 安全：由後端從怪物名稱推斷狀態
-    v_is_elite boolean := p_monster_name LIKE '%【菁英】%';
-    v_is_boss boolean := p_monster_name LIKE '%【首領】%';
-    v_is_weather_special boolean := p_monster_name LIKE '%【掩人耳目】%';
+    -- 安全：優先使用傳入旗標，若為空則由後端從怪物名稱推斷狀態
+    v_is_elite boolean := COALESCE(p_is_elite, p_monster_name LIKE '%【菁英】%');
+    v_is_boss boolean := COALESCE(p_is_boss, p_monster_name LIKE '%【首領】%');
+    v_is_weather_special boolean := COALESCE(p_is_weather_special, p_monster_name LIKE '%【掩人耳目】%');
     v_calc_lv int;
 BEGIN
-    SELECT * INTO v_p FROM public.profiles WHERE id = v_u;
+    -- [SECURITY] FOR UPDATE: 確保併發安全，讀取最新存檔並鎖定
+    SELECT * INTO v_p FROM public.profiles WHERE id = v_u FOR UPDATE;
     IF NOT FOUND THEN RAISE EXCEPTION 'No profile'; END IF;
 
     DECLARE
@@ -416,7 +420,7 @@ BEGIN
     END IF;
 
     -- 5.7 夥伴經驗值邏輯 (必定回傳供前端顯示)
-    v_p_exp := GREATEST(1, floor(v_e * 0.2 * (CASE WHEN v_goddess_active THEN 1.5 ELSE 1.0 END)));
+    v_p_exp := GREATEST(1, floor(v_e * 0.2 * (CASE WHEN v_goddess_active THEN 1.2 ELSE 1.0 END)));
     IF v_e > 0 THEN
         v_loots := v_loots || jsonb_build_array(jsonb_build_object(
             'id', 'p_exp', 'name', '夥伴經驗', 'icon', '⭐', 'type', 'material', 

@@ -1437,10 +1437,11 @@ const App: React.FC = () => {
 
     let currentIsElite = isElite;
 
-    // 冥幽七里香 (Elite Lure): 5% chance to encounter elite during auto explore
+    // 冥幽七里香 (Elite Lure): 當後端確認有遇敵後，才有 5% 權重轉為菁英怪
     if (autoExplore && playerRef.current?.activeBuffs?.eliteEncounterExpiry) {
       if (Date.now() < playerRef.current.activeBuffs.eliteEncounterExpiry) {
-        if (Math.random() < 0.05) {
+        // [FIX] 只有在原本判定為普通遇敵 (enc.result === 'monster') 時才進行轉換
+        if (enc?.result === 'monster' && Math.random() < 0.05) {
           currentIsElite = true;
         }
       }
@@ -1475,14 +1476,9 @@ const App: React.FC = () => {
       return `災厄${tier}階`;
     };
 
-    // 1. Filter monsters based on player level (Progressive Scaling)
-    let availableMonsters = MONSTER_DATABASE.filter(m => lv >= (m.minLv || 0) && lv <= (m.maxLv || 999));
-
-    // Fallback: If player outlevels everything, pick from the highest tier
-    if (availableMonsters.length === 0) {
-      const maxAvailableLv = Math.max(...MONSTER_DATABASE.map(m => m.minLv || 0));
-      availableMonsters = MONSTER_DATABASE.filter(m => (m.minLv || 0) >= maxAvailableLv);
-    }
+    // 1. Filter monsters - 開放全等級怪物池供高等玩家解任務
+    // 原本 logic 會過濾 lv <= maxLv，現改為只要符合最小等級即可 (越高等可以遇到越多種類)
+    let availableMonsters = MONSTER_DATABASE.filter(m => lv >= (m.minLv || 0));
 
     // Final defensive fallback: Use full database
     if (availableMonsters.length === 0) availableMonsters = MONSTER_DATABASE;
@@ -1584,7 +1580,10 @@ const App: React.FC = () => {
       p_lat: positionRef.current[0],
       p_lng: positionRef.current[1],
       p_monster_level: currentEnemy.level,
-      p_is_auto_explore: autoExplore
+      p_is_auto_explore: autoExplore,
+      p_is_elite: currentEnemy.isElite,
+      p_is_boss: currentEnemy.isBoss,
+      p_is_weather_special: currentEnemy.isWeatherSpecial
     });
 
     if (error) {
