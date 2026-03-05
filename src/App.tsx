@@ -1447,11 +1447,12 @@ const App: React.FC = () => {
 
     let currentIsElite = isElite;
 
-    // 冥幽七里香 (Elite Lure): 當後端確認有遇敵後，才有 5% 權重轉為菁英怪
+    // 冥幽七里香 (Elite Lure): 有 5% 獨立機率觸發菁英戰鬥
+    // [FIX] 舊邏輯：在普通遇敵後再疊加 5%，實際機率極低 (約 1%)
+    // [NEW] 修正：當七里香生效時，無論普通遇敵結果如何，都有獨立的 5% 機率強制生成菁英怪
     if (autoExplore && playerRef.current?.activeBuffs?.eliteEncounterExpiry) {
       if (Date.now() < playerRef.current.activeBuffs.eliteEncounterExpiry) {
-        // [FIX] 只有在原本判定為普通遇敵 (enc.result === 'monster') 時才進行轉換
-        if (enc?.result === 'monster' && Math.random() < 0.05) {
+        if (Math.random() < 0.05) {
           currentIsElite = true;
         }
       }
