@@ -1518,11 +1518,21 @@ const App: React.FC = () => {
       eAtk = Math.floor(baseAtk);
       eDef = Math.floor(baseDef);
     } else {
-      // [FIX] 怪物強度純由玩家等級決定，不受怪物類型模板影響
-      // 怪物類型（史萊姆、黑龍等）只影響外觀與元素，不影響強度
-      hp = Math.floor(lv * 12 * statMultiplier);
-      eAtk = Math.floor(lv * 2.5 * statMultiplier);
-      eDef = Math.floor(lv * 1.0 * statMultiplier);
+      // [FIX] 普通怪也應以玩家有效數值（含裝備+夥伴）為基準縮放
+      // 純用 lv * coefficient 無法反映玩家實際強度，會導致怪物過弱
+      const pHP2 = getEffectiveMaxHp(p);
+      const pATK2 = getEffectiveAtk(p);
+      const pDEF2 = getEffectiveDef(p);
+
+      // 普通怪難度：菁英的 40%（讓玩家有優勢但不是碾壓）
+      const normalDiff = 0.4;
+
+      // HP：能撐住玩家約 2~4 回合
+      hp = Math.floor(Math.max(lv * 12, pATK2 * (2 + Math.random() * 2) * normalDiff));
+      // ATK：每回合對玩家造成約 3~8% MaxHP 傷害
+      eAtk = Math.floor(Math.max(lv * 2.5, pDEF2 + pHP2 * (0.03 + Math.random() * 0.05) * normalDiff));
+      // DEF：能擋住玩家約 20% 攻擊力（讓玩家感覺能打穿但有點阻力）
+      eDef = Math.floor(Math.max(lv * 1.0, pATK2 * 0.2 * normalDiff));
     }
 
     // Calculate the actual monster level for prefix naming
