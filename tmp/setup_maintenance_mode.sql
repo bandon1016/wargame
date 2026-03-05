@@ -18,10 +18,10 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 DECLARE
-    v_role text;
+    v_admin_email text;
 BEGIN
-    SELECT role INTO v_role FROM public.profiles WHERE id = auth.uid();
-    IF v_role != 'admin' THEN
+    SELECT email INTO v_admin_email FROM auth.users WHERE id = auth.uid();
+    IF v_admin_email IS NULL OR v_admin_email != 'werboy@gmail.com' THEN
         RAISE EXCEPTION '操作被拒絕：權限不足。';
     END IF;
     
@@ -36,5 +36,15 @@ $$;
 -- 4. 初始化維護模式關閉狀態
 INSERT INTO public.app_settings (key, value) VALUES ('maintenance_mode', 'false') ON CONFLICT DO NOTHING;
 
--- 5. 啟用 Supabase Realtime 廣播
-ALTER PUBLICATION supabase_realtime ADD TABLE public.app_settings;
+-- 5. 啟用 Supabase Realtime 廣播 (如果尚未加入)
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_publication_tables
+        WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'app_settings'
+    ) THEN
+        ALTER PUBLICATION supabase_realtime ADD TABLE public.app_settings;
+    END IF;
+END
+$$;

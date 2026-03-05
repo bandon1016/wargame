@@ -1121,10 +1121,10 @@ const App: React.FC = () => {
 
   // Force stop auto-explore if maintenance mode turns on for non-admins
   useEffect(() => {
-    if (isMaintenance && player?.role !== 'admin') {
+    if (isMaintenance && session?.user?.email !== 'werboy@gmail.com') {
       setAutoExplore(false);
     }
-  }, [isMaintenance, player?.role]);
+  }, [isMaintenance, session?.user?.email]);
 
   // --- Session Stats Logic (Tracking Duration) ---
   useEffect(() => {
@@ -1607,12 +1607,87 @@ const App: React.FC = () => {
     // After success logic...
     // (Wait, I need to make sure I reset it at the end of the function too)
 
-    if (result.updated_profile) {
-      // 🚀 AUTHORITATIVE STATE SYNC
-      const newP = mapServerProfile(result.updated_profile);
-      playerRef.current = newP; // 即時同步引用，防止下一微秒的自動存檔抓取到舊狀態
-      setPlayer(newP);
-    }
+    // 🚀 DELTA MERGE SYNC (Egress Optimization)
+    // We NO LONGER receive `result.updated_profile` to reduce network traffic.
+    // Instead, we merge the new values directly into the current state safely.
+
+    // NOTE: Supabase RPC can return JSONB as a string - force parse it
+    let rawLoots = result.loots;
+    const sLoots: any[] = Array.isArray(rawLoots)
+      ? rawLoots
+      : (typeof rawLoots === 'string' ? JSON.parse(rawLoots) : []);
+    const sEquip = result.equipment;
+
+    const finalExp = result.exp_gained ?? _expReward;
+    const finalGold = result.gold_gained ?? _goldReward;
+
+    setPlayer(prev => {
+      if (!prev) return prev;
+
+      const newItems = [...prev.items];
+      let newIncense = prev.incense;
+
+      // Merge Loots into items cautiously
+      sLoots.forEach((loot: any) => {
+        let qty = loot.quantity || 1;
+        if (loot.id === 'currency_incense') {
+          newIncense += qty;
+        } else if (loot.id === 'p_exp' || loot.id === 'partner_exp') {
+          // partner logic is handled below or skipped for local player
+        } else {
+          const itemIdx = newItems.findIndex(i => i.id === loot.id);
+          if (itemIdx >= 0) {
+            newItems[itemIdx] = { ...newItems[itemIdx], quantity: newItems[itemIdx].quantity + qty };
+          } else {
+            newItems.push({
+              id: loot.id,
+              name: loot.name,
+              icon: loot.icon || '📦',
+              quantity: qty,
+              type: loot.type || 'material',
+              description: loot.description || ''
+            });
+          }
+        }
+      });
+
+      // Insert Equipment as item
+      if (sEquip) {
+        const itemIdx = newItems.findIndex(i => i.id === `eq_${sEquip.name}`);
+        if (itemIdx >= 0) {
+          newItems[itemIdx] = { ...newItems[itemIdx], quantity: newItems[itemIdx].quantity + 1 };
+        } else {
+          const eqItem: any = {
+            id: `eq_${sEquip.name}`,
+            name: sEquip.name,
+            icon: sEquip.icon || '🛡️',
+            quantity: 1,
+            type: 'material', // Safe fallback
+            description: sEquip.description || '',
+            stats: sEquip.stats
+          };
+          newItems.push(eqItem);
+        }
+      }
+
+      const mergedPlayer = {
+        ...prev,
+        gold: prev.gold + finalGold,
+        exp: result.current_exp ?? (prev.exp + finalExp),
+        hp: result.current_hp ?? prev.hp,
+        mp: result.current_mp ?? prev.mp,
+        level: result.new_level ?? prev.level,
+        maxHp: result.max_hp ?? prev.maxHp,
+        maxMp: result.max_mp ?? prev.maxMp,
+        incense: newIncense,
+        items: newItems
+        // Note: we don't deeply merge partners yet to save complexity. 
+        // If partner leveling isn't critical immediately, a refresh will get them.
+      };
+
+      playerRef.current = mergedPlayer;
+      return mergedPlayer;
+    });
 
     if (result.leveled_up) {
       setCombatLogs(prev => [...prev, {
@@ -1624,21 +1699,13 @@ const App: React.FC = () => {
     }
 
     // Process result for UI display
-    // NOTE: Supabase RPC can return JSONB as a string - force parse it
-    let rawLoots = result.loots;
-    const sLoots: any[] = Array.isArray(rawLoots)
-      ? rawLoots
-      : (typeof rawLoots === 'string' ? JSON.parse(rawLoots) : []);
-    const sEquip = result.equipment;
-
+    // Process result for UI display
     const rewardItems = sLoots.filter((l: any) => l.id !== 'currency_incense' && l.id !== 'p_exp' && l.id !== 'partner_exp');
     if (sEquip) rewardItems.push({ name: sEquip.name, quantity: 1, icon: sEquip.icon || '🛡️' });
 
     // Rewards are now only displayed in the bottom-right combat logs, as requested.
 
     // AUTHORITATIVE LOGGING
-    const finalExp = result?.exp ?? _expReward;
-    let finalGold = result?.gold ?? _goldReward;
 
     // Explicitly grab partner exp from loots for logging & stats
     const pExpLoot = sLoots.find((l: any) => l.id === 'p_exp' || l.id === 'partner_exp' || l.name?.includes('夥伴經驗'));
@@ -4045,6 +4112,15 @@ const App: React.FC = () => {
           </div>
         )
       }
+
+      {/* Maintenance Overlay */}
+      {isMaintenance && session?.user?.email !== 'werboy@gmail.com' && (
+        <div className="fixed inset-0 z-[9999] bg-slate-950/90 flex flex-col items-center justify-center p-6 backdrop-blur-md">
+          <div className="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-6"></div>
+          <h1 className="text-3xl font-bold text-white mb-2">系統升級中...</h1>
+          <p className="text-slate-400 text-center leading-relaxed">工程師正在進行升級更新，請稍後再來！<br />(自動探索已幫您暫停)</p>
+        </div>
+      )}
     </div >
   );
 };

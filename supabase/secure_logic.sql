@@ -611,7 +611,19 @@ BEGIN
 
 
     SELECT * INTO v_p FROM public.profiles WHERE id = v_u;
-RETURN jsonb_build_object('gold',v_g,'exp',v_e,'bonus_gold',v_bonus_g,'leveled_up',v_up,'new_level',v_lv,'loots',v_loots,'updated_profile',row_to_json(v_p));
+    
+    RETURN jsonb_build_object(
+        'gold_gained', v_g,
+        'exp_gained', v_e,
+        'leveled_up', v_up,
+        'new_level', v_lv,
+        'current_exp', v_ex,
+        'current_hp', v_hp,
+        'current_mp', v_mp,
+        'max_hp', v_mhp,
+        'max_mp', v_mmp,
+        'loots', v_loots
+    );
     END; -- CLOSE THE added BEGIN block for variable declarations
 END; $$;
 
