@@ -338,6 +338,7 @@ const App: React.FC = () => {
   const [isDoubleTabbed, setIsDoubleTabbed] = useState(false);
   const isDoubleTabbedRef = React.useRef(isDoubleTabbed);
   const isRpcPendingRef = React.useRef(false); // New flag to block auto-save during RPCs
+  const [isMaintenance, setIsMaintenance] = useState(false);
   useEffect(() => { isDoubleTabbedRef.current = isDoubleTabbed; }, [isDoubleTabbed]);
   const [showGuide, setShowGuide] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -644,7 +645,34 @@ const App: React.FC = () => {
       else { setPlayer(null); setLoading(false); }
     });
 
-    return () => subscription.unsubscribe();
+    // --- Maintenance Mode Subscription ---
+    const fetchMaintenance = async () => {
+      const { data } = await supabase.from('app_settings').select('value').eq('key', 'maintenance_mode').single();
+      if (data) setIsMaintenance(data.value === 'true');
+    };
+    fetchMaintenance();
+
+    const channel = supabase.channel('public:app_settings')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'app_settings', filter: 'key=eq.maintenance_mode' },
+        (payload) => {
+          setIsMaintenance(payload.new.value === 'true');
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'app_settings', filter: 'key=eq.maintenance_mode' },
+        (payload) => {
+          setIsMaintenance(payload.new.value === 'true');
+        }
+      )
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   // Anti Double Tabbing
@@ -704,6 +732,7 @@ const App: React.FC = () => {
       ...data,
       id: data.id,
       nickname: data.nickname,
+      role: data.role,
       level: data.level,
       hp: data.hp,
       maxHp: data.max_hp,
@@ -1089,6 +1118,13 @@ const App: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('autoExplore_v1', String(autoExplore));
   }, [autoExplore]);
+
+  // Force stop auto-explore if maintenance mode turns on for non-admins
+  useEffect(() => {
+    if (isMaintenance && player?.role !== 'admin') {
+      setAutoExplore(false);
+    }
+  }, [isMaintenance, player?.role]);
 
   // --- Session Stats Logic (Tracking Duration) ---
   useEffect(() => {

@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { ShieldAlert, X, Gift, Diamond } from 'lucide-react';
+import { ShieldAlert, X, Gift, Diamond, AlertTriangle } from 'lucide-react';
 import { PREMIUM_SHOP_ITEMS } from '../types/game';
 
 interface AdminPanelProps {
@@ -14,8 +14,43 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
     const [selectedBuffKey, setSelectedBuffKey] = useState(PREMIUM_SHOP_ITEMS[0].buffKey);
     const [buffDurationDays, setBuffDurationDays] = useState(1);
 
-    const [loadingAction, setLoadingAction] = useState<'gems' | 'buff' | 'lookup' | null>(null);
+    const [loadingAction, setLoadingAction] = useState<'gems' | 'buff' | 'lookup' | 'maintenance' | null>(null);
     const [message, setMessage] = useState<{ text: string, type: 'error' | 'success' } | null>(null);
+    const [isMaintenanceMode, setIsMaintenanceMode] = useState<boolean>(false);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        const fetchSettings = async () => {
+            const { data } = await supabase.from('app_settings').select('value').eq('key', 'maintenance_mode').single();
+            if (data) setIsMaintenanceMode(data.value === 'true');
+        };
+        fetchSettings();
+    }, [isOpen]);
+
+    const handleToggleMaintenance = async () => {
+        const newValue = !isMaintenanceMode;
+        if (!window.confirm(`[危險操作]\n確定要${newValue ? '開啟' : '關閉'}系統維護模式嗎？\n(開啟後所有普通玩家將立即被踢出並暫停探索)`)) {
+            return;
+        }
+
+        setLoadingAction('maintenance');
+        setMessage(null);
+        try {
+            const { error } = await supabase.rpc('secure_admin_set_setting', {
+                p_key: 'maintenance_mode',
+                p_value: newValue.toString()
+            });
+
+            if (error) throw error;
+            setIsMaintenanceMode(newValue);
+            setMessage({ text: `系統維護模式已${newValue ? '開啟' : '關閉'}！`, type: 'success' });
+        } catch (err: any) {
+            console.error('Toggle maintenance error:', err);
+            setMessage({ text: err.message || '操作失敗，請確認權限', type: 'error' });
+        } finally {
+            setLoadingAction(null);
+        }
+    };
 
     const resolveUidToUuid = async (uid: string): Promise<{ uuid: string | null, error?: string }> => {
         const cleanUid = uid.trim().toUpperCase();
@@ -142,6 +177,25 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                     )}
 
                     <div className="space-y-4 bg-slate-800/50 p-4 rounded-xl border border-slate-700">
+                        {/* Maintenance Mode Toggle */}
+                        <div className="bg-red-950/30 border border-red-900/50 p-4 rounded-lg flex items-center justify-between">
+                            <div>
+                                <h3 className="text-red-400 font-bold flex items-center gap-2">
+                                    <AlertTriangle size={18} /> 系統維護模式 (全域)
+                                </h3>
+                                <p className="text-slate-400 text-sm mt-1">開啟後將踢出所有非管理員玩家，並強制關閉他們的自動探索。</p>
+                            </div>
+                            <button
+                                onClick={handleToggleMaintenance}
+                                disabled={loadingAction === 'maintenance'}
+                                className={`px-6 py-2 rounded-lg font-bold transition-all shadow-lg text-white ${isMaintenanceMode ? 'bg-red-600 hover:bg-red-500 shadow-red-600/20' : 'bg-slate-700 hover:bg-slate-600'}`}
+                            >
+                                {loadingAction === 'maintenance' ? '處理中...' : isMaintenanceMode ? '關閉維護' : '開啟維護'}
+                            </button>
+                        </div>
+
+                        <div className="w-full h-px bg-slate-700/50 my-4" />
+
                         <div>
                             <label className="block text-sm text-slate-400 mb-1">目標玩家 UID (例如: G-0000)</label>
                             <input

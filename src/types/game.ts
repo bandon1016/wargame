@@ -397,6 +397,7 @@ export const PREMIUM_SHOP_ITEMS: PremiumShopItem[] = [
 
 export interface CharacterStats {
     nickname?: string;
+    role?: string;
     level: number;
     exp: number;
     maxExp: number;
