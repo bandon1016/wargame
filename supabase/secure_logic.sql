@@ -219,6 +219,8 @@ DECLARE
     v_incense_gain int := 0; v_reg text := 'unknown';
     v_skill_drop bool := false; v_has_skill bool := false; v_skill_idx int;
     v_p_exp int := 0;
+    v_base_g int := 0;
+    v_bonus_g int := 0;
     -- 安全：由後端從怪物名稱推斷狀態
     v_is_elite boolean := p_monster_name LIKE '%【菁英】%';
     v_is_boss boolean := p_monster_name LIKE '%【首領】%';
@@ -250,11 +252,12 @@ BEGIN
         v_base_gold int := 10 + (v_calc_lv - 1) * 5;
     BEGIN
         v_e := floor(v_base_exp * (CASE WHEN v_is_elite OR v_is_boss THEN 2.5 ELSE 1 END));
-        v_g := floor(v_base_gold * (CASE WHEN v_is_elite OR v_is_boss THEN 2.5 ELSE 1 END));
-        IF v_is_weather_special THEN v_e := v_e * 3; v_g := v_g * 3; END IF;
+        v_base_g := floor(v_base_gold * (CASE WHEN v_is_elite OR v_is_boss THEN 2.5 ELSE 1 END));
+        IF v_is_weather_special THEN v_e := v_e * 3; v_base_g := v_base_g * 3; END IF;
         
-        -- 豐饒角 (Horn of Plenty) 金幣增幅
-        v_g := floor(v_g * v_horn_multiplier);
+        -- 豐饒角 (Horn of Plenty) 金幣增幅：調整為 CEIL
+        v_g := CEIL(v_base_g * v_horn_multiplier);
+        v_bonus_g := v_g - v_base_g;
     END;
 
     -- 2. 成長與升級 (平滑曲線)
@@ -311,8 +314,8 @@ BEGIN
                 v_reg_sid text; v_reg_sn text; v_reg_sic text; v_reg_sd text; v_reg_q int := 1;
             BEGIN
                 IF (v_is_elite OR v_is_boss) THEN v_reg_q := floor(random() * 2 + 1); END IF;
-                -- Apply Horn of Plenty to regional material
-                v_reg_q := GREATEST(1, floor(v_reg_q * v_horn_multiplier))::int;
+                -- Apply Horn of Plenty to regional material: 使用 CEIL 確保 1.5 倍進位
+                v_reg_q := GREATEST(1, CEIL(v_reg_q * v_horn_multiplier))::int;
                 
                 CASE v_reg
                     WHEN 'north' THEN
@@ -345,10 +348,10 @@ BEGIN
 
         -- 5.5 台灣範圍「香火」隨機掉落
         IF v_reg != 'unknown' THEN
-            -- 一般、掩人耳目: 10% 機率 (1~3個); 菁英、首領: 20% 機率 (2~5個)
+            -- 一般、掩人耳目: 10% 機率 (2~4個); 菁英、首領: 20% 機率 (3~7個)
             IF (v_is_elite OR v_is_boss) THEN
                 IF random() < (CASE WHEN v_lucky_active THEN 0.24 ELSE 0.20 END) THEN
-                    v_incense_gain := GREATEST(1, floor(floor(random() * 4 + 2) * v_horn_multiplier))::int;
+                    v_incense_gain := GREATEST(1, CEIL(floor(random() * 5 + 3) * v_horn_multiplier))::int;
                     v_loots := v_loots || jsonb_build_array(jsonb_build_object(
                         'id', 'currency_incense', 'name', '香火', 'icon', '🔥', 'type', 'material', 
                         'description', '來自全台各地廟宇的信仰力量，可用於祭祀。', 'quantity', v_incense_gain
@@ -356,7 +359,7 @@ BEGIN
                 END IF;
             ELSE
                 IF random() < (CASE WHEN v_lucky_active THEN 0.12 ELSE 0.10 END) THEN
-                    v_incense_gain := GREATEST(1, floor(floor(random() * 3 + 1) * v_horn_multiplier))::int;
+                    v_incense_gain := GREATEST(1, CEIL(floor(random() * 3 + 2) * v_horn_multiplier))::int;
                     v_loots := v_loots || jsonb_build_array(jsonb_build_object(
                         'id', 'currency_incense', 'name', '香火', 'icon', '🔥', 'type', 'material', 
                         'description', '來自全台各地廟宇的信仰力量，可用於祭祀。', 'quantity', v_incense_gain
@@ -608,7 +611,7 @@ BEGIN
 
 
     SELECT * INTO v_p FROM public.profiles WHERE id = v_u;
-RETURN jsonb_build_object('gold',v_g,'exp',v_e,'leveled_up',v_up,'new_level',v_lv,'loots',v_loots,'updated_profile',row_to_json(v_p));
+RETURN jsonb_build_object('gold',v_g,'exp',v_e,'bonus_gold',v_bonus_g,'leveled_up',v_up,'new_level',v_lv,'loots',v_loots,'updated_profile',row_to_json(v_p));
     END; -- CLOSE THE added BEGIN block for variable declarations
 END; $$;
 

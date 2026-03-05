@@ -18,12 +18,16 @@ interface CombatScreenProps {
     hasWeatherResistance: (type: WeatherType) => boolean;
     isMinimized?: boolean;
     onMaximize?: () => void;
+    resolvedRewards?: {
+        gold: number; exp: number; bonus_gold: number;
+        items?: { name: string; quantity: number; icon: string }[]
+    } | null;
 }
 
 export const CombatScreen: React.FC<CombatScreenProps> = ({
     player, enemy, onWin, onLose, onFlee, autoExplore, weather,
     onAutoHeal, onRevive, onUseItem, hasWeatherResistance,
-    isMinimized, onMaximize, onMinimize
+    isMinimized, onMaximize, onMinimize, resolvedRewards
 }) => {
     const [combatStats] = useState({
         attack: player.attack,
@@ -52,15 +56,43 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({
     const [enemyDebuffs, setEnemyDebuffs] = useState<{ id: string; name: string; type: string; turns: number; damage: number; icon: string }[]>([]);
     const [round, setRound] = useState(1);
     const [skillsExpanded, setSkillsExpanded] = useState(false);
+    const isResolvingRef = useRef(false);
+    const hasLoggedWinRef = useRef(false);
     const revivePotCount = player.items.find(i => i.id === 'item_revive_pot')?.quantity || 0;
 
     useEffect(() => { logRef.current?.scrollTo({ top: 999999, behavior: 'smooth' }); }, [logs]);
 
-    // 同步來自外部（如使用道具 RPC）的權威狀態
+    // 同步來自外部（如使用道具 RPC 或全局開關）的權威狀態
     useEffect(() => {
         setPHp(player.hp);
         setPMp(player.mp);
     }, [player.hp, player.mp]);
+
+    // 同步來自外部的自動探索狀態
+    useEffect(() => {
+        setAuto(autoExplore || false);
+    }, [autoExplore]);
+
+    // 🏆 權威同步：當伺服器回傳確切獎勵後，才在日誌中顯示勝利訊息
+    useEffect(() => {
+        if (resolvedRewards && ended && !hasLoggedWinRef.current) {
+            hasLoggedWinRef.current = true;
+            const er = resolvedRewards.exp;
+            const totalGr = resolvedRewards.gold;
+            const bonusGr = resolvedRewards.bonus_gold || 0;
+            const baseGr = totalGr - bonusGr;
+
+            const rewardMsg = bonusGr > 0
+                ? `獲得 ${er} EXP、${baseGr} G (+${bonusGr} G)`
+                : `獲得 ${er} EXP、${totalGr} G`;
+
+            const itemsMsg = resolvedRewards.items && resolvedRewards.items.length > 0
+                ? `、物品 (${resolvedRewards.items.map(i => `${i.icon}${i.name}x${i.quantity}`).join(', ')})`
+                : '';
+
+            log(`🎉 戰鬥勝利！${rewardMsg}${itemsMsg}`);
+        }
+    }, [resolvedRewards, ended]);
 
     useEffect(() => {
         if (!auto || ended || awaitingRevive || !isPlayerTurn) return;
@@ -451,16 +483,21 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({
     };
 
     const win = (_finalEHp: number, finalPHp: number, finalPMp: number) => {
+        if (isResolvingRef.current) return;
+        isResolvingRef.current = true;
         setEnded(true); setAuto(false); setResult('win');
-        const er = enemy.expReward || 0;
-        const gr = enemy.goldReward || 0;
-        log(`🎉 戰鬥勝利！獲得 ${er} EXP、${gr} G`);
+
+        // 計算預期獎勵（作為回呼參數）
+        const er = resolvedRewards?.exp ?? (enemy.expReward || 0);
+        const totalGr = resolvedRewards?.gold ?? (enemy.goldReward || 0);
+
+        // 日誌訊息現在由 useEffect 監聽 resolvedRewards 後統一產生，以確保數值一致
         let sk: Skill | undefined;
         if (enemy.skillReward && Math.random() < 0.3) {
             sk = enemy.skillReward;
             log(`✨ 領悟新技能【${sk.icon} ${sk.name}】！`);
         }
-        setTimeout(() => onWin(er, gr, sk, enemy.lootTable, (enemy as any).equipmentDrop, finalPHp, finalPMp), autoExplore ? 2500 : 1500);
+        setTimeout(() => onWin(er, totalGr, sk, enemy.lootTable, (enemy as any).equipmentDrop, finalPHp, finalPMp), autoExplore ? 2500 : 1500);
     };
 
     const lose = (finalPHp: number, finalPMp: number) => {
@@ -623,7 +660,37 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({
                         {/* Result Banner */}
                         {result && (
                             <div className={`text-center py-3 rounded-xl mb-3 font-bold text-lg flex items-center justify-center gap-2 anim-scale-in ${result === 'win' ? 'bg-game-gold/15 text-game-gold border border-game-gold/30' : 'bg-game-danger/15 text-game-danger border border-game-danger/30'}`}>
-                                {result === 'win' ? <><Award size={20} /> 戰鬥勝利！</> : <>💀 戰鬥落敗</>}
+                                {result === 'win' ? (
+                                    <div className="flex flex-col items-center">
+                                        <div className="flex items-center gap-2"><Award size={20} /> 戰鬥勝利！</div>
+                                        {resolvedRewards && (
+                                            <div className="text-[13px] mt-1 opacity-90 flex items-center gap-3 font-medium">
+                                                <span>EXP +{resolvedRewards.exp}</span>
+                                                <span>
+                                                    GOLD +{resolvedRewards.gold - (resolvedRewards.bonus_gold || 0)}
+                                                    {resolvedRewards.bonus_gold > 0 && (
+                                                        <span className="text-amber-400 font-black ml-1.5 animate-pulse">
+                                                            (+{resolvedRewards.bonus_gold})
+                                                        </span>
+                                                    )}
+                                                </span>
+                                            </div>
+                                        )}
+                                        {resolvedRewards?.items && resolvedRewards.items.length > 0 && (
+                                            <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 mt-1.5 pt-1.5 border-t border-game-gold/10 w-full px-4">
+                                                {resolvedRewards.items.map((it, idx) => (
+                                                    <span key={idx} className="text-[11px] text-white flex items-center gap-1 font-medium bg-white/5 px-2 py-0.5 rounded-lg border border-white/5">
+                                                        <span>{it.icon}</span>
+                                                        <span>{it.name}</span>
+                                                        <span className="text-game-gold font-black">x{it.quantity}</span>
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <><X size={20} className="text-game-danger" /> 戰鬥落敗</>
+                                )}
                             </div>
                         )}
 
@@ -632,7 +699,7 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({
                             {logs.map((l, i) => (
                                 <div key={i} className={
                                     l.includes('勇者') && !l.includes('倒下') ? 'text-game-accent' :
-                                        l.includes('勝利') || l.includes('領悟') || l.includes('獲得') ? 'text-game-gold font-semibold' :
+                                        l.includes('勝利') || l.includes('領悟') || l.includes('獲得') || l.includes('G') ? 'text-game-gold font-semibold' :
                                             l.includes('倒下') ? 'text-gray-500' : 'text-red-300'
                                 }>&gt; {l}</div>
                             ))}

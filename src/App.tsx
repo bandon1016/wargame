@@ -242,6 +242,7 @@ interface CombatLog {
   enemyName: string;
   exp?: number;
   gold?: number;
+  goldBonus?: number;
   partnerExp?: number;
   items?: { name: string; quantity: number; icon: string }[];
   message?: string;
@@ -320,12 +321,16 @@ const App: React.FC = () => {
   const walkStartedAtRef = React.useRef<Date | null>(null);
   const walkDurationSecRef = React.useRef<number>(0);
   const lastSafePositionRef = React.useRef<[number, number]>([25.0330, 121.5654]); // 紀錄最後在陸地的安全座標
-  const [lootMessage, setLootMessage] = useState<{ title: string; items: { name: string; quantity: number; icon: string }[]; gold?: number; exp?: number } | null>(null);
+  const [lootMessage, setLootMessage] = useState<{ title: string; items: { name: string; quantity: number; icon: string }[]; gold?: number; goldBonus?: number; exp?: number } | null>(null);
 
   const [activePoiCombat, setActivePoiCombat] = useState<string | null>(null);
   const [batchUseItem, setBatchUseItem] = useState<GameItem | null>(null);
   const [batchAmount, setBatchAmount] = useState<number>(1);
   const [pendingTarget, setPendingTarget] = useState<{ lat: number, lng: number, label: string } | null>(null);
+  const [resolvedCombatRewards, setResolvedCombatRewards] = useState<{
+    gold: number; exp: number; bonus_gold: number;
+    items?: { name: string; quantity: number; icon: string }[]
+  } | null>(null);
   const [isMerchantOpen, setIsMerchantOpen] = useState(false);
   const [isWeatherPanelOpen, setIsWeatherPanelOpen] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
@@ -1380,6 +1385,9 @@ const App: React.FC = () => {
       return;
     }
 
+    // Reset resolved rewards at the start of a new combat
+    setResolvedCombatRewards(null);
+
     // 1. Encounter Check via Backend (Only for non-Elite/POI checks or when called from Explore)
     // Use the dynamic encounter rate from the backend (secure_check_encounter already handles the rate)
     const { data: enc, error: encError } = await supabase.rpc('secure_check_encounter', {
@@ -1500,6 +1508,8 @@ const App: React.FC = () => {
     };
 
     setCurrentEnemy(enemy as any);
+    setInTown(null);
+    setResolvedCombatRewards(null);
     setIsCombatAction(true);
   }, [player?.level]);
 
@@ -1524,7 +1534,7 @@ const App: React.FC = () => {
   }, [autoExplore, isCombatAction, activeTab, move, startHunt]);
 
   const handleCombatWin = useCallback(async (_expReward: number, _goldReward: number, _learnedSkill?: Skill, _lootList?: GameItem[], _droppedEq?: Equipment, finalHp?: number, finalMp?: number) => {
-    if (!player || !currentEnemy) return;
+    if (!player || !currentEnemy || isRpcPendingRef.current) return;
 
     const randomSkill = SKILL_DATABASE[Math.floor(Math.random() * SKILL_DATABASE.length)];
 
@@ -1640,12 +1650,30 @@ const App: React.FC = () => {
       };
     });
 
+    setResolvedCombatRewards({
+      gold: result.gold || 0,
+      exp: result.exp || 0,
+      bonus_gold: result.bonus_gold || 0,
+      items: rewardItems.map((l: any) => ({ name: l.name, quantity: l.quantity || 1, icon: l.icon || '📦' }))
+    });
+
+    // Removed lootMessage popup per user request to integrate into combat logs
+    /*
+    setLootMessage({
+      title: `擊敗了 ${currentEnemy.name}`,
+      exp: finalExp,
+      gold: finalGold,
+      goldBonus: result.bonus_gold || 0,
+      items: rewardItems.map((l: any) => ({ name: l.name, quantity: l.quantity || 1, icon: l.icon || '📦' }))
+    });
+    */
     const newLog: CombatLog = {
       id: `battle_${Date.now()}`,
       type: 'win',
       enemyName: currentEnemy.name,
       exp: finalExp,
       gold: finalGold,
+      goldBonus: result.bonus_gold || 0,
       partnerExp: partnerExpAmount,
       items: rewardItems.map((i: any) => ({ name: i.name, quantity: i.quantity || 1, icon: i.icon || '📦' }))
     };
@@ -3145,7 +3173,12 @@ const App: React.FC = () => {
                             <span className="text-gray-400">|</span>
                             <span className="text-sky-300 whitespace-nowrap">+{log.exp} EXP</span>
                             <span className="text-gray-400">|</span>
-                            <span className="text-game-gold whitespace-nowrap">+{log.gold} 金幣</span>
+                            <span className="text-game-gold whitespace-nowrap">
+                              +{(log.gold || 0) - (log.goldBonus || 0)} 金幣
+                              {log.goldBonus && log.goldBonus > 0 ? (
+                                <span className="text-amber-400 ml-1">(+{log.goldBonus} G)</span>
+                              ) : null}
+                            </span>
                             {log.partnerExp !== undefined && log.partnerExp > 0 && (
                               <>
                                 <span className="text-gray-400">|</span>
@@ -3186,11 +3219,11 @@ const App: React.FC = () => {
             )}
 
             {/* Bottom Left Area - Auto Explore & Interactions */}
-            {activeTab === 'explore' && !isCombatAction && !inTown && (
-              <div className="absolute bottom-6 left-4 sm:left-6 z-[1000] flex flex-col gap-3 pointer-events-none items-start w-fit px-0">
+            {activeTab === 'explore' && !inTown && (
+              <div className={`absolute bottom-6 left-4 sm:left-6 ${isCombatAction ? 'z-[3000]' : 'z-[1000]'} flex flex-col gap-3 pointer-events-none items-start w-fit px-0`}>
 
                 {/* Contextual Interaction Card (Shown when clicking a POI or Town nearby) */}
-                {interactingLocation && (
+                {interactingLocation && !isCombatAction && (
                   <div className="w-fit sm:w-64 glass-panel p-3.5 rounded-2xl anim-fade-in-up pointer-events-auto border-t-2 border-t-game-accent/50 shadow-2xl relative overflow-hidden">
                     <div className="absolute inset-0 bg-gradient-to-br from-game-accent/10 to-transparent pointer-events-none"></div>
                     <div className="flex flex-col gap-3 relative z-10">
@@ -3280,8 +3313,15 @@ const App: React.FC = () => {
                   <div className="flex items-center gap-4 bg-amber-500/10 p-3 rounded-2xl border border-amber-500/20">
                     <div className="text-3xl drop-shadow-md">💰</div>
                     <div className="flex-1">
-                      <div className="font-bold text-lg text-amber-300">金幣</div>
-                      <div className="text-sm text-gray-400">獲得: <span className="text-white font-bold">+{lootMessage.gold}</span></div>
+                      <div className="flex flex-col">
+                        <div className="font-bold text-lg text-amber-300">金幣</div>
+                        <div className="text-sm text-gray-400">
+                          獲得: <span className="text-white font-bold">+{(lootMessage.gold || 0) - (lootMessage.goldBonus || 0)}</span>
+                          {lootMessage.goldBonus && lootMessage.goldBonus > 0 ? (
+                            <span className="text-amber-400 font-bold ml-1">(+{lootMessage.goldBonus})</span>
+                          ) : null}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -3736,13 +3776,12 @@ const App: React.FC = () => {
               isMinimized={isCombatMinimized}
               onMaximize={() => setActiveTab('explore')}
               onMinimize={() => setIsCombatMinimized(true)}
+              resolvedRewards={resolvedCombatRewards}
               onWin={(exp: number, gold: number, skill?: Skill, loot?: GameItem[], eq?: Equipment, finalHp?: number, finalMp?: number) => {
                 handleCombatWin(exp, gold, skill, loot, eq, finalHp, finalMp);
               }}
-              onLose={(finalHp?: number, finalMp?: number) => {
-                handleCombatLose(finalHp, finalMp);
-              }}
-              onFlee={() => { setIsCombatAction(false); setAutoExplore(false); }}
+              onLose={(finalHp?: number, finalMp?: number) => { handleCombatLose(finalHp, finalMp); setResolvedCombatRewards(null); }}
+              onFlee={() => { setIsCombatAction(false); setAutoExplore(false); setResolvedCombatRewards(null); }}
               autoExplore={autoExplore}
               onAutoHeal={() => {
                 const pot = player.items.find(i => i.type === 'potion' && i.id !== 'item_revive_pot');
