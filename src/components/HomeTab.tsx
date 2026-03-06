@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Home, Pickaxe, ArrowUpCircle, Hammer, TrendingUp, Users, Plus, X, Star, Clock } from 'lucide-react';
-import type { CharacterStats, Building, Partner } from '../types/game';
+import type { CharacterStats, HydratedCharacterStats, Building, Partner } from '../types/game';
 import { getBuildingUpgradeTime, getBuildingUpgradeGold } from '../types/game';
 
-interface Props { player: CharacterStats; onUpdatePlayer: (a: React.SetStateAction<CharacterStats>) => void; saveProfile: (newState?: CharacterStats) => void; }
+interface Props { player: HydratedCharacterStats; onUpdatePlayer: (a: React.SetStateAction<CharacterStats | null>) => void; saveProfile: (newState?: CharacterStats | null) => void; }
 
 // Helper to calculate building bonus
 const getBuildingBonus = (b: Building, allPartners: Partner[]) => {
@@ -56,15 +56,17 @@ export const HomeTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfile }
             upgradeEndsAt: endsAt
         } : x);
 
-        const nextState = {
+        const nextState: CharacterStats | null = player ? {
             ...player,
             baseMaterials: player.baseMaterials - finalCost,
             gold: player.gold - finalGoldCost,
-            buildings: nextBuildings,
-        };
+            buildings: nextBuildings.map(b => ({ id: b.id, level: b.level, isUpgrading: b.isUpgrading, upgradeEndsAt: b.upgradeEndsAt, assignedPartners: b.assignedPartners })),
+        } as any : null;
 
-        onUpdatePlayer(nextState);
-        saveProfile(nextState);
+        if (nextState) {
+            onUpdatePlayer(nextState);
+            saveProfile(nextState);
+        }
     };
 
     const finishUpgrade = (b: Building) => {
@@ -77,13 +79,15 @@ export const HomeTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfile }
             upgradeEndsAt: null
         } : x);
 
-        const nextState = {
+        const nextState: CharacterStats | null = player ? {
             ...player,
-            buildings: nextBuildings,
-        };
+            buildings: nextBuildings.map(b => ({ id: b.id, level: b.level, isUpgrading: b.isUpgrading, upgradeEndsAt: b.upgradeEndsAt, assignedPartners: b.assignedPartners })),
+        } as any : null;
 
-        onUpdatePlayer(nextState);
-        saveProfile(nextState);
+        if (nextState) {
+            onUpdatePlayer(nextState);
+            saveProfile(nextState);
+        }
     };
 
     const formatTimeLeft = (ms: number) => {
@@ -105,9 +109,15 @@ export const HomeTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfile }
             if (currentAssigned.length >= 2) return b;
             return { ...b, assignedPartners: [...currentAssigned, partnerId] };
         });
-        const nextState = { ...player, buildings: nextBuildings };
-        onUpdatePlayer(nextState);
-        saveProfile(nextState);
+        const nextState: CharacterStats | null = player ? {
+            ...player,
+            buildings: nextBuildings.map(b => ({ id: b.id, level: b.level, isUpgrading: b.isUpgrading, upgradeEndsAt: b.upgradeEndsAt, assignedPartners: b.assignedPartners })),
+        } as any : null;
+
+        if (nextState) {
+            onUpdatePlayer(nextState);
+            saveProfile(nextState);
+        }
         setSelectedBuildingId(null);
     };
 
@@ -116,9 +126,15 @@ export const HomeTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfile }
             if (b.id !== buildingId) return b;
             return { ...b, assignedPartners: (b.assignedPartners || []).filter(id => id !== partnerId) };
         });
-        const nextState = { ...player, buildings: nextBuildings };
-        onUpdatePlayer(nextState);
-        saveProfile(nextState);
+        const nextState: CharacterStats | null = player ? {
+            ...player,
+            buildings: nextBuildings.map(b => ({ id: b.id, level: b.level, isUpgrading: b.isUpgrading, upgradeEndsAt: b.upgradeEndsAt, assignedPartners: b.assignedPartners })),
+        } as any : null;
+
+        if (nextState) {
+            onUpdatePlayer(nextState);
+            saveProfile(nextState);
+        }
     };
 
     let totalGoldPerMin = 0;

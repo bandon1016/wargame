@@ -1,0 +1,27 @@
+import type { GameItem } from '../types/game';
+
+export const ITEM_DICT: Record<string, Omit<GameItem, 'quantity'>> = {
+    'item_hp_pot': { id: 'item_hp_pot', name: '小型生命藥水', type: 'potion', icon: '🧪', description: '微微泛紅的初級藥水，能恢復 50 點生命值。' },
+    'item_hp_pot_m': { id: 'item_hp_pot_m', name: '中型生命藥水', type: 'potion', icon: '⚗️', description: '濃郁的紅色藥劑，能恢復 200 點生命值。' },
+    'item_hp_pot_l': { id: 'item_hp_pot_l', name: '大型生命藥水', type: 'potion', icon: '🍷', description: '極其珍貴的高級藥品，能恢復 500 點生命值。' },
+    'item_str_seed': { id: 'item_str_seed', name: '力量種子', type: 'consumable', icon: '💪', description: '蘊含神秘力量的種子，服用後永久提升 2 點攻擊力。' },
+    'item_def_seed': { id: 'item_def_seed', name: '鐵壁種子', type: 'consumable', icon: '🛡️', description: '堅硬如鐵的種子，服用後永久提升 2 點防禦力。' },
+    'item_hp_seed': { id: 'item_hp_seed', name: '生命之果', type: 'consumable', icon: '🍎', description: '散發著生命氣息的果實，服用後永久提升 10 點最大生命值。' },
+    'item_iron_ore': { id: 'item_iron_ore', name: '鐵礦石', type: 'material', icon: '🔩', description: '可以用來鍛造基礎裝備的金屬原礦。' },
+    'item_magic_gem': { id: 'item_magic_gem', name: '魔力寶石', type: 'gem', icon: '🔮', description: '散發著幽藍微光的奇異寶石，蘊藏大量精純魔力。' },
+    'item_herb': { id: 'item_herb', name: '藥草', type: 'material', icon: '🌿', description: '生長在野外的普通草本植物，是煉製各類藥水的基本材料。' },
+    'item_dragon_scale': { id: 'item_dragon_scale', name: '龍鱗碎片', type: 'material', icon: '🐲', description: '強大黑龍掉落的珍貴鱗片，堅硬無比，散發著危險的氣息。' },
+    'item_mp_pot': { id: 'item_mp_pot', name: '魔力藥水', type: 'potion', icon: '💧', description: '閃爍著幽藍光芒的藥水，能恢復 50 點魔力值。' },
+    'item_revive_pot': { id: 'item_revive_pot', name: '復甦精華', type: 'potion', icon: '💧', description: '閃耀著奇蹟般光芒的泉水，不僅能恢復生命，還能在戰敗時將角色滿血復活。' },
+    'mat_north_tech': { id: 'mat_north_tech', name: '科技廢料', type: 'material', icon: '⚙️', description: '北部特產：沾染微弱魔力的報廢電路板。' },
+    'mat_north_glass': { id: 'mat_north_glass', name: '魔法玻璃', type: 'material', icon: '🪷', description: '北部特產：折射著奇幻光芒的玻璃碎片，可用於光學附魔。' },
+    'mat_central_iron': { id: 'mat_central_iron', name: '高山鐵礦', type: 'material', icon: '⛰️', description: '中部特產：只有在中央山脈深處才挖得到的極堅硬礦石。' },
+    'mat_central_wood': { id: 'mat_central_wood', name: '神木枝枒', type: 'material', icon: '🍃', description: '中部特產：受到古老森林魔力滋養的千年樹枝。' },
+    'mat_south_sand': { id: 'mat_south_sand', name: '炎漠紅砂', type: 'material', icon: '🏜️', description: '南部特產：蘊含濃烈火屬性魔力的紅色砂礫。' },
+    'mat_south_pearl': { id: 'mat_south_pearl', name: '海淵珍珠', type: 'material', icon: '🦪', description: '南部特產：凝聚大洋水屬性精華的璀璨珍珠。' },
+    'mat_east_crystal': { id: 'mat_east_crystal', name: '花東水晶', type: 'material', icon: '💠', description: '東部特產：純淨無瑕的天然水晶，能大幅增幅魔力。' },
+    'mat_coral': { id: 'mat_coral', name: '珊瑚碎片', type: 'material', icon: '🌺', description: '屏東特產：沾著濃厚海洋魔力的礁石碎片。' },
+    'mat_basalt': { id: 'mat_basalt', name: '玄武岩礦石', type: 'material', icon: '🌑', description: '台東特產：花東縱谷出產的堅硬黑色岩石。' },
+    'mat_ancient_wood': { id: 'mat_ancient_wood', name: '太古神木', type: 'material', icon: '🌲', description: '台中稀有：更高品質的千年神木原木，蒸餾著古老欲力。' },
+    'mat_lava_sand': { id: 'mat_lava_sand', name: '熔岩紅砂', type: 'material', icon: '🌋', description: '台南稀有：比炎漠紅砂更濃縮的極品火屬性砂礫。' },
+};

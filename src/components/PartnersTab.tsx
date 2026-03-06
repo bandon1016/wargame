@@ -1,15 +1,15 @@
 import React, { useState, useMemo } from 'react';
 import { Star, Sparkles, UserPlus, Users, ShieldAlert, CheckCircle2, MinusCircle, PlusCircle, Loader2, X, Zap, AlertTriangle, ArrowRight, Home, Flame, Diamond, Search, Info, Book } from 'lucide-react';
-import type { Partner, CharacterStats, God } from '../types/game';
+import type { Partner, CharacterStats, HydratedCharacterStats, God } from '../types/game';
 import { RARITY_COLORS, getPartnerAvatar } from '../types/game';
 import { supabase } from '../lib/supabase';
 
 interface Props {
-    player: CharacterStats;
-    onUpdatePlayer: (a: React.SetStateAction<CharacterStats>) => void;
-    saveProfile: (p: CharacterStats) => void;
+    player: HydratedCharacterStats;
+    onUpdatePlayer: (a: React.SetStateAction<CharacterStats | null>) => void;
+    saveProfile: (p: CharacterStats | null) => void;
     isCombatAction: boolean;
-    mapServerProfile: (data: any) => CharacterStats;
+    mapServerProfile: (data: any) => CharacterStats | null;
     setRpcPending?: (val: boolean) => void;
 }
 
@@ -188,6 +188,7 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
         }
 
         onUpdatePlayer(prev => {
+            if (!prev) return null;
             const nextGods = prev.gods.map(g =>
                 g.id === godId ? { ...g, level: g.level + 1 } : g
             );
@@ -207,6 +208,7 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
             return;
         }
         onUpdatePlayer(prev => {
+            if (!prev) return null;
             const nextId = prev.activeGodId === godId ? null : godId;
             const nextState = { ...prev, activeGodId: nextId };
             saveProfile(nextState);
@@ -275,6 +277,7 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
         }
 
         onUpdatePlayer(prev => {
+            if (!prev) return null;
             const isCurrentlyDeployed = prev.partners.find(p => p.id === partnerId)?.isDeployed;
             const deployedCount = prev.partners.filter(p => p.isDeployed).length;
 

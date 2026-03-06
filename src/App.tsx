@@ -1,9 +1,21 @@
 ﻿import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap, Circle, Polyline, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Compass, Sword, Home, Users, Package, Settings as SettingsIcon, Book, Heart, Shield, Zap, ChevronRight, ChevronLeft, MapPin, Loader2, X, PlusCircle, ShieldAlert, TrainFront, Coins, Sparkles, Cpu, Waves, Diamond, Trophy, Copy, Check, ScrollText, TrendingUp, Square, Crown, Rocket, Bell } from 'lucide-react';
-import type { CharacterStats, Equipment, GameItem, Skill, MapPOI, Town, WeatherType, Enemy, AlchemyRecipe, BlacksmithRecipe, ElementType } from './types/game';
+import {
+  Compass, MapPin, Sword, TrainFront, Users, Shield, Heart, Package, Home, ChevronRight, Zap, Target, Scroll, Settings, Settings as SettingsIcon, LogOut, MessageSquare, AlertCircle, Info, Star, Award, Search, X, PlusCircle, MinusCircle, RefreshCcw, Save, Trash2, Edit2, Check, ExternalLink, Menu, Bell, Volume2, VolumeX, Maximize2, Minimize2, Map as MapIcon, Layers, Sun, Cloud, CloudRain, CloudLightning, Wind, Thermometer, Droplets, Clock,
+  Loader2, ShieldAlert, Book, Trophy, Crown, Coins, ScrollText, Sparkles, Cpu, Waves, Diamond, Square, Rocket, ChevronLeft, TrendingUp, Copy
+} from 'lucide-react';
+import { supabase } from './lib/supabase';
 import { MONSTER_DATABASE, SKILL_DATABASE, ITEM_DATABASE, EQUIPMENT_DATABASE, RARITY_COLORS, WEATHER_TYPES, TOWN_DATABASE, getPartnerAvatar, getRailwayPath, POI_NAMES, ELEMENT_META, getRegionByCoordinates, getRegionByCityName, getRegionalMaterials, getDistance, getPathDistance, getInterpolatedPositionByDistance } from './types/game';
+import type {
+  CharacterStats, Partner, GameItem, Building, Town, MapPOI,
+  Enemy, Skill, WeatherType, HydratedCharacterStats, Equipment,
+  PartnerSync, GameItemSync, BuildingSync, EquipmentSync, PushSettings, AlchemyRecipe, BlacksmithRecipe, ElementType
+} from './types/game';
+import { ITEM_DICT } from './data/items';
+import { PARTNER_DICT } from './data/partners';
+import { BUILDING_DICT } from './data/buildings';
+import { EQUIPMENT_DICT } from './data/equipment';
 import { UPDATE_NOTES } from './data/updates';
 import { CombatScreen } from './components/CombatScreen';
 import { PartnersTab } from './components/PartnersTab';
@@ -16,7 +28,6 @@ import { WeatherRain } from './components/WeatherRain';
 import { DailyQuestPanel } from './components/DailyQuestPanel';
 import { PremiumShopModal } from './components/PremiumShopModal';
 import { AdminPanel } from './components/AdminPanel';
-import { supabase } from './lib/supabase';
 
 // Fix leaflet default icon paths in React
 import L from 'leaflet';
@@ -27,7 +38,7 @@ L.Marker.prototype.options.icon = L.icon({ iconUrl: iconImg, shadowUrl: iconShad
 // Custom Player Icon (Avatar Emoji)
 const createPlayerIcon = (emoji: string, godAvatar: string | null = null) => L.divIcon({
   html: `
-  <div class="relative flex items-center justify-center">
+  <div class="relative flex items-center justify-center" >
     ${godAvatar ? `
         <div class="absolute -top-3 -right-3 w-7 h-7 bg-amber-400 rounded-full flex items-center justify-center border-2 border-black shadow-[0_0_10px_rgba(251,191,36,0.5)] z-20 anim-god-glow">
           <span class="text-sm">${godAvatar}</span>
@@ -36,7 +47,7 @@ const createPlayerIcon = (emoji: string, godAvatar: string | null = null) => L.d
       ` : ''
     }
 <div class="relative text-3xl drop-shadow-lg ${godAvatar ? 'anim-god-glow' : ''}">${emoji}</div>
-    </div >
+    </div>
   `,
   className: 'player-div-icon',
   iconSize: [40, 40],
@@ -50,7 +61,7 @@ const POI_ICONS = {
   altar: '⛩️'
 };
 const createPoiIcon = (type: keyof typeof POI_ICONS) => L.divIcon({
-  html: `<div style="font-size: 24px; filter: drop-shadow(0 0 5px rgba(255,255,255,0.7)); transform: translate(-10%, -10%); opacity: 0.9;">${POI_ICONS[type]}</div>`,
+  html: `<div style = "font-size: 24px; filter: drop-shadow(0 0 5px rgba(255,255,255,0.7)); transform: translate(-10%, -10%); opacity: 0.9;" > ${POI_ICONS[type]}</div > `,
   className: 'custom-poi-marker',
   iconSize: [30, 30],
   iconAnchor: [15, 15],
@@ -62,10 +73,10 @@ const FACILITY_ICONS: Record<string, string> = {
 };
 const createFacilityIcon = (type: string, label: string) => L.divIcon({
   html: `
-  <div style="display:flex; flex-direction:column; align-items:center; gap:2px;">
+  <div style = "display:flex; flex-direction:column; align-items:center; gap:2px;" >
     <div style="font-size:22px; filter:drop-shadow(0 2px 6px rgba(0,0,0,0.8));">${FACILITY_ICONS[type] || '🏛️'}</div>
     <div style="font-size:9px; font-weight:900; color:#93c5fd; background:rgba(0,0,0,0.75); border:1px solid rgba(255,255,255,0.15); padding:1px 5px; border-radius:99px; white-space:nowrap; backdrop-filter:blur(4px);">${label}</div>
-  </div>`,
+  </div> `,
   className: 'facility-static-marker',
   iconSize: [50, 42],
   iconAnchor: [25, 42],
@@ -73,11 +84,11 @@ const createFacilityIcon = (type: string, label: string) => L.divIcon({
 
 const createCityLabelIcon = (name: string) => L.divIcon({
   html: `
-  <div class="flex flex-col items-center">
+  <div class="flex flex-col items-center" >
     <div class="px-2 py-0.5 bg-black/60 backdrop-blur-md border border-white/20 rounded-full text-[10px] font-black text-white shadow-xl shadow-black/50 whitespace-nowrap">
       ${name}
     </div>
-    </div >
+    </div>
   `,
   className: 'city-label-icon',
   iconSize: [60, 20],
@@ -86,8 +97,8 @@ const createCityLabelIcon = (name: string) => L.divIcon({
 
 const createConfirmIcon = (label: string) => L.divIcon({
   html: `
-  <div class="relative flex flex-col items-center group pointer-events-auto">
-      <!-- Floating Card Confirm UI -->
+  <div class="relative flex flex-col items-center group pointer-events-auto" >
+      <!--Floating Card Confirm UI-->
       <div class="absolute bottom-10 flex flex-col items-center anim-fade-in-up">
         <div class="bg-black/95 backdrop-blur-2xl border border-game-accent/50 rounded-2xl p-2 shadow-[0_15px_40px_rgba(0,0,0,0.8)] flex flex-col items-center gap-2 min-w-[150px]">
           <div class="text-[13px] font-black text-game-accent uppercase tracking-wide mb-1 opacity-90">${label}</div>
@@ -105,7 +116,7 @@ const createConfirmIcon = (label: string) => L.divIcon({
       </div>
       <!--Pin -->
   <div class="text-3xl drop-shadow-[0_4px_10px_rgba(0,0,0,0.5)] anim-pulse-slow">📍</div>
-    </div >
+    </div>
   `,
   className: 'target-confirm-icon pointer-events-auto',
   iconSize: [40, 40],
@@ -186,35 +197,32 @@ const getRewardsByLevel = (lv: number) => ({
 });
 
 // --- God System Stat Bonuses ---
-const getGodStatBonus = (p: CharacterStats) => {
-  if (!p.activeGodId) return { atk: 1, def: 1, hp: 1, dmg: 1 };
-  const god = p.gods.find(g => g.id === p.activeGodId);
-  if (!god) return { atk: 1, def: 1, hp: 1, dmg: 1 };
-
-  const lv = god.level;
-  if (god.name.includes('媽祖')) return { atk: 1, def: 1 + lv * 0.005, hp: 1, dmg: 1 };
-  if (god.name.includes('土地公')) return { atk: 1, def: 1, hp: 1 + lv * 0.005, dmg: 1 };
-  if (god.name.includes('太子')) return { atk: 1 + lv * 0.005, def: 1, hp: 1, dmg: 1 };
-  if (god.name.includes('玄天')) return { atk: 1, def: 1, hp: 1, dmg: 1 + lv * 0.01 };
-  if (god.name.includes('關公') || god.name.includes('關聖')) return { atk: 1 + lv * 0.01, def: 1 + lv * 0.01, hp: 1 + lv * 0.01, dmg: 1 };
-
-  return { atk: 1, def: 1, hp: 1, dmg: 1 };
+const getGodStatBonus = (p: HydratedCharacterStats) => {
+  if (!p.activeGodId) return { atk: 1, def: 1, hp: 1 };
+  const g = p.gods.find(god => god.id === p.activeGodId);
+  if (!g) return { atk: 1, def: 1, hp: 1 };
+  const lvBonus = 1 + (g.level * 0.02);
+  return { atk: lvBonus, def: lvBonus, hp: lvBonus };
 };
 
-const totalEquipAtk = (p: CharacterStats) => [p.equippedWeapon, p.equippedArmor, p.equippedHelmet, p.equippedBoots, p.equippedAccessory].reduce((s, e) => s + (e?.attack ?? 0), 0);
-const totalEquipDef = (p: CharacterStats) => [p.equippedWeapon, p.equippedArmor, p.equippedHelmet, p.equippedBoots, p.equippedAccessory].reduce((s, e) => s + (e?.defense ?? 0), 0);
-const totalEquipHp = (p: CharacterStats) => [p.equippedWeapon, p.equippedArmor, p.equippedHelmet, p.equippedBoots, p.equippedAccessory].reduce((s, e) => s + (e?.hp ?? 0), 0);
+const totalEquipAtk = (p: HydratedCharacterStats) => {
+  return (p.equippedWeapon?.attack || 0) + (p.equippedArmor?.attack || 0) + (p.equippedHelmet?.attack || 0) + (p.equippedBoots?.attack || 0) + (p.equippedAccessory?.attack || 0);
+};
+const totalEquipDef = (p: HydratedCharacterStats) => {
+  return (p.equippedWeapon?.defense || 0) + (p.equippedArmor?.defense || 0) + (p.equippedHelmet?.defense || 0) + (p.equippedBoots?.defense || 0) + (p.equippedAccessory?.defense || 0);
+};
+const totalEquipHp = (p: HydratedCharacterStats) => {
+  return (p.equippedWeapon?.hp || 0) + (p.equippedArmor?.hp || 0) + (p.equippedHelmet?.hp || 0) + (p.equippedBoots?.hp || 0) + (p.equippedAccessory?.hp || 0);
+};
 
-// Partner Stat Bonuses (Only counts deployed partners)
-const totalPartnerAtk = (p: CharacterStats) => p.partners.filter(pt => pt.isDeployed).reduce((s, pt) => s + (pt.role === 'dps' ? pt.power : Math.floor(pt.power * 0.2)), 0);
-const totalPartnerDef = (p: CharacterStats) => p.partners.filter(pt => pt.isDeployed).reduce((s, pt) => s + (pt.role === 'tank' ? Math.floor(pt.power * 0.5) : Math.floor(pt.power * 0.1)), 0);
-const totalPartnerHp = (p: CharacterStats) => p.partners.filter(pt => pt.isDeployed).reduce((s, pt) => s + (pt.role === 'tank' || pt.role === 'healer' ? pt.power * 3 : pt.power), 0);
-const totalPartnerHeal = (p: CharacterStats) => p.partners.filter(pt => pt.isDeployed).reduce((s, pt) => s + (pt.role === 'healer' ? pt.power : 0), 0);
+const totalPartnerAtk = (p: HydratedCharacterStats) => p.partners.filter(pt => pt.isDeployed).reduce((s, pt) => s + pt.power, 0);
+const totalPartnerDef = (p: HydratedCharacterStats) => p.partners.filter(pt => pt.isDeployed).reduce((s, pt) => s + (pt.power * 0.5), 0);
+const totalPartnerHp = (p: HydratedCharacterStats) => p.partners.filter(pt => pt.isDeployed).reduce((s, pt) => s + (pt.power * 5), 0);
+const totalPartnerHeal = (p: HydratedCharacterStats) => p.partners.filter(pt => pt.isDeployed && pt.role === 'healer').reduce((s, pt) => s + (pt.power * 2), 0);
 
-// Authoritative Effective Stats (Base + Equip + Partner) * God Bonus
-const getEffectiveAtk = (p: CharacterStats) => Math.floor((p.attack + totalEquipAtk(p) + totalPartnerAtk(p)) * getGodStatBonus(p).atk);
-const getEffectiveDef = (p: CharacterStats) => Math.floor((p.defense + totalEquipDef(p) + totalPartnerDef(p)) * getGodStatBonus(p).def);
-const getEffectiveMaxHp = (p: CharacterStats) => Math.floor((p.maxHp + totalEquipHp(p) + totalPartnerHp(p)) * getGodStatBonus(p).hp);
+const getEffectiveAtk = (p: HydratedCharacterStats) => Math.floor((p.attack + totalEquipAtk(p) + totalPartnerAtk(p)) * getGodStatBonus(p).atk);
+const getEffectiveDef = (p: HydratedCharacterStats) => Math.floor((p.defense + totalEquipDef(p) + totalPartnerDef(p)) * getGodStatBonus(p).def);
+const getEffectiveMaxHp = (p: HydratedCharacterStats) => Math.floor((p.maxHp + totalEquipHp(p) + totalPartnerHp(p)) * getGodStatBonus(p).hp);
 
 export const getSkillUpgradeInfo = (currentLevel: number) => {
   if (currentLevel >= 10) return null;
@@ -224,7 +232,6 @@ export const getSkillUpgradeInfo = (currentLevel: number) => {
 
   const fragments = fragCost[currentLevel] || 55;
   const gold = goldCost[currentLevel] || 55000;
-
   let successRate = 100;
   if (targetLv === 5) successRate = 70;
   else if (targetLv === 6) successRate = 60;
@@ -232,7 +239,6 @@ export const getSkillUpgradeInfo = (currentLevel: number) => {
   else if (targetLv === 8) successRate = 40;
   else if (targetLv === 9) successRate = 15;
   else if (targetLv === 10) successRate = 10;
-
   return { fragments, gold, successRate };
 };
 
@@ -307,6 +313,61 @@ function urlBase64ToUint8Array(base64String: string) {
   return outputArray;
 }
 
+// --- Hydration Helper ---
+const hydratePlayer = (p: CharacterStats | null): HydratedCharacterStats | null => {
+  if (!p) return null;
+
+  const hydratedItems = p.items.map(item => {
+    const staticData = ITEM_DICT[item.id] || { name: '未知道具', icon: '❓', type: 'material', description: '無資料' };
+    return { ...staticData, ...item } as GameItem;
+  });
+
+  const hydratedPartners = p.partners.map(pSync => {
+    const staticData = PARTNER_DICT[pSync.id] || { name: '未知夥伴', icon: '👤', role: 'attacker', avatar: '👤', rarity: 'N', description: '無資料' };
+    return { ...staticData, ...pSync } as Partner;
+  });
+
+  const hydratedBuildings = p.buildings.map(bSync => {
+    const staticData = BUILDING_DICT[bSync.id] || { name: '未知建築', icon: '🏠', type: 'material_camp', description: '無資料' };
+    return { ...staticData, ...bSync } as Building;
+  });
+
+  const hydratedEq = p.equipment.map(eSync => {
+    const staticData = EQUIPMENT_DICT[eSync.id] || { name: '未知裝備', icon: '❓', rarity: 'N', type: 'weapon', description: '無資料', attack: 0, defense: 0, hp: 0 };
+    return { ...staticData, ...eSync } as Equipment;
+  });
+
+  const hydrateSingleEq = (id?: string) => {
+    if (!id) return undefined;
+    const syncItem = p.equipment.find(e => e.id === id);
+    if (!syncItem) return undefined;
+    const staticData = EQUIPMENT_DICT[syncItem.id] || { name: '未知裝備', icon: '❓', rarity: 'N', type: 'weapon', description: '無資料', attack: 0, defense: 0, hp: 0 };
+    return { ...staticData, ...syncItem } as Equipment;
+  };
+
+  const temp: any = {
+    ...p,
+    items: hydratedItems,
+    partners: hydratedPartners,
+    buildings: hydratedBuildings,
+    equipment: hydratedEq,
+    equippedWeapon: hydrateSingleEq(p.equippedWeapon?.id),
+    equippedArmor: hydrateSingleEq(p.equippedArmor?.id),
+    equippedHelmet: hydrateSingleEq(p.equippedHelmet?.id),
+    equippedBoots: hydrateSingleEq(p.equippedBoots?.id),
+    equippedAccessory: hydrateSingleEq(p.equippedAccessory?.id),
+    effectiveAtk: 0,
+    effectiveDef: 0,
+    effectiveMaxHp: 0
+  };
+
+  temp.effectiveAtk = getEffectiveAtk(temp);
+  temp.effectiveDef = getEffectiveDef(temp);
+  temp.effectiveMaxHp = getEffectiveMaxHp(temp);
+
+  return temp as HydratedCharacterStats;
+};
+
 const App: React.FC = () => {
   const [position, setPosition] = useState<[number, number]>([25.0330, 121.5654]);
   const positionRef = React.useRef<[number, number]>(position);
@@ -320,6 +381,8 @@ const App: React.FC = () => {
   const [player, setPlayer] = useState<CharacterStats | null>(null);
   const playerRef = React.useRef<CharacterStats | null>(player);
   useEffect(() => { playerRef.current = player; }, [player]);
+
+  const hydratedPlayer = useMemo(() => hydratePlayer(player), [player]);
 
   const [weather, setWeather] = useState<WeatherType>('sunny');
   const weatherRef = React.useRef<WeatherType>(weather);
@@ -404,7 +467,7 @@ const App: React.FC = () => {
     const h = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);
     const s = seconds % 60;
-    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')} `;
   };
 
   // Check for onboarding
@@ -783,16 +846,10 @@ const App: React.FC = () => {
       saltCrystals: data.salt_crystals ?? 0,
       premiumGems: data.premium_gems ?? 0,
       buildings: data.buildings || [],
-      items: (data.items || []).map((it: any) => {
-        const dbItem = ITEM_DATABASE.find(d => d.id === it.id);
-        return {
-          ...it,
-          name: dbItem?.name || it.name || '未知道具',
-          type: dbItem?.type || it.type || 'material',
-          description: dbItem?.description || it.description || '探險獲得的道具',
-          icon: dbItem?.icon || it.icon || '🧪'
-        };
-      }),
+      items: (data.items || []).map((it: any) => ({
+        id: it.id,
+        quantity: it.quantity
+      })),
       equipment: data.equipment || [],
       partners: data.partners || [],
       equippedWeapon: data.equipped_weapon,
@@ -1092,8 +1149,8 @@ const App: React.FC = () => {
       syncResult = await supabase.rpc('secure_sync_profile', {
         p_lat: targetLat,
         p_lng: targetLng,
-        p_hp: p.hp,
-        p_mp: p.mp,
+        p_hp: Math.floor(p.hp),
+        p_mp: Math.floor(p.mp),
         p_travel_data: {
           path: travelSaveData.travel_path,
           started_at: travelSaveData.travel_started_at,
@@ -1126,16 +1183,16 @@ const App: React.FC = () => {
         p_incense: null,
         p_salt_crystals: null,
         p_premium_gems: null,
-        p_last_updated_at: p.updatedAt,
-        p_push_settings: hasPushSettingsChanged ? p.pushSettings : null
+        p_push_settings: hasPushSettingsChanged ? p.pushSettings : null,
+        p_last_updated_at: p.updatedAt ? new Date(p.updatedAt).getTime() : Date.now()
       });
     } else {
       syncResult = await supabase.rpc('secure_sync_location', {
         p_lat: targetLat,
         p_lng: targetLng,
-        p_hp: p.hp,
-        p_mp: p.mp,
-        p_last_updated_at: p.updatedAt
+        p_hp: Math.floor(p.hp),
+        p_mp: Math.floor(p.mp),
+        p_last_updated_at: p.updatedAt ? new Date(p.updatedAt).getTime() : Date.now()
       });
     }
 
@@ -1205,15 +1262,18 @@ const App: React.FC = () => {
       if (isDoubleTabbedRef.current) return;
       setPlayer(p => {
         if (!p) return null;
+        // Use the hydration helper locally for calculation
+        const hp = hydratePlayer(p);
+        if (!hp) return p;
+
         let dg = 0, dm = 0;
-        p.buildings.forEach(b => {
-          // Calculate bonus
+        hp.buildings.forEach(b => {
           let goldBonus = 0;
           let matBonus = 0;
-          const assigned = p.partners.filter(pt => b.assignedPartners?.includes(pt.id));
+          const assigned = hp.partners.filter(pt => b.assignedPartners?.includes(pt.id));
           assigned.forEach(pt => {
-            let mult = pt.rarity === 5 ? 0.05 : pt.rarity === 4 ? 0.03 : 0.02;
-            if (pt.role === 'tank' && (b.type === 'material_camp' || b.name.includes('營地') || b.name.includes('工坊'))) {
+            let mult = pt.rarity === 'UR' || pt.rarity === 'SSR' ? 0.05 : pt.rarity === 'SR' ? 0.03 : 0.02;
+            if (pt.role === 'tank' && (b.type === 'material_camp')) {
               matBonus += mult;
             } else if (pt.role === 'healer' && b.type === 'gold_mine') {
               goldBonus += mult;
@@ -1221,18 +1281,21 @@ const App: React.FC = () => {
           });
 
           if (b.type === 'gold_mine') {
-            dg += (b.baseProduction * (1 + goldBonus));
+            dg += (b.baseProduction * (1 + goldBonus)) / 60;
           } else if (b.type === 'material_camp') {
-            dm += (b.baseProduction * (1 + matBonus));
+            dm += (b.baseProduction * (1 + matBonus)) / 60;
           }
         });
 
-        if (dg === 0 && dm === 0) {
-          return p;
-        }
-        return { ...p, gold: p.gold + dg, baseMaterials: p.baseMaterials + dm };
+        if (dg === 0 && dm === 0) return p;
+        return {
+          ...p,
+          gold: p.gold + dg,
+          baseMaterials: p.baseMaterials + dm,
+          updatedAt: Date.now()
+        };
       });
-    }, 60000);
+    }, 1000); // Changed to 1s for better UX, dividend by 60 for per-min rate
     return () => window.clearInterval(t);
   }, []);
 
@@ -1486,7 +1549,9 @@ const App: React.FC = () => {
       if (hasWeatherResistance(weather)) return; // God protection
       setPlayer(prev => {
         if (!prev) return prev;
-        const effectiveMaxHp = getEffectiveMaxHp(prev);
+        const hp_data = hydratePlayer(prev);
+        if (!hp_data) return prev;
+        const effectiveMaxHp = getEffectiveMaxHp(hp_data);
         const drain = Math.max(1, Math.floor(effectiveMaxHp * effect.envHpTickDmg));
         const newHp = Math.max(0, prev.hp - drain);
         if (newHp === 0 && prev.hp > 0) {
@@ -1509,7 +1574,8 @@ const App: React.FC = () => {
         if (b.isUpgrading && b.upgradeEndsAt && now >= b.upgradeEndsAt) {
           const key = `${b.id}_${b.level}`;
           if (!notifiedBuildingsRef.current.has(key)) {
-            triggerPushNotification('building', '🏗️ 設施升級完成', `${b.name} 已成功升級至 Lv.${b.level + 1}！`);
+            const bName = BUILDING_DICT[b.id]?.name || '未知設施';
+            triggerPushNotification('building', '🏗️ 設施升級完成', `${bName} 已成功升級至 Lv.${b.level + 1}！`);
             notifiedBuildingsRef.current.add(key);
           }
         }
@@ -1736,9 +1802,11 @@ const App: React.FC = () => {
     let hp, eAtk, eDef;
 
     if (currentIsElite || isBoss || isWeatherSpecial) {
-      const pHP = getEffectiveMaxHp(p);
-      const pATK = getEffectiveAtk(p);
-      const pDEF = getEffectiveDef(p);
+      const hPlayer = hydratePlayer(p);
+      if (!hPlayer) return;
+      const pHP = getEffectiveMaxHp(hPlayer);
+      const pATK = getEffectiveAtk(hPlayer);
+      const pDEF = getEffectiveDef(hPlayer);
 
       const diffMultiplier = isBoss ? 1.5 : (isWeatherSpecial ? 1.2 : 1.0);
 
@@ -1753,9 +1821,11 @@ const App: React.FC = () => {
     } else {
       // [FIX] 普通怪也應以玩家有效數值（含裝備+夥伴）為基準縮放
       // 純用 lv * coefficient 無法反映玩家實際強度，會導致怪物過弱
-      const pHP2 = getEffectiveMaxHp(p);
-      const pATK2 = getEffectiveAtk(p);
-      const pDEF2 = getEffectiveDef(p);
+      const hPlayer2 = hydratePlayer(p);
+      if (!hPlayer2) return;
+      const pHP2 = getEffectiveMaxHp(hPlayer2);
+      const pATK2 = getEffectiveAtk(hPlayer2);
+      const pDEF2 = getEffectiveDef(hPlayer2);
 
       // 普通怪難度：菁英的 40%（讓玩家有優勢但不是碾壓）
       const normalDiff = 0.4;
@@ -1833,8 +1903,8 @@ const App: React.FC = () => {
     isRpcPendingRef.current = true;
     const { data: result, error } = await supabase.rpc('secure_resolve_combat', {
       p_monster_name: currentEnemy.name,
-      p_player_hp: finalHp ?? player.hp,
-      p_player_mp: finalMp ?? player.mp,
+      p_player_hp: Math.floor(finalHp ?? player.hp),
+      p_player_mp: Math.floor(finalMp ?? player.mp),
       p_skill_reward_id: randomSkill.id,
       p_skill_reward_name: randomSkill.name,
       p_lat: positionRef.current[0],
@@ -1877,55 +1947,34 @@ const App: React.FC = () => {
       : (typeof rawLoots === 'string' ? JSON.parse(rawLoots) : []);
     const sEquip = result.equipment;
 
-    const finalExp = result.exp_gained ?? _expReward;
-    const finalGold = result.gold_gained ?? _goldReward;
+    const finalExp = result.exp_gained || 0;
+    const finalGold = result.gold_gained || 0;
 
     setPlayer(prev => {
       if (!prev) return prev;
-
       const newItems = [...prev.items];
       let newIncense = prev.incense;
 
-      // Merge Loots into items cautiously
       sLoots.forEach((loot: any) => {
         let qty = loot.quantity || 1;
         if (loot.id === 'currency_incense') {
           newIncense += qty;
-        } else if (loot.id === 'p_exp' || loot.id === 'partner_exp') {
-          // partner logic is handled below or skipped for local player
         } else {
           const itemIdx = newItems.findIndex(i => i.id === loot.id);
           if (itemIdx >= 0) {
             newItems[itemIdx] = { ...newItems[itemIdx], quantity: newItems[itemIdx].quantity + qty };
           } else {
-            newItems.push({
-              id: loot.id,
-              name: loot.name,
-              icon: loot.icon || '📦',
-              quantity: qty,
-              type: loot.type || 'material',
-              description: loot.description || ''
-            });
+            newItems.push({ id: loot.id, quantity: qty } as GameItemSync);
           }
         }
       });
 
-      // Insert Equipment as item
       if (sEquip) {
-        const itemIdx = newItems.findIndex(i => i.id === `eq_${sEquip.name}`);
+        const itemIdx = newItems.findIndex(i => i.id === `eq_${sEquip.id}`);
         if (itemIdx >= 0) {
           newItems[itemIdx] = { ...newItems[itemIdx], quantity: newItems[itemIdx].quantity + 1 };
         } else {
-          const eqItem: any = {
-            id: `eq_${sEquip.name}`,
-            name: sEquip.name,
-            icon: sEquip.icon || '🛡️',
-            quantity: 1,
-            type: 'material', // Safe fallback
-            description: sEquip.description || '',
-            stats: sEquip.stats
-          };
-          newItems.push(eqItem);
+          newItems.push({ id: sEquip.id, quantity: 1 } as GameItemSync);
         }
       }
 
@@ -1940,10 +1989,7 @@ const App: React.FC = () => {
         maxMp: result.max_mp ?? prev.maxMp,
         incense: newIncense,
         items: newItems
-        // Note: we don't deeply merge partners yet to save complexity. 
-        // If partner leveling isn't critical immediately, a refresh will get them.
       };
-
       playerRef.current = mergedPlayer;
       return mergedPlayer;
     });
@@ -2929,7 +2975,7 @@ const App: React.FC = () => {
       {showGuide && <GuideModal onClose={() => setShowGuide(false)} />}
 
       {/* 財庫 Modal (新) */}
-      {showTreasury && (
+      {showTreasury && hydratedPlayer && (
         <div className="fixed inset-0 z-[5000] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md anim-fade-in">
           <div className="glass-panel w-full max-w-md rounded-[2.5rem] p-8 border border-white/20 shadow-2xl relative overflow-hidden anim-scale-in">
             <div className="absolute -right-20 -top-20 w-64 h-64 bg-amber-500/10 rounded-full blur-3xl opacity-50" />
@@ -2952,13 +2998,13 @@ const App: React.FC = () => {
             <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
               {/* 基礎貨幣 */}
               {[
-                { id: 'gold', label: '金幣 / TWD', val: Math.floor(player.gold), icon: <div className="text-2xl">💰</div>, desc: '在大台北地區通用的商業貨幣。', color: 'text-amber-400' },
-                { id: 'mats', label: '建材', val: Math.floor(player.baseMaterials), icon: <div className="text-2xl">🧱</div>, desc: '用於家園建築升級的基礎工業資源。', color: 'text-orange-400' },
-                { id: 'incense', label: '香火', val: player.incense, icon: <span className="text-2xl">🕯️</span>, desc: '來自全台各地廟宇的信仰力量，可用於祭祀。', color: 'text-red-400' },
-                { id: 'lingQi', label: '仙草靈氣', val: player.lingQi, icon: <Sparkles className="text-emerald-400" size={24} />, desc: '山林間採集而來的純淨靈氣，對技能極為重要。', color: 'text-emerald-400' },
-                { id: 'tech', label: '科技碎片', val: player.techFragments, icon: <Cpu className="text-sky-400" size={24} />, desc: '矽島科技重鎮的半導體零件，用於裝備開發。', color: 'text-sky-400' },
-                { id: 'salt', label: '海鹽結晶', val: player.saltCrystals, icon: <Waves className="text-blue-300" size={24} />, desc: '西南沿海精煉的鹽晶，生活物資的關鍵。', color: 'text-blue-300' },
-                { id: 'gems', label: '台灣藍寶靈石', val: player.premiumGems, icon: <Diamond className="text-indigo-400" size={24} />, desc: '花蓮礦區挖掘出的極稀有寶石。', color: 'text-indigo-400' },
+                { id: 'gold', label: '金幣 / TWD', val: Math.floor(hydratedPlayer.gold), icon: <div className="text-2xl">💰</div>, desc: '在大台北地區通用的商業貨幣。', color: 'text-amber-400' },
+                { id: 'mats', label: '建材', val: Math.floor(hydratedPlayer.baseMaterials), icon: <div className="text-2xl">🧱</div>, desc: '用於家園建築升級的基礎工業資源。', color: 'text-orange-400' },
+                { id: 'incense', label: '香火', val: hydratedPlayer.incense, icon: <span className="text-2xl">🕯️</span>, desc: '來自全台各地廟宇的信仰力量，可用於祭祀。', color: 'text-red-400' },
+                { id: 'lingQi', label: '仙草靈氣', val: hydratedPlayer.lingQi, icon: <Sparkles className="text-emerald-400" size={24} />, desc: '山林間採集而來的純淨靈氣，對技能極為重要。', color: 'text-emerald-400' },
+                { id: 'tech', label: '科技碎片', val: hydratedPlayer.techFragments, icon: <Cpu className="text-sky-400" size={24} />, desc: '矽島科技重鎮的半導體零件，用於裝備開發。', color: 'text-sky-400' },
+                { id: 'salt', label: '海鹽結晶', val: hydratedPlayer.saltCrystals, icon: <Waves className="text-blue-300" size={24} />, desc: '西南沿海精煉的鹽晶，生活物資的關鍵。', color: 'text-blue-300' },
+                { id: 'gems', label: '台灣藍寶靈石', val: hydratedPlayer.premiumGems, icon: <Diamond className="text-indigo-400" size={24} />, desc: '花蓮礦區挖掘出的極稀有寶石。', color: 'text-indigo-400' },
               ].map(res => (
                 <div key={res.id} className="flex items-center gap-4 bg-white/5 p-4 rounded-[1.5rem] border border-white/5 hover:border-white/10 transition-all group">
                   <div className="w-14 h-14 bg-white/5 rounded-2xl flex items-center justify-center border border-white/10 group-hover:scale-110 transition-transform">
@@ -3336,12 +3382,12 @@ const App: React.FC = () => {
               )}
 
               {/* Deployed Partners */}
-              {player.partners.filter(p => p.isDeployed).map((p) => {
-                const colors = RARITY_COLORS[p.rarity];
+              {hydratedPlayer?.partners.filter(p => p.isDeployed).map((p) => {
+                const colors = RARITY_COLORS[p.rarity] || { border: 'border-gray-500', bg: 'bg-black/60', text: 'text-white', glow: '', label: 'N' };
                 return (
                   <div
                     key={p.id}
-                    className={`relative w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center text-xl sm:text-2xl border-2 bg-black/60 backdrop-blur-md shadow-lg transition-all ${colors ? colors.border + ' ' + colors.glow : 'border-gray-500'} ${isTraveling ? 'opacity-50 grayscale' : ''}`}
+                    className={`relative w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center text-xl sm:text-2xl border-2 bg-black/60 backdrop-blur-md shadow-lg transition-all ${colors.border} ${colors.glow} ${isTraveling ? 'opacity-50 grayscale' : ''}`}
                     title={p.name}
                   >
                     {getPartnerAvatar(p.name, p.avatar)}
@@ -3780,12 +3826,12 @@ const App: React.FC = () => {
         )}
 
         {/* ─── PARTNERS ─── */}
-        {activeTab === 'partners' && <PartnersTab player={player!} onUpdatePlayer={setPlayer as any} saveProfile={saveProfile} isCombatAction={isCombatAction} mapServerProfile={mapServerProfile} setRpcPending={(val: boolean) => { isRpcPendingRef.current = val; }} />}
+        {activeTab === 'partners' && hydratedPlayer && <PartnersTab player={hydratedPlayer} onUpdatePlayer={setPlayer as any} saveProfile={saveProfile} isCombatAction={isCombatAction} mapServerProfile={mapServerProfile} setRpcPending={(val: boolean) => { isRpcPendingRef.current = val; }} />}
 
-        {activeTab === 'home' && <HomeTab player={player!} onUpdatePlayer={setPlayer as any} saveProfile={saveProfile} />}
+        {activeTab === 'home' && hydratedPlayer && <HomeTab player={hydratedPlayer} onUpdatePlayer={setPlayer as any} saveProfile={saveProfile} />}
 
         {/* ─── RANKING (排行) ─── */}
-        {activeTab === 'ranking' && <RankingTab player={player!} />}
+        {activeTab === 'ranking' && hydratedPlayer && <RankingTab player={hydratedPlayer} />}
 
         {activeTab === 'quests' && (
           <DailyQuestPanel
@@ -3872,7 +3918,7 @@ const App: React.FC = () => {
                             }}
                             className="text-gray-500 hover:text-game-accent transition-colors p-1"
                           >
-                            <SettingsIcon size={16} />
+                            <Settings size={16} />
                           </button>
                         </h2>
                       )}
@@ -3959,13 +4005,13 @@ const App: React.FC = () => {
               {/* My Skills */}
               <div className="glass-panel p-5 rounded-3xl">
                 <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><Book size={18} className="text-game-accent" /> 我的技能</h3>
-                {player.skills.length === 0 ? (
+                {hydratedPlayer?.skills.length === 0 ? (
                   <div className="text-center py-12 text-gray-500 italic bg-black/10 rounded-2xl border border-dashed border-white/5">
                     目前尚未領悟任何技能...
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {player.skills.map(playerSkill => {
+                    {hydratedPlayer?.skills.map(playerSkill => {
                       const skInfo = SKILL_DATABASE.find(s => s.id === playerSkill.id);
                       if (!skInfo) return null;
                       const upgrade = getSkillUpgradeInfo(playerSkill.level);
@@ -4016,7 +4062,7 @@ const App: React.FC = () => {
                                 <span className={playerSkill.fragments >= upgrade.fragments ? "text-emerald-400" : "text-red-400"}>
                                   碎片: {playerSkill.fragments}/{upgrade.fragments}
                                 </span>
-                                <span className={player.gold >= upgrade.gold ? "text-game-gold" : "text-red-400"}>
+                                <span className={hydratedPlayer.gold >= upgrade.gold ? "text-game-gold" : "text-red-400"}>
                                   💰 {upgrade.gold}
                                 </span>
                                 <span className="text-gray-400">成功率 {upgrade.successRate}%</span>
@@ -4056,8 +4102,8 @@ const App: React.FC = () => {
                 <h3 className="text-base font-bold mb-4 flex items-center gap-2">⚔️ 當前裝備</h3>
                 <div className="grid grid-cols-5 gap-3">
                   {(['weapon', 'armor', 'helmet', 'boots', 'accessory'] as const).map(slot => {
-                    const slotKey = `equipped${slot.charAt(0).toUpperCase() + slot.slice(1)}` as keyof CharacterStats;
-                    const eq = player[slotKey] as Equipment | undefined;
+                    const slotKey = `equipped${slot.charAt(0).toUpperCase() + slot.slice(1)}` as keyof HydratedCharacterStats;
+                    const eq = hydratedPlayer[slotKey] as Equipment | undefined;
                     const r = eq ? RARITY_COLORS[eq.rarity] : null;
                     return (
                       <div key={slot} className="tooltip-wrap" onClick={() => eq && unequipItem(slot)}>
@@ -4083,11 +4129,11 @@ const App: React.FC = () => {
               </div>
 
               {/* Unequipped Equipment */}
-              {player.equipment.length > 0 && (
+              {hydratedPlayer.equipment.length > 0 && (
                 <div className="glass-panel rounded-2xl p-5">
                   <h3 className="text-base font-bold mb-4 flex items-center gap-2">🎒 背包裝備</h3>
                   <div className="flex flex-wrap gap-3">
-                    {player.equipment.map((eq, index) => {
+                    {hydratedPlayer.equipment.map((eq, index) => {
                       const r = RARITY_COLORS[eq.rarity];
                       return (
                         <div key={`${eq.id}-${index}`} className="tooltip-wrap" onClick={() => equipItem(eq)}>
@@ -4113,11 +4159,11 @@ const App: React.FC = () => {
               {/* Items */}
               <div className="glass-panel rounded-2xl p-5 mb-10">
                 <h3 className="text-base font-bold mb-4 flex items-center gap-2">🧪 道具行李</h3>
-                {player.items.length === 0 ? (
+                {hydratedPlayer.items.length === 0 ? (
                   <div className="text-center text-gray-500 py-8 text-sm">背包空空如也…去探索看看吧！</div>
                 ) : (
                   <div className="flex flex-wrap gap-3">
-                    {player.items.map(item => {
+                    {hydratedPlayer.items.map(item => {
                       const itemDef = ITEM_DATABASE.find(id => id.id === item.id);
                       const description = item.description || itemDef?.description || '普通道具';
                       return (
@@ -4196,10 +4242,10 @@ const App: React.FC = () => {
 
         {/* Combat Overlay */}
         {
-          isCombatAction && currentEnemy && (
+          isCombatAction && currentEnemy && hydratedPlayer && (
             <CombatScreen
               player={{
-                ...player,
+                ...hydratedPlayer,
                 attack: effectiveAtk,
                 // Rainy slightly lowers player defense, unless resistant
                 defense: (weather === 'rainy' && !hasWeatherResistance('rainy')) ? Math.max(0, effectiveDef - 2) : effectiveDef,
@@ -4220,11 +4266,11 @@ const App: React.FC = () => {
               onFlee={() => { setIsCombatAction(false); setAutoExplore(false); setResolvedCombatRewards(null); }}
               autoExplore={autoExplore}
               onAutoHeal={() => {
-                const pot = player.items.find(i => i.type === 'potion' && i.id !== 'item_revive_pot');
+                const pot = hydratedPlayer.items.find(i => i.type === 'potion' && i.id !== 'item_revive_pot');
                 if (pot) useItem(pot, true);
               }}
               onRevive={() => {
-                const revivePot = player.items.find(i => i.id === 'item_revive_pot');
+                const revivePot = hydratedPlayer.items.find(i => i.id === 'item_revive_pot');
                 if (revivePot) useItem(revivePot, true);
               }}
               onUseItem={(it: GameItem) => useItem(it, true)}
@@ -4235,7 +4281,7 @@ const App: React.FC = () => {
         {/* Merchant Shop Overlay */}
         {
           isMerchantOpen && (
-            <div className="absolute inset-0 z-[2500] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm anim-fade-in-up">
+            <div className="fixed inset-0 z-[2500] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm anim-fade-in-up">
               <div className="glass-panel w-full max-w-md rounded-3xl p-6 border border-amber-500/30 shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
                 <div className="flex justify-between items-center mb-6">
                   <div>
@@ -4259,16 +4305,16 @@ const App: React.FC = () => {
                   <div className="text-2xl">💰</div>
                   <div>
                     <div className="text-[10px] text-amber-400 font-bold">你的資金</div>
-                    <div className="text-lg font-mono font-bold">{Math.floor(player.gold)} <span className="text-xs font-sans">金幣</span></div>
+                    <div className="text-lg font-mono font-bold">{Math.floor(player?.gold || 0)} <span className="text-xs font-sans">金幣</span></div>
                   </div>
                 </div>
 
                 <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
                   <p className="text-xs font-bold text-gray-400 mb-2 px-1">你可以販售以下獲得的物品：</p>
-                  {player.items.length === 0 ? (
+                  {hydratedPlayer?.items.length === 0 ? (
                     <div className="text-center py-12 text-gray-500 italic text-sm">背包空空如也...</div>
                   ) : (
-                    player.items.map(item => {
+                    hydratedPlayer?.items.map(item => {
                       let sellPrice = 10;
                       if (item.type === 'gem') sellPrice = 200;
                       if (item.type === 'material') sellPrice = 15;
@@ -4318,7 +4364,7 @@ const App: React.FC = () => {
           inTown && (
             <TownScreen
               town={inTown}
-              player={player!}
+              player={hydratedPlayer!}
               userId={session.user.id}
               onLeave={() => { setInTown(null); setInitialFacility(null); }}
               onCraftAlchemy={handleCraftAlchemy}
@@ -4454,7 +4500,7 @@ const App: React.FC = () => {
           <p className="text-slate-400 text-center leading-relaxed">工程師正在進行升級更新，請稍後再來！<br />(自動探索已幫您暫停)</p>
         </div>
       )}
-    </div >
+    </div>
   );
 };
 

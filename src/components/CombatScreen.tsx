@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import type { CharacterStats, Enemy, Skill, WeatherType } from '../types/game';
+import type { CharacterStats, Enemy, Skill, WeatherType, HydratedCharacterStats } from '../types/game';
 import { SKILL_DATABASE, ELEMENT_META, WEATHER_TYPES } from '../types/game';
 import { Shield, Sword, Heart, Play, Square, X, Award, PlusCircle, Zap, ChevronRight } from 'lucide-react';
 
 interface CombatScreenProps {
-    player: CharacterStats;
+    player: HydratedCharacterStats;
     enemy: Enemy;
     onWin: (exp: number, gold: number, skill?: Skill, lootTable?: any[], equipmentDrop?: any, finalHp?: number, finalMp?: number) => void;
     onLose: (finalHp?: number, finalMp?: number) => void;
@@ -64,8 +64,8 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({
 
     // 同步來自外部（如使用道具 RPC 或全局開關）的權威狀態
     useEffect(() => {
-        setPHp(player.hp);
-        setPMp(player.mp);
+        setPHp(Math.floor(player.hp));
+        setPMp(Math.floor(player.mp));
     }, [player.hp, player.mp]);
 
     // 同步來自外部的自動探索狀態
@@ -162,10 +162,10 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({
         setEShake(true); setTimeout(() => setEShake(false), 300);
         log(`🗡️ 勇者揮出一擊，對 ${enemy.name} 造成 ${pDmg} 傷害`);
 
-        if (newEHp <= 0) { win(newEHp, pHp, pMp); return; }
+        if (newEHp <= 0) { win(newEHp, Math.floor(pHp), Math.floor(pMp)); return; }
 
         // Brief pause before monster turn
-        setTimeout(() => executeMonsterTurn(newEHp, pHp, pMp), 800);
+        setTimeout(() => executeMonsterTurn(newEHp, Math.floor(pHp), Math.floor(pMp)), 800);
     };
 
     const handleUseSkill = (skId: string) => {
@@ -378,14 +378,14 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({
             return;
         }
 
-        const eDmg = Math.max(1, enemy.attack - combatStats.defense + Math.floor(Math.random() * 4));
+        const eDmg = Math.max(1, Math.round(enemy.attack - combatStats.defense + Math.floor(Math.random() * 4)));
         const reflectBuff = activeBuffs.find(b => b.type === 'reflect');
         let reflectDmg = 0;
         if (reflectBuff) {
             reflectDmg = Math.floor(eDmg * (reflectBuff.power / 100));
         }
 
-        const finalPHp = Math.max(0, nextPHp - eDmg);
+        const finalPHp = Math.max(0, Math.floor(nextPHp - eDmg));
         setPHp(finalPHp);
         setPShake(true); setTimeout(() => setPShake(false), 300);
 
@@ -485,6 +485,8 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({
     const win = (_finalEHp: number, finalPHp: number, finalPMp: number) => {
         if (isResolvingRef.current) return;
         isResolvingRef.current = true;
+        const fHp = Math.floor(finalPHp);
+        const fMp = Math.floor(finalPMp);
         setEnded(true); setAuto(false); setResult('win');
 
         // 計算預期獎勵（作為回呼參數）
@@ -497,7 +499,7 @@ export const CombatScreen: React.FC<CombatScreenProps> = ({
             sk = enemy.skillReward;
             log(`✨ 領悟新技能【${sk.icon} ${sk.name}】！`);
         }
-        setTimeout(() => onWin(er, totalGr, sk, enemy.lootTable, (enemy as any).equipmentDrop, finalPHp, finalPMp), autoExplore ? 2500 : 1500);
+        setTimeout(() => onWin(er, totalGr, sk, enemy.lootTable, (enemy as any).equipmentDrop, fHp, fMp), autoExplore ? 2500 : 1500);
     };
 
     const lose = (finalPHp: number, finalPMp: number) => {

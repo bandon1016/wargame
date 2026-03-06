@@ -39,7 +39,8 @@ export interface PlayerSkill {
 }
 
 export interface Equipment {
-    id: string;
+    id: string;      // Template ID (starts with eq_)
+    uid?: string;    // Unique instance ID for specific equipment stats
     name: string;
     slot: 'weapon' | 'armor' | 'helmet' | 'boots' | 'accessory';
     rarity: 1 | 2 | 3 | 4 | 5;
@@ -48,6 +49,15 @@ export interface Equipment {
     hp: number;
     icon: string;
     description: string;
+}
+
+// Minimal sync structure for Equipment
+export interface EquipmentSync {
+    id: string;      // Template ID
+    uid?: string;
+    attack: number;
+    defense: number;
+    hp: number;
 }
 
 export interface GameItem {
@@ -59,8 +69,14 @@ export interface GameItem {
     description: string;
 }
 
-export interface Partner {
+// Minimal sync structure for items
+export interface GameItemSync {
     id: string;
+    quantity: number;
+}
+
+export interface Partner {
+    id: string;      // Partner ID (e.g., 聖靈騎士)
     name: string;
     role: 'tank' | 'dps' | 'healer';
     rarity: 3 | 4 | 5;
@@ -69,6 +85,14 @@ export interface Partner {
     maxExp: number;
     power: number;
     avatar: string; // emoji
+    isDeployed?: boolean;
+}
+
+// Minimal sync structure for partners
+export interface PartnerSync {
+    id: string;
+    level: number;
+    exp: number;
     isDeployed?: boolean;
 }
 
@@ -85,6 +109,15 @@ export interface Building {
     assignedPartners?: string[];
     isUpgrading?: boolean;
     upgradeEndsAt?: number | null; // Unix Timestamp (ms)
+}
+
+// Minimal sync structure for buildings
+export interface BuildingSync {
+    id: string;
+    level: number;
+    isUpgrading?: boolean;
+    upgradeEndsAt?: number | null;
+    assignedPartners?: string[];
 }
 
 // 根據設施等級計算升級所需時間 (回傳毫秒)
@@ -426,15 +459,15 @@ export interface CharacterStats {
     mp: number;
     maxMp: number;
     skills: PlayerSkill[];
-    partners: Partner[];
-    buildings: Building[];
-    equipment: Equipment[];
-    equippedWeapon?: Equipment | null;
-    equippedArmor?: Equipment | null;
-    equippedHelmet?: Equipment | null;
-    equippedBoots?: Equipment | null;
-    equippedAccessory?: Equipment | null;
-    items: GameItem[];
+    partners: PartnerSync[];   // Changed to Sync
+    buildings: BuildingSync[]; // Changed to Sync
+    equipment: EquipmentSync[]; // Changed to Sync
+    equippedWeapon?: EquipmentSync | null; // Changed to Sync
+    equippedArmor?: EquipmentSync | null;
+    equippedHelmet?: EquipmentSync | null;
+    equippedBoots?: EquipmentSync | null;
+    equippedAccessory?: EquipmentSync | null;
+    items: GameItemSync[];     // Changed to Sync
     activeQuests?: Quest[];
     completedQuests?: string[];
     uid: string;
@@ -446,6 +479,19 @@ export interface CharacterStats {
     updatedAt?: number; // Unix timestamp (ms) for state versioning
     activeBuffs?: ActiveBuffs; // 加值商城 24 小時增益效果
     pushSettings?: PushSettings; // 推播通知設定
+}
+
+// Hydrated version for UI components
+export interface HydratedCharacterStats extends Omit<CharacterStats, 'partners' | 'buildings' | 'equipment' | 'items' | 'equippedWeapon' | 'equippedArmor' | 'equippedHelmet' | 'equippedBoots' | 'equippedAccessory'> {
+    partners: Partner[];
+    buildings: Building[];
+    equipment: Equipment[];
+    items: GameItem[];
+    equippedWeapon?: Equipment | null;
+    equippedArmor?: Equipment | null;
+    equippedHelmet?: Equipment | null;
+    equippedBoots?: Equipment | null;
+    equippedAccessory?: Equipment | null;
 }
 
 export interface God {

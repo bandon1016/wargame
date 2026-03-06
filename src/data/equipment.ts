@@ -1,0 +1,32 @@
+import type { Equipment } from '../types/game';
+
+export const EQUIPMENT_DICT: Record<string, Omit<Equipment, 'uid'>> = {
+    'eq_wood_sword': { id: 'eq_wood_sword', name: '木劍', slot: 'weapon', rarity: 1, attack: 5, defense: 0, hp: 0, icon: '🗡️', description: '新手用的木製長劍' },
+    'eq_iron_sword': { id: 'eq_iron_sword', name: '鐵劍', slot: 'weapon', rarity: 2, attack: 12, defense: 0, hp: 0, icon: '⚔️', description: '堅固的鐵製長劍' },
+    'eq_steel_sword': { id: 'eq_steel_sword', name: '鋼鐵大劍', slot: 'weapon', rarity: 3, attack: 22, defense: 2, hp: 0, icon: '⚔️', description: '沉重而且極具破壞力的鋼鐵巨劍' },
+    'eq_flame_blade': { id: 'eq_flame_blade', name: '烈焰之刃', slot: 'weapon', rarity: 4, attack: 35, defense: 0, hp: 0, icon: '🔥', description: '附有火焰附魔的神兵' },
+    'eq_dragon_slayer': { id: 'eq_dragon_slayer', name: '屠龍巨劍', slot: 'weapon', rarity: 5, attack: 55, defense: 0, hp: 0, icon: '🗡️', description: '傳說中能斬下巨龍頭顱的巨劍' },
+    'eq_leather_armor': { id: 'eq_leather_armor', name: '皮甲', slot: 'armor', rarity: 1, attack: 0, defense: 5, hp: 20, icon: '🧥', description: '簡易的皮革護甲' },
+    'eq_chain_mail': { id: 'eq_chain_mail', name: '鎖子甲', slot: 'armor', rarity: 2, attack: 0, defense: 12, hp: 40, icon: '🛡️', description: '環環相扣的金屬鎧甲' },
+    'eq_steel_armor': { id: 'eq_steel_armor', name: '鋼鐵重甲', slot: 'armor', rarity: 3, attack: 0, defense: 22, hp: 60, icon: '🛡️', description: '厚重的鋼鐵防護甲' },
+    'eq_wood_armor': { id: 'eq_wood_armor', name: '神木護甲', slot: 'armor', rarity: 4, attack: 5, defense: 30, hp: 80, icon: '🌲', description: '由千年神木打造，充滿生命力' },
+    'eq_dragon_armor': { id: 'eq_dragon_armor', name: '龍鱗鎧甲', slot: 'armor', rarity: 5, attack: 5, defense: 45, hp: 120, icon: '🐲', description: '以龍鱗打造的傳說級鎧甲' },
+    'eq_leather_helm': { id: 'eq_leather_helm', name: '皮帽', slot: 'helmet', rarity: 1, attack: 0, defense: 3, hp: 10, icon: '🪖', description: '簡單的皮製頭巾' },
+    'eq_iron_helm': { id: 'eq_iron_helm', name: '鐵盔', slot: 'helmet', rarity: 2, attack: 0, defense: 8, hp: 20, icon: '⛑️', description: '保護頭部的鐵製頭盔' },
+    'eq_knight_helm': { id: 'eq_knight_helm', name: '騎士頭盔', slot: 'helmet', rarity: 3, attack: 0, defense: 12, hp: 35, icon: '🪖', description: '標準的騎士防護頭盔' },
+    'eq_crystal_crown': { id: 'eq_crystal_crown', name: '水晶王冠', slot: 'helmet', rarity: 4, attack: 5, defense: 15, hp: 50, icon: '👑', description: '鑲嵌水晶的魔法王冠' },
+    'eq_dawn_helm': { id: 'eq_dawn_helm', name: '破曉戰盔', slot: 'helmet', rarity: 5, attack: 10, defense: 25, hp: 80, icon: '🌅', description: '能夠抵禦極強攻擊的傳說戰盔' },
+    'eq_leather_boots': { id: 'eq_leather_boots', name: '皮靴', slot: 'boots', rarity: 1, attack: 0, defense: 3, hp: 10, icon: '👢', description: '輕便的冒險皮靴' },
+    'eq_iron_boots_2': { id: 'eq_iron_boots_2', name: '鐵靴', slot: 'boots', rarity: 2, attack: 0, defense: 6, hp: 15, icon: '🥾', description: '底部加固的鐵皮靴' },
+    'eq_steel_greaves': { id: 'eq_steel_greaves', name: '鋼鐵護腿', slot: 'boots', rarity: 3, attack: 0, defense: 10, hp: 25, icon: '🥾', description: '提供極佳防護的鋼製戰靴' },
+    'eq_lava_boots': { id: 'eq_lava_boots', name: '熔岩戰靴', slot: 'boots', rarity: 4, attack: 5, defense: 15, hp: 40, icon: '🌋', description: '能夠在極端地形中行走的炎之靴' },
+    'eq_flame_boots': { id: 'eq_flame_boots', name: '踏炎神靴', slot: 'boots', rarity: 5, attack: 15, defense: 20, hp: 60, icon: '🔥', description: '傳說中可以踏過一切阻礙的神靴' },
+    'eq_wood_amulet': { id: 'eq_wood_amulet', name: '木雕護身符', slot: 'accessory', rarity: 1, attack: 1, defense: 1, hp: 10, icon: '🧿', description: '手工雕刻的有祈福作用的木牌' },
+    'eq_iron_ring': { id: 'eq_iron_ring', name: '鐵戒指', slot: 'accessory', rarity: 2, attack: 5, defense: 2, hp: 15, icon: '💍', description: '打磨光滑的鐵製戒指' },
+    'eq_ruby_ring': { id: 'eq_ruby_ring', name: '红寶石戒指', slot: 'accessory', rarity: 3, attack: 10, defense: 5, hp: 30, icon: '💍', description: '散發著微火魔力的寶石戒指' },
+    'eq_crystal_necklace': { id: 'eq_crystal_necklace', name: '水晶項鍊', slot: 'accessory', rarity: 4, attack: 5, defense: 10, hp: 60, icon: '📿', description: '能增幅法力的純淨水晶' },
+    'eq_star_hourglass': { id: 'eq_star_hourglass', name: '星辰沙漏', slot: 'accessory', rarity: 5, attack: 15, defense: 15, hp: 100, icon: '⏳', description: '蘊含時光與星辰之力的傳說寶物' },
+    'eq_central_blade': { id: 'eq_central_blade', name: '中央之劍', slot: 'weapon', rarity: 3, attack: 28, defense: 5, hp: 0, icon: '🗡️', description: '取用中央山脈的高山鐵礦打造而成' },
+    'eq_sacred_wood_armor': { id: 'eq_sacred_wood_armor', name: '太古木甲', slot: 'armor', rarity: 4, attack: 0, defense: 35, hp: 120, icon: '🌲', description: '使用台中特產太古神木製作的精良護甲' },
+    'eq_sun_moon_ring': { id: 'eq_sun_moon_ring', name: '日月明珠', slot: 'accessory', rarity: 5, attack: 20, defense: 10, hp: 50, icon: '💍', description: '融合了太陽與月亮精華的絕世飾品' }
+};
