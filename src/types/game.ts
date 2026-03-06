@@ -492,6 +492,9 @@ export interface HydratedCharacterStats extends Omit<CharacterStats, 'partners' 
     equippedHelmet?: Equipment | null;
     equippedBoots?: Equipment | null;
     equippedAccessory?: Equipment | null;
+    effectiveAtk: number;
+    effectiveDef: number;
+    effectiveMaxHp: number;
 }
 
 export interface God {

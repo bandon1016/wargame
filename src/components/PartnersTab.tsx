@@ -103,7 +103,7 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
     };
 
     const handleSynthesis = () => {
-        if (selectedMaterials.length < 4) return;
+        if (selectedMaterials.length < 4 || synthAnim) return;
         const synthCount = Math.floor(selectedMaterials.length / 4);
 
         setSynthAnim(true);
@@ -720,10 +720,10 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
 
                                         <button
                                             onClick={handleSynthesis}
-                                            disabled={selectedMaterials.length < 4}
+                                            disabled={selectedMaterials.length < 4 || synthAnim}
                                             className="w-full bg-purple-600 hover:bg-purple-500 disabled:bg-white/5 disabled:text-gray-500 text-white font-black py-4 px-8 rounded-xl transition-all shadow-[0_4px_15px_rgba(168,85,247,0.3)] disabled:shadow-none"
                                         >
-                                            確認合成 ({Math.floor(selectedMaterials.length / 4)} 次)
+                                            {synthAnim ? '處理中...' : `確認合成 (${Math.floor(selectedMaterials.length / 4)} 次)`}
                                         </button>
                                     </div>
                                 )}
@@ -825,9 +825,13 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
                                                                 )}
                                                                 <div className="text-3xl mb-1 mt-1 group-hover:scale-110 transition-transform">{getLatestAvatar(p.name, p.avatar)}</div>
                                                                 <div className="font-black text-[10px] text-center truncate w-full px-1 text-white/90">{p.name}</div>
-                                                                <div className="mt-1 flex items-center gap-0.5 bg-black/30 px-1.5 py-0.5 rounded-full border border-white/5">
-                                                                    <Star size={8} className="text-game-gold" fill="currentColor" />
-                                                                    <span className="text-[9px] font-black text-game-gold">{p.rarity}</span>
+                                                                <div className="text-[8px] font-black text-white/40 mb-1">LV.{p.level}</div>
+                                                                <div className="mt-1 flex items-center gap-1">
+                                                                    <div className="flex items-center gap-0.5 bg-black/30 px-1.5 py-0.5 rounded-full border border-white/5">
+                                                                        <Star size={8} className="text-game-gold" fill="currentColor" />
+                                                                        <span className="text-[9px] font-black text-game-gold">{p.rarity}</span>
+                                                                    </div>
+                                                                    <RoleTag role={p.role} />
                                                                 </div>
                                                             </div>
                                                         );
@@ -854,10 +858,10 @@ export const PartnersTab: React.FC<Props> = ({ player, onUpdatePlayer, saveProfi
                                         </div>
                                         <button
                                             onClick={handleSynthesis}
-                                            disabled={selectedMaterials.length < 4}
+                                            disabled={selectedMaterials.length < 4 || synthAnim}
                                             className={`w-full sm:w-auto disabled:bg-white/5 disabled:text-gray-500 text-white font-black py-4 px-8 rounded-xl transition-all disabled:shadow-none ${synthRarity === 3 ? 'bg-sky-600 hover:bg-sky-500 shadow-[0_4px_15px_rgba(14,165,233,0.3)]' : 'bg-purple-600 hover:bg-purple-500 shadow-[0_4px_15px_rgba(168,85,247,0.3)]'}`}
                                         >
-                                            確認合成 ({Math.floor(selectedMaterials.length / 4)} 次)
+                                            {synthAnim ? '處理中' : `確認合成 (${Math.floor(selectedMaterials.length / 4)} 次)`}
                                         </button>
                                     </div>
                                 </div>

@@ -3,7 +3,7 @@ import { Home, Pickaxe, ArrowUpCircle, Hammer, TrendingUp, Users, Plus, X, Star,
 import type { CharacterStats, HydratedCharacterStats, Building, Partner } from '../types/game';
 import { getBuildingUpgradeTime, getBuildingUpgradeGold } from '../types/game';
 
-interface Props { player: HydratedCharacterStats; onUpdatePlayer: (a: React.SetStateAction<CharacterStats | null>) => void; saveProfile: (newState?: CharacterStats | null) => void; }
+interface Props { player: HydratedCharacterStats; onUpdatePlayer: (a: React.SetStateAction<CharacterStats | null>) => void; saveProfile: (newState: CharacterStats | null) => void; }
 
 // Helper to calculate building bonus
 const getBuildingBonus = (b: Building, allPartners: Partner[]) => {

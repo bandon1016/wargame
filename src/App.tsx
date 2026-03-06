@@ -2,7 +2,8 @@
 import { MapContainer, TileLayer, Marker, Popup, useMap, Circle, Polyline, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import {
-  Compass, MapPin, Sword, TrainFront, Users, Shield, Heart, Package, Home, ChevronRight, Zap, Target, Scroll, Settings, Settings as SettingsIcon, LogOut, MessageSquare, AlertCircle, Info, Star, Award, Search, X, PlusCircle, MinusCircle, RefreshCcw, Save, Trash2, Edit2, Check, ExternalLink, Menu, Bell, Volume2, VolumeX, Maximize2, Minimize2, Map as MapIcon, Layers, Sun, Cloud, CloudRain, CloudLightning, Wind, Thermometer, Droplets, Clock,
+  Compass, MapPin, Sword, TrainFront, Users, Shield, Heart, Package, Home, ChevronRight, Zap,
+  Settings as SettingsIcon, Bell, Settings, X, Check, PlusCircle,
   Loader2, ShieldAlert, Book, Trophy, Crown, Coins, ScrollText, Sparkles, Cpu, Waves, Diamond, Square, Rocket, ChevronLeft, TrendingUp, Copy
 } from 'lucide-react';
 import { supabase } from './lib/supabase';
@@ -10,7 +11,7 @@ import { MONSTER_DATABASE, SKILL_DATABASE, ITEM_DATABASE, EQUIPMENT_DATABASE, RA
 import type {
   CharacterStats, Partner, GameItem, Building, Town, MapPOI,
   Enemy, Skill, WeatherType, HydratedCharacterStats, Equipment,
-  PartnerSync, GameItemSync, BuildingSync, EquipmentSync, PushSettings, AlchemyRecipe, BlacksmithRecipe, ElementType
+  ElementType, GameItemSync, AlchemyRecipe, BlacksmithRecipe
 } from './types/game';
 import { ITEM_DICT } from './data/items';
 import { PARTNER_DICT } from './data/partners';
@@ -509,7 +510,7 @@ const App: React.FC = () => {
   useEffect(() => { weatherRef.current = weather; }, [weather]);
 
   // Ref to saveProfile - avoids forward-reference issues since saveProfile is declared later via useCallback
-  const saveProfileRef = React.useRef<((newState?: CharacterStats, forceLocation?: [number, number]) => Promise<void>) | null>(null);
+  const saveProfileRef = React.useRef<((newState: CharacterStats | null, forceLocation?: [number, number]) => Promise<void>) | null>(null);
 
   // Track hashes for individual large collections for granular selective sync
   const lastSyncedHashRef = React.useRef({
@@ -559,7 +560,7 @@ const App: React.FC = () => {
         triggerPushNotification('transport', '抵達目的地', '您已搭乘交通工具順利抵達目的地城鎮！');
 
         // Trigger immediate save to sync the arrival position and clear travel data in DB
-        setTimeout(() => saveProfileRef.current?.(undefined, finalPos), 50);
+        setTimeout(() => saveProfileRef.current?.(null, finalPos), 50);
         return;
       }
 
@@ -602,7 +603,7 @@ const App: React.FC = () => {
           walkStartedAtRef.current = null;
           moveDirRef.current = null;
           // Notice: We don't change areaName here, we just bounced them back.
-          setTimeout(() => saveProfileRef.current?.(), 0);
+          setTimeout(() => saveProfileRef.current?.(null), 0);
         } else {
           setAreaName(city);
           lastSafePositionRef.current = position;
@@ -1011,7 +1012,7 @@ const App: React.FC = () => {
         walkStartRef.current = null;
         walkStartedAtRef.current = null;
         // 立即存入目的地，讓 DB 的 walk 欄位清空，避免下次刷新重複觸發
-        setTimeout(() => saveProfileRef.current?.(undefined, [targetLat, targetLng]), 500);
+        setTimeout(() => saveProfileRef.current?.(null, [targetLat, targetLng]), 500);
       } else {
         const currentProgress = elapsedSec / durationSec;
         const currentLat = startLat + dLat * currentProgress;
@@ -1063,7 +1064,7 @@ const App: React.FC = () => {
   };
 
   // Sync to database
-  const saveProfile = useCallback(async (newState?: CharacterStats, forceLocation?: [number, number]) => {
+  const saveProfile = useCallback(async (newState: CharacterStats | null, forceLocation?: [number, number]) => {
     if (loading || isDoubleTabbedRef.current || isRpcPendingRef.current) return;
     const p = newState || playerRef.current;
     if (!p || !session?.user?.id) return;
@@ -1230,7 +1231,7 @@ const App: React.FC = () => {
     // Throttled Auto-Save: 5000ms. 確保連續移動或狀態更新時，不會被打斷存檔。
     if (!pendingSaveRef.current) {
       pendingSaveRef.current = setTimeout(() => {
-        saveProfile();
+        saveProfile(null);
         pendingSaveRef.current = null;
       }, 5000);
     }
@@ -1248,10 +1249,10 @@ const App: React.FC = () => {
   }, [saveProfile]);
 
   const immediateSaveTimerRef = React.useRef<any>(null);
-  const debouncedSaveProfile = useCallback((newState?: CharacterStats, forceLocation?: [number, number]) => {
+  const debouncedSaveProfile = useCallback((newState?: CharacterStats | null, forceLocation?: [number, number]) => {
     if (immediateSaveTimerRef.current) clearTimeout(immediateSaveTimerRef.current);
     immediateSaveTimerRef.current = setTimeout(() => {
-      saveProfile(newState, forceLocation);
+      saveProfile(newState || null, forceLocation);
       immediateSaveTimerRef.current = null;
     }, 500); // 500ms debounce for manual movement
   }, [saveProfile]);
@@ -1272,7 +1273,7 @@ const App: React.FC = () => {
           let matBonus = 0;
           const assigned = hp.partners.filter(pt => b.assignedPartners?.includes(pt.id));
           assigned.forEach(pt => {
-            let mult = pt.rarity === 'UR' || pt.rarity === 'SSR' ? 0.05 : pt.rarity === 'SR' ? 0.03 : 0.02;
+            let mult = pt.rarity === 5 ? 0.05 : pt.rarity === 4 ? 0.03 : 0.02;
             if (pt.role === 'tank' && (b.type === 'material_camp')) {
               matBonus += mult;
             } else if (pt.role === 'healer' && b.type === 'gold_mine') {
@@ -1655,7 +1656,7 @@ const App: React.FC = () => {
       walkStartedAtRef.current = new Date();
       walkDurationSecRef.current = dist / speedUsed;
 
-      saveProfileRef.current?.(); // Trigger save to register walk start with duration
+      saveProfileRef.current?.(null); // Trigger save to register walk start with duration
     }
 
     const animate = () => {
@@ -1681,7 +1682,7 @@ const App: React.FC = () => {
         walkStartedAtRef.current = null;
         walkDurationSecRef.current = 0;
         // Now save with forceLocation to guarantee the correct destination is written
-        saveProfileRef.current?.(undefined, [targetLat, targetLng]);
+        saveProfileRef.current?.(null, [targetLat, targetLng]);
         return;
       }
 
@@ -1697,7 +1698,7 @@ const App: React.FC = () => {
         walkStartRef.current = null;
         walkStartedAtRef.current = null;
         walkDurationSecRef.current = 0;
-        saveProfileRef.current?.(undefined, [currentLat, currentLng]);
+        saveProfileRef.current?.(null, [currentLat, currentLng]);
         return;
       }
 
@@ -2479,10 +2480,10 @@ const App: React.FC = () => {
 
 
 
-  const effectiveAtk = player ? getEffectiveAtk(player) : 0;
-  const effectiveDef = player ? getEffectiveDef(player) : 0;
-  const effectiveMaxHp = player ? getEffectiveMaxHp(player) : 0;
-  const effectiveHeal = player ? totalPartnerHeal(player) : 0;
+  const effectiveAtk = hydratedPlayer ? hydratedPlayer.effectiveAtk : 0;
+  const effectiveDef = hydratedPlayer ? hydratedPlayer.effectiveDef : 0;
+  const effectiveMaxHp = hydratedPlayer ? hydratedPlayer.effectiveMaxHp : 0;
+  const effectiveHeal = hydratedPlayer ? totalPartnerHeal(hydratedPlayer) : 0;
 
   // Interaction Handler for POIs (Refactored to handle interactions gracefully)
   const executePoiInteraction = useCallback(async (poi: MapPOI) => {
@@ -2609,7 +2610,7 @@ const App: React.FC = () => {
       }
     } else if (poi.type === 'altar') {
       // Heal both HP and MP to full, and gain Incense
-      const currentMaxHp = getEffectiveMaxHp(player);
+      const currentMaxHp = effectiveMaxHp;
       const incenseGain = Math.floor(Math.random() * 6) + 5; // 5-10 incense
       const nextState = {
         ...player,
@@ -3372,7 +3373,7 @@ const App: React.FC = () => {
                     walkStartRef.current = null;
                     walkStartedAtRef.current = null;
                     walkDurationSecRef.current = 0;
-                    saveProfileRef.current?.(); // Immediate save to clear DB
+                    saveProfileRef.current?.(null); // Immediate save to clear DB
                   }}
                   className="bg-red-500/80 backdrop-blur-md px-4 py-1.5 rounded-full border border-red-400/50 shadow-lg flex items-center gap-2 pointer-events-auto hover:bg-red-600 transition-all anim-scale-in"
                 >
@@ -4103,7 +4104,7 @@ const App: React.FC = () => {
                 <div className="grid grid-cols-5 gap-3">
                   {(['weapon', 'armor', 'helmet', 'boots', 'accessory'] as const).map(slot => {
                     const slotKey = `equipped${slot.charAt(0).toUpperCase() + slot.slice(1)}` as keyof HydratedCharacterStats;
-                    const eq = hydratedPlayer[slotKey] as Equipment | undefined;
+                    const eq = hydratedPlayer?.[slotKey] as Equipment | undefined;
                     const r = eq ? RARITY_COLORS[eq.rarity] : null;
                     return (
                       <div key={slot} className="tooltip-wrap" onClick={() => eq && unequipItem(slot)}>
@@ -4129,7 +4130,7 @@ const App: React.FC = () => {
               </div>
 
               {/* Unequipped Equipment */}
-              {hydratedPlayer.equipment.length > 0 && (
+              {hydratedPlayer && hydratedPlayer.equipment.length > 0 && (
                 <div className="glass-panel rounded-2xl p-5">
                   <h3 className="text-base font-bold mb-4 flex items-center gap-2">🎒 背包裝備</h3>
                   <div className="flex flex-wrap gap-3">
@@ -4159,7 +4160,7 @@ const App: React.FC = () => {
               {/* Items */}
               <div className="glass-panel rounded-2xl p-5 mb-10">
                 <h3 className="text-base font-bold mb-4 flex items-center gap-2">🧪 道具行李</h3>
-                {hydratedPlayer.items.length === 0 ? (
+                {!hydratedPlayer || hydratedPlayer.items.length === 0 ? (
                   <div className="text-center text-gray-500 py-8 text-sm">背包空空如也…去探索看看吧！</div>
                 ) : (
                   <div className="flex flex-wrap gap-3">
@@ -4266,11 +4267,11 @@ const App: React.FC = () => {
               onFlee={() => { setIsCombatAction(false); setAutoExplore(false); setResolvedCombatRewards(null); }}
               autoExplore={autoExplore}
               onAutoHeal={() => {
-                const pot = hydratedPlayer.items.find(i => i.type === 'potion' && i.id !== 'item_revive_pot');
+                const pot = hydratedPlayer?.items.find(i => i.type === 'potion' && i.id !== 'item_revive_pot');
                 if (pot) useItem(pot, true);
               }}
               onRevive={() => {
-                const revivePot = hydratedPlayer.items.find(i => i.id === 'item_revive_pot');
+                const revivePot = hydratedPlayer?.items.find(i => i.id === 'item_revive_pot');
                 if (revivePot) useItem(revivePot, true);
               }}
               onUseItem={(it: GameItem) => useItem(it, true)}

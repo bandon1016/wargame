@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Map as MapIcon, ChevronRight, TrainFront, ClipboardList, Anchor, Ship, Coins, ShoppingBag, Trash2, Loader2, PlusCircle, CheckCircle, RefreshCw } from 'lucide-react';
-import type { Town, CharacterStats, AlchemyRecipe, BlacksmithRecipe, Equipment } from '../types/game';
+import type { Town, HydratedCharacterStats, AlchemyRecipe, BlacksmithRecipe, Equipment } from '../types/game';
 import { ALCHEMY_RECIPES, BLACKSMITH_RECIPES, ITEM_DATABASE, EQUIPMENT_DATABASE, RARITY_COLORS, TOWN_DATABASE, CITY_QUEST_POOL, getRailwayPath, getDistance, getPathDistance } from '../types/game';
 import { supabase } from '../lib/supabase';
 
@@ -14,7 +14,7 @@ const CURRENCY_ICONS: Record<string, string> = {
 
 interface TownScreenProps {
     town: Town;
-    player: CharacterStats;
+    player: HydratedCharacterStats;
     userId: string;
     onLeave: () => void;
     onCraftAlchemy: (recipe: AlchemyRecipe) => void;

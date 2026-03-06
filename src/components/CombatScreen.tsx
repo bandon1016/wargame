@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import type { CharacterStats, Enemy, Skill, WeatherType, HydratedCharacterStats } from '../types/game';
+import type { Enemy, Skill, WeatherType, HydratedCharacterStats } from '../types/game';
 import { SKILL_DATABASE, ELEMENT_META, WEATHER_TYPES } from '../types/game';
 import { Shield, Sword, Heart, Play, Square, X, Award, PlusCircle, Zap, ChevronRight } from 'lucide-react';
 
