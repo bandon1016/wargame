@@ -4,7 +4,7 @@ import 'leaflet/dist/leaflet.css';
 import {
   Compass, MapPin, Sword, TrainFront, Users, Shield, Heart, Package, Home, ChevronRight, Zap,
   Settings as SettingsIcon, Bell, Settings, X, Check, PlusCircle,
-  Loader2, ShieldAlert, Book, Trophy, Crown, Coins, ScrollText, Sparkles, Cpu, Waves, Diamond, Square, Rocket, ChevronLeft, TrendingUp, Copy
+  Loader2, ShieldAlert, Book, Trophy, Crown, Coins, ScrollText, Sparkles, Cpu, Waves, Diamond, Square, Rocket, ChevronLeft, TrendingUp, Copy, Facebook, Maximize2
 } from 'lucide-react';
 import { supabase } from './lib/supabase';
 import { MONSTER_DATABASE, SKILL_DATABASE, ITEM_DATABASE, EQUIPMENT_DATABASE, RARITY_COLORS, WEATHER_TYPES, TOWN_DATABASE, getPartnerAvatar, getRailwayPath, POI_NAMES, ELEMENT_META, getRegionByCoordinates, getRegionByCityName, getRegionalMaterials, getDistance, getPathDistance, getInterpolatedPositionByDistance } from './types/game';
@@ -419,6 +419,7 @@ const App: React.FC = () => {
   const isDoubleTabbedRef = React.useRef(isDoubleTabbed);
   const isRpcPendingRef = React.useRef(false); // New flag to block auto-save during RPCs
   const [isMaintenance, setIsMaintenance] = useState(false);
+  const [zoomedImage, setZoomedImage] = useState<string | null>(null);
   const isMaintenanceRef = React.useRef(isMaintenance);
   useEffect(() => { isMaintenanceRef.current = isMaintenance; }, [isMaintenance]);
   useEffect(() => { isDoubleTabbedRef.current = isDoubleTabbed; }, [isDoubleTabbed]);
@@ -1960,6 +1961,10 @@ const App: React.FC = () => {
         let qty = loot.quantity || 1;
         if (loot.id === 'currency_incense') {
           newIncense += qty;
+        } else if (loot.id === 'p_exp' || loot.id === 'partner_exp') {
+          // Skip partner exp in items array
+        } else if (loot.id.startsWith('skill_') || loot.id.startsWith('frag_')) {
+          // Skip skills and fragments in items array (handled via updated_skills/updated_partners)
         } else {
           const itemIdx = newItems.findIndex(i => i.id === loot.id);
           if (itemIdx >= 0) {
@@ -1989,7 +1994,9 @@ const App: React.FC = () => {
         maxHp: result.max_hp ?? prev.maxHp,
         maxMp: result.max_mp ?? prev.maxMp,
         incense: newIncense,
-        items: newItems
+        items: newItems,
+        skills: result.updated_skills || prev.skills,
+        partners: result.updated_partners || prev.partners
       };
       playerRef.current = mergedPlayer;
       return mergedPlayer;
@@ -4495,10 +4502,111 @@ const App: React.FC = () => {
 
       {/* Maintenance Overlay */}
       {isMaintenance && session?.user?.email !== 'werboy@gmail.com' && (
-        <div className="fixed inset-0 z-[9999] bg-slate-950/90 flex flex-col items-center justify-center p-6 backdrop-blur-md">
-          <div className="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-6"></div>
-          <h1 className="text-3xl font-bold text-white mb-2">系統升級中...</h1>
-          <p className="text-slate-400 text-center leading-relaxed">工程師正在進行升級更新，請稍後再來！<br />(自動探索已幫您暫停)</p>
+        <div className="fixed inset-0 z-[9999] bg-slate-950 flex flex-col items-center justify-center p-4 md:p-10 overflow-hidden">
+          {/* Animated Background Orbs */}
+          <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-indigo-600/20 rounded-full blur-[120px] animate-pulse"></div>
+          <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-game-accent/20 rounded-full blur-[150px] animate-pulse delay-1000"></div>
+
+          <div className="max-w-4xl w-full flex flex-col items-center gap-8 z-10">
+            {/* Main Center Card */}
+            <div className="w-full max-w-xl bg-slate-900/40 backdrop-blur-2xl border border-white/10 p-8 md:p-12 rounded-[3.5rem] flex flex-col items-center text-center shadow-[0_30px_100px_rgba(0,0,0,0.5)] relative overflow-hidden group">
+              <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
+
+              {/* Logo */}
+              <div className="relative mb-8 transform group-hover:scale-105 transition-transform duration-500">
+                <div className="absolute inset-0 bg-indigo-500/20 rounded-full blur-2xl animate-pulse"></div>
+                <img src="/logo.png" alt="Logo" className="w-24 h-24 md:w-32 md:h-32 object-contain relative drop-shadow-[0_0_20px_rgba(99,102,241,0.5)]" />
+              </div>
+
+              <h1 className="text-2xl md:text-3xl font-black text-white mb-6 leading-tight tracking-tight">
+                歡迎來到《浪跡戰域》<br />
+                <span className="text-indigo-400">真實RPG世界</span>
+              </h1>
+
+              <p className="text-slate-400 mb-10 leading-relaxed text-sm md:text-base font-medium px-4 max-w-md">
+                感謝您對專案感興趣，我們正持續調整遊戲內容且採需求性開放，如您想了解專案內容或關於 Vibe Coding 心得，可透過以下方式與我聯繫。
+              </p>
+
+              <div className="flex flex-col sm:flex-row gap-4 w-full px-4">
+                <a
+                  href="https://www.facebook.com/werboy"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group/btn flex items-center justify-center gap-3 bg-white hover:bg-indigo-50 text-slate-950 font-black py-4 px-8 rounded-2xl transition-all shadow-xl shadow-white/5 active:scale-95 flex-1"
+                >
+                  <Facebook className="w-5 h-5 text-indigo-600" />
+                  與我聯繫
+                </a>
+              </div>
+
+              <div className="mt-8 flex items-center gap-3 text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em] opacity-60">
+                <span className="flex h-2 w-2 relative">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
+                </span>
+                Demand Based Access Only
+              </div>
+            </div>
+
+            {/* Screenshots Gallery Section */}
+            <div className="w-full flex flex-col gap-4">
+              <div className="flex items-center justify-between px-2">
+                <h2 className="text-white/60 text-xs font-black uppercase tracking-widest flex items-center gap-2">
+                  <div className="w-4 h-[1px] bg-white/20"></div>
+                  遊戲開發預覽
+                </h2>
+                <div className="text-[10px] text-slate-500 font-bold italic">點擊圖片可放大觀賞</div>
+              </div>
+
+              <div className="flex gap-4 overflow-x-auto pb-4 px-2 no-scrollbar mask-fade-edges">
+                {[
+                  { src: '/screenshots/ss5.jpg', label: '大地圖探索' },
+                  { src: '/screenshots/ss1.png', label: '神明聖所' },
+                  { src: '/screenshots/ss2.png', label: '城鎮設施' },
+                  { src: '/screenshots/ss3.png', label: '城市火車站' },
+                  { src: '/screenshots/ss4.png', label: '自訂地圖樣式' },
+                  { src: '/screenshots/ss6.png', label: '我的技能' },
+                  { src: '/screenshots/ss7.png', label: '星空加值商城' },
+                  { src: '/screenshots/ss8.png', label: '夥伴管理中心' },
+                  { src: '/screenshots/ss9.png', label: '命運契約' },
+                  { src: '/screenshots/ss10.png', label: '戰鬥介面' }
+                ].map((ss, idx) => (
+                  <div
+                    key={idx}
+                    onClick={() => setZoomedImage(ss.src)}
+                    className="flex-shrink-0 relative w-48 md:w-64 aspect-video rounded-3xl overflow-hidden border border-white/5 cursor-zoom-in group/ss hover:border-indigo-500/50 transition-all duration-300 shadow-lg shadow-black/20"
+                  >
+                    <img src={ss.src} alt={ss.label} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-60 group-hover:opacity-100 transition-opacity"></div>
+                    <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between">
+                      <span className="text-[10px] text-white/90 font-black uppercase tracking-wider">{ss.label}</span>
+                      <Maximize2 size={12} className="text-white/50 group-hover:text-white transition-colors" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Image Zoom Modal */}
+      {zoomedImage && (
+        <div
+          className="fixed inset-0 z-[10000] bg-black/95 flex items-center justify-center p-4 md:p-20 backdrop-blur-xl"
+          onClick={() => setZoomedImage(null)}
+        >
+          <button
+            className="absolute top-6 right-6 w-12 h-12 bg-white/10 hover:bg-white/20 rounded-full flex items-center justify-center text-white transition-colors z-[10001] border border-white/10"
+            onClick={() => setZoomedImage(null)}
+          >
+            <X size={24} />
+          </button>
+          <img
+            src={zoomedImage}
+            alt="Zoomed"
+            className="max-w-full max-h-full object-contain rounded-2xl shadow-2xl"
+          />
         </div>
       )}
     </div>

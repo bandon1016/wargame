@@ -421,21 +421,23 @@ BEGIN
 
                 IF v_skill_idx IS NOT NULL THEN
                     v_has_skill := true;
-                    -- 已持有：增加碎片
+                    -- 已持有：增加碎片 (直接更新 v_p.skills)
                     v_p.skills := jsonb_set(
                         v_p.skills,
                         ARRAY[v_skill_idx::text, 'fragments'],
                         ((COALESCE(v_p.skills->v_skill_idx->>'fragments', '0')::int) + 1)::text::jsonb
                     );
+                    -- 為了前端顯示獎勵日誌，我們仍將碎片放入 v_loots，但在最終存入 profiles.items 時會過濾掉
                     v_loots := v_loots || jsonb_build_array(jsonb_build_object(
                         'id', 'frag_' || p_skill_reward_id, 'name', p_skill_reward_name || '碎片', 
                         'icon', '💎', 'type', 'material', 'description', '用於強化技能的碎片。', 'quantity', 1
                     ));
                 ELSE
-                    -- 未持有：習得技能
+                    -- 未持有：習得技能 (直接更新 v_p.skills)
                     v_p.skills := v_p.skills || jsonb_build_array(jsonb_build_object(
                         'id', p_skill_reward_id, 'level', 1, 'fragments', 0
                     ));
+                    -- 為了前端顯示獎勵日誌，我們仍將技能放入 v_loots，但在最終存入 profiles.items 時會過濾掉
                     v_loots := v_loots || jsonb_build_array(jsonb_build_object(
                         'id', 'skill_' || p_skill_reward_id, 'name', '技能：' || p_skill_reward_name, 
                         'icon', '✨', 'type', 'material', 'description', '全新的技能！', 'quantity', 1
@@ -644,6 +646,7 @@ BEGIN
     
     RETURN jsonb_build_object(
         'gold_gained', v_g,
+        'bonus_gold', v_bonus_g,
         'exp_gained', v_e,
         'leveled_up', v_up,
         'new_level', v_lv,
@@ -652,7 +655,9 @@ BEGIN
         'current_mp', v_mp,
         'max_hp', v_mhp,
         'max_mp', v_mmp,
-        'loots', v_loots
+        'loots', v_loots,
+        'updated_skills', v_p.skills,
+        'updated_partners', v_p.partners
     );
     END; -- CLOSE THE added BEGIN block for variable declarations
 END; $$;
@@ -1254,8 +1259,21 @@ $$;
 
 -- 10. SECURE ENCOUNTER CHECK
 -- 邏輯：根據天氣回傳遇敵結果，雷暴/濃霧機率降低，但有機會出現「掩人耳目」特殊強敵。
-CREATE OR REPLACE FUNCTION public.secure_check_encounter(p_weather text, p_force boolean DEFAULT false)
-RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER AS $$
+DROP FUNCTION IF EXISTS public.secure_check_encounter(text, boolean);
+DROP FUNCTION IF EXISTS public.secure_check_encounter(boolean, text, double precision, double precision);
+DROP FUNCTION IF EXISTS public.secure_check_encounter(text, boolean, double precision, double precision);
+
+CREATE OR REPLACE FUNCTION public.secure_check_encounter(
+    p_weather text, 
+    p_force boolean DEFAULT false,
+    p_lat float8 DEFAULT NULL,
+    p_lng float8 DEFAULT NULL
+)
+RETURNS jsonb 
+LANGUAGE plpgsql 
+SECURITY DEFINER 
+SET search_path = public
+AS $$
 DECLARE 
     v_roll float := random(); 
     v_threshold float; 
@@ -1533,16 +1551,295 @@ BEGIN
     RAISE EXCEPTION 'Unauthorized';
   END IF;
 
-  -- 更新所有通用採集任務（不含特定目標的城市採集，那部分由 secure_resolve_combat 處理）
-  UPDATE public.player_quests
-  SET progress = LEAST(progress + p_increment, required)
-  WHERE user_id = p_user_id
-    AND (assigned_date = v_today OR assigned_date = v_week_start)
-    AND claimed = false
-    AND (
-      quest_id LIKE 'dq_collect_%'
-      OR quest_id LIKE 'wq_collect_%'
-    );
+-- ==========================================
+-- 10. SECURE ENCOUNTER CHECK (修復歧義與編碼)
+-- ==========================================
+DROP FUNCTION IF EXISTS public.secure_check_encounter(text, boolean);
+DROP FUNCTION IF EXISTS public.secure_check_encounter(boolean, text, double precision, double precision);
+DROP FUNCTION IF EXISTS public.secure_check_encounter(text, boolean, double precision, double precision);
+
+CREATE OR REPLACE FUNCTION public.secure_check_encounter(
+    p_weather text, 
+    p_force boolean DEFAULT false,
+    p_lat float8 DEFAULT NULL,
+    p_lng float8 DEFAULT NULL
+)
+RETURNS jsonb 
+LANGUAGE plpgsql 
+SECURITY DEFINER 
+SET search_path = public
+AS $$
+DECLARE 
+    v_roll float := random(); 
+    v_threshold float; 
+    v_res text := 'none';
+BEGIN
+    v_threshold := CASE 
+        WHEN p_weather IN ('sunny', 'clear') THEN 0.08 
+        WHEN p_weather = 'rainy' THEN 0.10 
+        WHEN p_weather IN ('stormy', 'foggy') THEN 0.15 
+        ELSE 0.10 
+    END;
+
+    IF p_force OR v_roll < v_threshold THEN
+        v_res := 'normal';
+        IF p_weather IN ('stormy', 'foggy') AND random() < 0.05 THEN v_res := 'weather_special'; END IF;
+    END IF;
+    RETURN jsonb_build_object('result', v_res, 'weather', p_weather);
+END; $$;
+
+GRANT EXECUTE ON FUNCTION public.secure_check_encounter(text, boolean, float8, float8) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.secure_check_encounter(text, boolean, float8, float8) TO anon;
+
+-- ==========================================
+-- 14. 裝備管理 RPC (Secure Equipment Management)
+-- ==========================================
+DROP FUNCTION IF EXISTS public.secure_equip_item(text, jsonb, text);
+CREATE OR REPLACE FUNCTION public.secure_equip_item(
+  p_equip_id text DEFAULT NULL,
+  p_equipment_inventory jsonb DEFAULT NULL,
+  p_slot text DEFAULT NULL
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_profile public.profiles;
+  v_current_equipped jsonb;
+  v_new_inventory jsonb;
+  v_eq_to_equip jsonb;
+BEGIN
+  SELECT * INTO v_profile FROM public.profiles WHERE id = auth.uid() FOR UPDATE;
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('success', false, 'message', '找不到玩家資料');
+  END IF;
+
+  IF p_slot = 'weapon' THEN v_current_equipped := v_profile.equipped_weapon;
+  ELSIF p_slot = 'armor' THEN v_current_equipped := v_profile.equipped_armor;
+  ELSIF p_slot = 'helmet' THEN v_current_equipped := v_profile.equipped_helmet;
+  ELSIF p_slot = 'boots' THEN v_current_equipped := v_profile.equipped_boots;
+  ELSIF p_slot = 'accessory' THEN v_current_equipped := v_profile.equipped_accessory;
+  ELSE
+    RETURN jsonb_build_object('success', false, 'message', '無效的裝備槽位: ' || COALESCE(p_slot, 'NULL'));
+  END IF;
+
+  v_new_inventory := COALESCE(p_equipment_inventory, v_profile.equipment);
+
+  IF p_equip_id IS NULL THEN
+    IF v_current_equipped IS NOT NULL THEN
+      v_new_inventory := v_new_inventory || jsonb_build_array(v_current_equipped);
+    END IF;
+
+    UPDATE public.profiles 
+    SET 
+      equipped_weapon = CASE WHEN p_slot = 'weapon' THEN NULL ELSE equipped_weapon END,
+      equipped_armor = CASE WHEN p_slot = 'armor' THEN NULL ELSE equipped_armor END,
+      equipped_helmet = CASE WHEN p_slot = 'helmet' THEN NULL ELSE equipped_helmet END,
+      equipped_boots = CASE WHEN p_slot = 'boots' THEN NULL ELSE equipped_boots END,
+      equipped_accessory = CASE WHEN p_slot = 'accessory' THEN NULL ELSE equipped_accessory END,
+      equipment = v_new_inventory,
+      updated_at = now()
+    WHERE id = auth.uid()
+    RETURNING * INTO v_profile;
+
+  ELSE
+    SELECT elem INTO v_eq_to_equip
+    FROM jsonb_array_elements(v_new_inventory) AS elem
+    WHERE (elem->>'id') = p_equip_id
+    LIMIT 1;
+
+    IF v_eq_to_equip IS NULL THEN
+      RETURN jsonb_build_object('success', false, 'message', '找不到指定裝備於背包中: ' || p_equip_id);
+    END IF;
+
+    WITH removed AS (
+      SELECT idx FROM jsonb_array_elements(v_new_inventory) WITH ORDINALITY AS t(elem, idx)
+      WHERE (elem->>'id') = p_equip_id
+      ORDER BY idx LIMIT 1
+    )
+    SELECT jsonb_agg(elem ORDER BY idx) INTO v_new_inventory
+    FROM (
+      SELECT idx, elem FROM jsonb_array_elements(v_new_inventory) WITH ORDINALITY AS t(elem, idx)
+      WHERE idx NOT IN (SELECT idx FROM removed)
+    ) s;
+
+    IF v_current_equipped IS NOT NULL THEN
+      v_new_inventory := COALESCE(v_new_inventory, '[]'::jsonb) || jsonb_build_array(v_current_equipped);
+    END IF;
+
+    UPDATE public.profiles 
+    SET 
+      equipped_weapon = CASE WHEN p_slot = 'weapon' THEN v_eq_to_equip ELSE equipped_weapon END,
+      equipped_armor = CASE WHEN p_slot = 'armor' THEN v_eq_to_equip ELSE equipped_armor END,
+      equipped_helmet = CASE WHEN p_slot = 'helmet' THEN v_eq_to_equip ELSE equipped_helmet END,
+      equipped_boots = CASE WHEN p_slot = 'boots' THEN v_eq_to_equip ELSE equipped_boots END,
+      equipped_accessory = CASE WHEN p_slot = 'accessory' THEN v_eq_to_equip ELSE equipped_accessory END,
+      equipment = v_new_inventory,
+      updated_at = now()
+    WHERE id = auth.uid()
+    RETURNING * INTO v_profile;
+  END IF;
+
+  RETURN jsonb_build_object('success', true, 'updated_profile', row_to_json(v_profile)::jsonb);
 END;
 $$;
 
+GRANT EXECUTE ON FUNCTION public.secure_equip_item(text, jsonb, text) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.secure_equip_item(text, jsonb, text) TO anon;
+
+-- ==========================================
+-- 15. POI 互動與戰鬥結算
+-- ==========================================
+DROP FUNCTION IF EXISTS public.interact_poi(uuid);
+CREATE OR REPLACE FUNCTION public.interact_poi(p_poi_id uuid)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  UPDATE public.map_pois 
+  SET is_active = false, respawn_at = now() + interval '30 minutes'
+  WHERE id = p_poi_id AND is_active = true;
+  
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('success', false, 'message', '該聖地已消失或已被領取');
+  END IF;
+
+  INSERT INTO public.poi_claims (poi_id, user_id, claimed_at)
+  VALUES (p_poi_id, auth.uid(), now())
+  ON CONFLICT DO NOTHING;
+
+  RETURN jsonb_build_object('success', true);
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.interact_poi(uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.interact_poi(uuid) TO anon;
+
+DROP FUNCTION IF EXISTS public.resolve_poi_combat(uuid, boolean);
+CREATE OR REPLACE FUNCTION public.resolve_poi_combat(p_poi_id uuid, p_win boolean)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF p_win THEN
+    UPDATE public.map_pois 
+    SET is_active = false, respawn_at = now() + interval '1 hour'
+    WHERE id = p_poi_id;
+  END IF;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.resolve_poi_combat(uuid, boolean) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.resolve_poi_combat(uuid, boolean) TO anon;
+
+-- ==========================================
+-- 16. 其他任務進度更新
+-- ==========================================
+DROP FUNCTION IF EXISTS public.increment_craft_quests(uuid, int);
+CREATE OR REPLACE FUNCTION public.increment_craft_quests(p_user_id uuid, p_increment int DEFAULT 1)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF auth.uid() != p_user_id THEN RAISE EXCEPTION 'Unauthorized'; END IF;
+  UPDATE public.player_quests
+  SET progress = LEAST(progress + p_increment, required)
+  WHERE user_id = p_user_id AND (assigned_date = current_date OR assigned_date = date_trunc('week', current_date)::date)
+    AND claimed = false AND (quest_id LIKE 'dq_craft_%' OR quest_id LIKE 'wq_craft_%' OR quest_id LIKE 'cq_%_craft');
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.increment_craft_quests(uuid, int) TO authenticated;
+
+DROP FUNCTION IF EXISTS public.increment_travel_quests(uuid, int);
+CREATE OR REPLACE FUNCTION public.increment_travel_quests(p_user_id uuid, p_increment int DEFAULT 1)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF auth.uid() != p_user_id THEN RAISE EXCEPTION 'Unauthorized'; END IF;
+  UPDATE public.player_quests
+  SET progress = LEAST(progress + p_increment, required)
+  WHERE user_id = p_user_id AND (assigned_date = current_date OR assigned_date = date_trunc('week', current_date)::date)
+    AND claimed = false AND (quest_id LIKE 'dq_travel_%' OR quest_id LIKE 'wq_travel_%' OR quest_id LIKE 'cq_%_travel');
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.increment_travel_quests(uuid, int) TO authenticated;
+
+-- ==========================================
+-- 17. 每日任務初始化系統
+-- ==========================================
+DROP FUNCTION IF EXISTS public.get_or_reset_daily_quests(uuid, text);
+CREATE OR REPLACE FUNCTION public.get_or_reset_daily_quests(p_user_id uuid, p_city_id text DEFAULT NULL)
+RETURNS TABLE (
+  quest_id      text,
+  period        text,
+  progress      int,
+  required      int,
+  claimed       boolean,
+  assigned_date date
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_today       date := current_date;
+  v_week_start  date := date_trunc('week', current_date)::date;
+  v_daily_count int;
+  v_weekly_count int;
+  v_city_count int;
+BEGIN
+  IF auth.uid() != p_user_id THEN RAISE EXCEPTION 'Unauthorized'; END IF;
+
+  SELECT count(*) INTO v_daily_count FROM public.player_quests q
+  WHERE q.user_id = p_user_id AND q.period = 'daily' AND q.assigned_date = v_today AND q.quest_id LIKE 'dq_%';
+
+  IF v_daily_count = 0 THEN
+    INSERT INTO public.player_quests (user_id, quest_id, period, required, assigned_date)
+    SELECT p_user_id, pool.id, 'daily', pool.req, v_today
+    FROM (VALUES ('dq_kill_slime', 5), ('dq_kill_goblin', 3), ('dq_walk_500', 500), ('dq_walk_1000', 1000), ('dq_explore_poi', 2), ('dq_collect_mat', 3)) AS pool(id, req)
+    ORDER BY random() LIMIT 3 ON CONFLICT DO NOTHING;
+  END IF;
+
+  SELECT count(*) INTO v_weekly_count FROM public.player_quests q
+  WHERE q.user_id = p_user_id AND q.period = 'weekly' AND q.assigned_date = v_week_start;
+
+  IF v_weekly_count = 0 THEN
+    INSERT INTO public.player_quests (user_id, quest_id, period, required, assigned_date)
+    SELECT p_user_id, pool.id, 'weekly', pool.req, v_week_start
+    FROM (VALUES ('wq_kill_boss', 3), ('wq_walk_5000', 5000), ('wq_collect_rare', 5)) AS pool(id, req)
+    ORDER BY random() LIMIT 1 ON CONFLICT DO NOTHING;
+  END IF;
+
+  IF p_city_id IS NOT NULL THEN
+    SELECT count(*) INTO v_city_count FROM public.player_quests q
+    WHERE q.user_id = p_user_id AND q.assigned_date = v_today AND (q.quest_id LIKE 'cq_' || substr(p_city_id, 6) || '_%' OR q.quest_id LIKE 'cq_' || p_city_id || '_%');
+
+    IF v_city_count = 0 THEN
+        INSERT INTO public.player_quests (user_id, quest_id, period, required, assigned_date)
+        SELECT p_user_id, pool.id, 'daily', pool.req, v_today
+        FROM (VALUES ('town_tpe', 'cq_tpe_101', 5), ('town_tpe', 'cq_tpe_walk', 1500), ('town_ntpc', 'cq_ntpc_kill', 5), ('town_ntpc', 'cq_ntpc_collect', 3), ('town_tyn', 'cq_tyn_train', 1), ('town_tyn', 'cq_tyn_slime', 5), ('town_txg', 'cq_txg_iron', 5), ('town_txg', 'cq_txg_altar', 1), ('town_tnn', 'cq_tnn_altar', 2), ('town_tnn', 'cq_tnn_ghost', 3), ('town_khh', 'cq_khh_kill', 5), ('town_khh', 'cq_khh_collect', 3), ('town_pif', 'cq_pif_slime', 5), ('town_pif', 'cq_pif_walk', 2000), ('town_hun', 'cq_hun_crystal', 3), ('town_hun', 'cq_hun_walk', 2000), ('town_ttu', 'cq_ttu_crystal', 3)) AS pool(city, id, req)
+        WHERE pool.city = p_city_id
+        ON CONFLICT DO NOTHING;
+    END IF;
+  END IF;
+
+  RETURN QUERY SELECT q.quest_id, q.period, q.progress, q.required, q.claimed, q.assigned_date
+  FROM public.player_quests q WHERE q.user_id = p_user_id AND ((q.period = 'daily' AND q.assigned_date = v_today) OR (q.period = 'weekly' AND q.assigned_date = v_week_start))
+  ORDER BY q.period DESC, q.quest_id;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.get_or_reset_daily_quests(uuid, text) TO authenticated;
