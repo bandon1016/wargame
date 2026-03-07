@@ -4528,8 +4528,8 @@ const App: React.FC = () => {
               </div>
 
               <h1 className="text-2xl md:text-3xl font-black text-white mb-6 leading-tight tracking-tight pointer-events-none">
-                《浪跡戰域》<br />
-                <span className="text-indigo-400">真實RPG世界 ・ 維護中</span>
+                歡迎來到《浪跡戰域》<br />
+                <span className="text-indigo-400">真實RPG世界</span>
               </h1>
 
               <p className="text-slate-300 mb-10 leading-relaxed text-sm md:text-base font-medium px-4 max-w-md pointer-events-none">
