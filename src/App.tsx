@@ -4512,31 +4512,40 @@ const App: React.FC = () => {
             <div className="w-full max-w-xl bg-slate-900/40 backdrop-blur-2xl border border-white/10 p-8 md:p-12 rounded-[3.5rem] flex flex-col items-center text-center shadow-[0_30px_100px_rgba(0,0,0,0.5)] relative overflow-hidden group">
               <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
 
-              {/* Logo */}
-              <div className="relative mb-8 transform group-hover:scale-105 transition-transform duration-500">
-                <div className="absolute inset-0 bg-indigo-500/20 rounded-full blur-2xl animate-pulse"></div>
-                <img src="/logo.png" alt="Logo" className="w-24 h-24 md:w-32 md:h-32 object-contain relative drop-shadow-[0_0_20px_rgba(99,102,241,0.5)]" />
+              {/* Redesigned Logo Section - Framing the logo to handle white edges */}
+              <div className="relative mb-10 group/logo pointer-events-none">
+                <div className="absolute inset-0 bg-indigo-500/30 rounded-[2rem] blur-2xl group-hover/logo:bg-indigo-500/50 transition-colors duration-500"></div>
+
+                <div className="relative p-1 bg-white/5 backdrop-blur-md rounded-[2rem] border border-white/10 shadow-2xl overflow-hidden">
+                  <div className="overflow-hidden rounded-[1.8rem] bg-white border-[6px] border-slate-900 shadow-xl">
+                    <img src="/logo.png" alt="Logo" className="w-28 h-28 md:w-36 md:h-36 object-contain" />
+                  </div>
+                </div>
+
+                {/* Decorative Brackets */}
+                <div className="absolute -top-3 -left-3 w-6 h-6 border-t-2 border-l-2 border-indigo-500 opacity-50"></div>
+                <div className="absolute -bottom-3 -right-3 w-6 h-6 border-b-2 border-r-2 border-indigo-500 opacity-50"></div>
               </div>
 
-              <h1 className="text-2xl md:text-3xl font-black text-white mb-6 leading-tight tracking-tight">
-                歡迎來到《浪跡戰域》<br />
-                <span className="text-indigo-400">真實RPG世界</span>
+              <h1 className="text-2xl md:text-3xl font-black text-white mb-6 leading-tight tracking-tight pointer-events-none">
+                《浪跡戰域》<br />
+                <span className="text-indigo-400">真實RPG世界 ・ 維護中</span>
               </h1>
 
-              <p className="text-slate-400 mb-10 leading-relaxed text-sm md:text-base font-medium px-4 max-w-md">
-                感謝您對專案感興趣，我們正持續調整遊戲內容且採需求性開放，如您想了解專案內容或關於 Vibe Coding 心得，可透過以下方式與我聯繫。
+              <p className="text-slate-300 mb-10 leading-relaxed text-sm md:text-base font-medium px-4 max-w-md pointer-events-none">
+                感謝您對專案感興趣，目前系統正持續調整中。如您想了解專案內容或關於 Vibe Coding 心得，歡迎透過下方按鈕聯繫。
               </p>
 
-              <div className="flex flex-col sm:flex-row gap-4 w-full px-4">
+              <div className="flex flex-col sm:flex-row gap-4 w-full px-4 relative z-50">
                 <a
                   href="https://www.facebook.com/werboy"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="group/btn flex items-center justify-center gap-3 bg-white hover:bg-slate-50 text-slate-950 font-black py-4 px-8 rounded-2xl transition-all shadow-xl active:scale-95 flex-1 cursor-pointer pointer-events-auto"
+                  className="group/btn flex items-center justify-center gap-3 bg-white hover:bg-slate-50 text-slate-950 font-black py-4 px-8 rounded-2xl transition-all shadow-xl active:scale-95 flex-1 cursor-pointer pointer-events-auto relative"
                   style={{ position: 'relative', zIndex: 100001, pointerEvents: 'auto' }}
                 >
                   <Facebook className="w-5 h-5 text-indigo-600 pointer-events-none" />
-                  <span className="pointer-events-none">與我聯繫</span>
+                  <span className="pointer-events-none">點此與我聯繫</span>
                 </a>
               </div>
 
