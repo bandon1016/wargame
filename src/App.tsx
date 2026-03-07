@@ -4516,9 +4516,14 @@ const App: React.FC = () => {
               <div className="relative mb-10 group/logo pointer-events-none">
                 <div className="absolute inset-0 bg-indigo-500/30 rounded-[2rem] blur-2xl group-hover/logo:bg-indigo-500/50 transition-colors duration-500"></div>
 
-                <div className="relative p-1 bg-white/5 backdrop-blur-md rounded-[2rem] border border-white/10 shadow-2xl overflow-hidden">
-                  <div className="overflow-hidden rounded-[1.8rem] bg-white border-[6px] border-slate-900 shadow-xl">
-                    <img src="/logo.png" alt="Logo" className="w-28 h-28 md:w-36 md:h-36 object-contain" />
+                <div className="relative p-1.5 bg-indigo-500/10 backdrop-blur-md rounded-full border border-indigo-500/20 shadow-2xl">
+                  <div className="overflow-hidden rounded-full bg-slate-900 border-2 border-indigo-500/30 shadow-inner">
+                    <img
+                      src="/logo.png"
+                      alt="Logo"
+                      className="w-28 h-28 md:w-36 md:h-36 object-cover scale-[1.08]"
+                      style={{ clipPath: 'circle(46%)' }}
+                    />
                   </div>
                 </div>
 
@@ -4533,7 +4538,8 @@ const App: React.FC = () => {
               </h1>
 
               <p className="text-slate-300 mb-10 leading-relaxed text-sm md:text-base font-medium px-4 max-w-md pointer-events-none">
-                感謝您對專案感興趣，目前系統正持續調整中。如您想了解專案內容或關於 Vibe Coding 心得，歡迎透過下方按鈕聯繫。
+                感謝您對專案感興趣，目前系統正持續調整中。如您想了解專案內容或關於 Vibe Coding 心得，
+                <span className="block mt-2 text-indigo-300 font-bold">歡迎透過Facebook與我聯繫。</span>
               </p>
 
               <div className="flex flex-col sm:flex-row gap-4 w-full px-4 relative z-50">
