@@ -4502,7 +4502,7 @@ const App: React.FC = () => {
 
       {/* Maintenance Overlay */}
       {isMaintenance && session?.user?.email !== 'werboy@gmail.com' && (
-        <div className="fixed inset-0 z-[9999] bg-slate-950 flex flex-col items-center justify-center p-4 md:p-10 overflow-hidden">
+        <div className="fixed inset-0 z-[100000] bg-slate-950 flex flex-col items-center justify-center p-4 md:p-10 overflow-hidden pointer-events-auto">
           {/* Animated Background Orbs */}
           <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-indigo-600/20 rounded-full blur-[120px] animate-pulse"></div>
           <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-game-accent/20 rounded-full blur-[150px] animate-pulse delay-1000"></div>
@@ -4532,10 +4532,11 @@ const App: React.FC = () => {
                   href="https://www.facebook.com/werboy"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="group/btn flex items-center justify-center gap-3 bg-white hover:bg-indigo-50 text-slate-950 font-black py-4 px-8 rounded-2xl transition-all shadow-xl shadow-white/5 active:scale-95 flex-1"
+                  className="group/btn flex items-center justify-center gap-3 bg-white hover:bg-slate-50 text-slate-950 font-black py-4 px-8 rounded-2xl transition-all shadow-xl active:scale-95 flex-1 cursor-pointer pointer-events-auto"
+                  style={{ position: 'relative', zIndex: 100001, pointerEvents: 'auto' }}
                 >
-                  <Facebook className="w-5 h-5 text-indigo-600" />
-                  與我聯繫
+                  <Facebook className="w-5 h-5 text-indigo-600 pointer-events-none" />
+                  <span className="pointer-events-none">與我聯繫</span>
                 </a>
               </div>
 
