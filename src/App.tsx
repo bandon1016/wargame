@@ -4516,14 +4516,9 @@ const App: React.FC = () => {
               <div className="relative mb-10 group/logo pointer-events-none">
                 <div className="absolute inset-0 bg-indigo-500/30 rounded-[2rem] blur-2xl group-hover/logo:bg-indigo-500/50 transition-colors duration-500"></div>
 
-                <div className="relative p-1.5 bg-indigo-500/10 backdrop-blur-md rounded-full border border-indigo-500/20 shadow-2xl">
-                  <div className="overflow-hidden rounded-full bg-slate-900 border-2 border-indigo-500/30 shadow-inner">
-                    <img
-                      src="/logo.png"
-                      alt="Logo"
-                      className="w-28 h-28 md:w-36 md:h-36 object-cover scale-[1.08]"
-                      style={{ clipPath: 'circle(46%)' }}
-                    />
+                <div className="relative p-1 bg-white/5 backdrop-blur-md rounded-[2rem] border border-white/10 shadow-2xl overflow-hidden">
+                  <div className="overflow-hidden rounded-[1.8rem] bg-white border-[6px] border-slate-900 shadow-xl">
+                    <img src="/logo.png" alt="Logo" className="w-28 h-28 md:w-36 md:h-36 object-contain" />
                   </div>
                 </div>
 
