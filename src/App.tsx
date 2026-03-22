@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap, Circle, Polyline, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import {
@@ -4539,7 +4539,7 @@ const App: React.FC = () => {
 
               <div className="flex flex-col sm:flex-row gap-4 w-full px-4 relative z-50">
                 <a
-                  href="https://www.facebook.com/werboy"
+                  href="https://www.facebook.com/LineagemPack/?locale=zh_TW"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="group/btn flex items-center justify-center gap-3 bg-white hover:bg-slate-50 text-slate-950 font-black py-4 px-8 rounded-2xl transition-all shadow-xl active:scale-95 flex-1 cursor-pointer pointer-events-auto relative"
@@ -4604,7 +4604,7 @@ const App: React.FC = () => {
       {/* Image Zoom Modal */}
       {zoomedImage && (
         <div
-          className="fixed inset-0 z-[10000] bg-black/95 flex items-center justify-center p-4 md:p-20 backdrop-blur-xl"
+          className="fixed inset-0 z-[200000] bg-black/95 flex items-center justify-center p-4 md:p-20 backdrop-blur-xl"
           onClick={() => setZoomedImage(null)}
         >
           <button
